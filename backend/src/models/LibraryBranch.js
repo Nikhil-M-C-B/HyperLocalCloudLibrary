@@ -1,0 +1,49 @@
+const mongoose = require('mongoose');
+
+const libraryBranchSchema = new mongoose.Schema({
+  organizationId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Organization',
+    required: true
+  },
+  name: {
+    type: String,
+    required: true,
+    trim: true
+  },
+  address: {
+    type: String,
+    required: true
+  },
+  location: {
+    type: {
+      type: String,
+      enum: ['Point'],
+      required: true
+    },
+    coordinates: {
+      type: [Number], // [longitude, latitude]
+      required: true
+    }
+  },
+  librarian: {
+    type: String,
+    required: true
+  },
+  serviceRadiusKm: {
+    type: Number,
+    default: 8
+  },
+  status: {
+    type: String,
+    enum: ['ACTIVE', 'INACTIVE'],
+    default: 'ACTIVE'
+  }
+}, {
+  timestamps: true
+});
+
+// Create geospatial index for location queries
+libraryBranchSchema.index({ location: '2dsphere' });
+
+module.exports = mongoose.model('LibraryBranch', libraryBranchSchema);
