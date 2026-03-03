@@ -17,7 +17,7 @@ const signToken = (id) => {
  * Register new user
  */
 exports.register = async (userData) => {
-  const { email, password, phone, name, preferredGenres } = userData;
+  const { email, password, phone, name, preferredGenres, role } = userData;
   
   // Check if user already exists
   const existingAuth = await Auth.findOne({ email });
@@ -25,10 +25,11 @@ exports.register = async (userData) => {
     throw new AppError('Email already registered', 400);
   }
   
-  // Create user
+  // Create user (role defaults to USER if not provided)
   const user = await User.create({
     email,
     phone,
+    role: role || 'USER',
     profiles: [{
       name,
       accountType: 'PARENT',
@@ -52,6 +53,7 @@ exports.register = async (userData) => {
       id: user._id,
       email: user.email,
       phone: user.phone,
+      role: user.role,
       profiles: user.profiles
     }
   };

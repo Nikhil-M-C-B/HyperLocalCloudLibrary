@@ -8,14 +8,14 @@ const router = express.Router();
 
 // Validation schemas
 const createLibrarySchema = Joi.object({
-  organizationId: Joi.string().required(),
+  organizationId: Joi.string().optional(),
   name: Joi.string().required(),
   address: Joi.string().required(),
   location: Joi.object({
-    type: Joi.string().valid('Point').required(),
+    type: Joi.string().valid('Point').default('Point'),
     coordinates: Joi.array().items(Joi.number()).length(2).required()
-  }).required(),
-  librarian: Joi.string().required(),
+  }).optional(),
+  librarian: Joi.string().optional(),
   serviceRadiusKm: Joi.number().positive().default(8)
 });
 

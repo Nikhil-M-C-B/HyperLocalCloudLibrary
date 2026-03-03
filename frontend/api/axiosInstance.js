@@ -15,7 +15,8 @@ import { secureStorage } from '../utils/storage';
  */
 
 // Base URL is configurable — point this to your Node.js backend
-const BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api';
+// Backend runs on port 5000 with /api/v1 prefix
+const BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:5000/api/v1';
 
 const axiosInstance = axios.create({
     baseURL: BASE_URL,

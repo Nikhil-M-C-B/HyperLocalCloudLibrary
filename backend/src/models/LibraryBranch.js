@@ -4,7 +4,6 @@ const libraryBranchSchema = new mongoose.Schema({
   organizationId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Organization',
-    required: true
   },
   name: {
     type: String,
@@ -19,16 +18,13 @@ const libraryBranchSchema = new mongoose.Schema({
     type: {
       type: String,
       enum: ['Point'],
-      required: true
     },
     coordinates: {
       type: [Number], // [longitude, latitude]
-      required: true
     }
   },
   librarian: {
     type: String,
-    required: true
   },
   serviceRadiusKm: {
     type: Number,

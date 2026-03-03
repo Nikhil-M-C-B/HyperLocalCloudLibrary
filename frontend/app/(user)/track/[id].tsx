@@ -1,0 +1,175 @@
+import { useRouter } from 'expo-router';
+import {
+  View, Text, TouchableOpacity, StyleSheet, SafeAreaView, ScrollView,
+} from 'react-native';
+import { Colors, Radius, Spacing, Typography } from '@/constants/theme';
+
+const STEPS = [
+  { key: 'placed',   label: 'Order Placed',      icon: '📋', desc: 'Mar 3, 2026 · 10:22 AM' },
+  { key: 'packed',   label: 'Packed at Library',  icon: '📦', desc: 'Mar 3, 2026 · 2:15 PM' },
+  { key: 'shipped',  label: 'Shipped',             icon: '🚚', desc: 'Mar 4, 2026 · 9:00 AM' },
+  { key: 'out',      label: 'Out for Delivery',    icon: '🛵', desc: 'Estimated today by 7 PM' },
+  { key: 'delivered',label: 'Delivered',           icon: '✅', desc: 'Pending' },
+];
+
+const CURRENT_STEP = 3; // 0-indexed — out for delivery
+
+export default function TrackOrderScreen() {
+  const router = useRouter();
+
+  return (
+    <SafeAreaView style={s.safe}>
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={s.scroll}>
+
+        <TouchableOpacity style={s.backBtn} onPress={() => router.back()}>
+          <Text style={s.backText}>← Back</Text>
+        </TouchableOpacity>
+
+        <Text style={s.title}>Track Order</Text>
+        <Text style={s.orderId}>Order #ORD-2026-001</Text>
+
+        {/* Book info */}
+        <View style={s.bookCard}>
+          <Text style={s.bookEmoji}>📖</Text>
+          <View style={{ flex: 1 }}>
+            <Text style={s.bookTitle}>Matilda</Text>
+            <Text style={s.bookAuthor}>by Roald Dahl · Koramangala Branch</Text>
+          </View>
+          <View style={s.statusPill}>
+            <Text style={s.statusText}>🛵 Out for delivery</Text>
+          </View>
+        </View>
+
+        {/* ETA banner */}
+        <View style={s.etaBanner}>
+          <Text style={s.etaEmoji}>⏱️</Text>
+          <View>
+            <Text style={s.etaTitle}>Expected today by 7 PM</Text>
+            <Text style={s.etaSub}>Return by: March 17, 2026 (14 days)</Text>
+          </View>
+        </View>
+
+        {/* Progress stepper */}
+        <View style={s.stepperCard}>
+          {STEPS.map((step, i) => {
+            const isDone    = i < CURRENT_STEP;
+            const isCurrent = i === CURRENT_STEP;
+            const isPending = i > CURRENT_STEP;
+            return (
+              <View key={step.key} style={s.stepRow}>
+                {/* Connector line */}
+                <View style={s.connectorCol}>
+                  <View style={[
+                    s.stepCircle,
+                    isDone    && s.stepCircleDone,
+                    isCurrent && s.stepCircleCurrent,
+                    isPending && s.stepCirclePending,
+                  ]}>
+                    <Text style={[s.stepIcon, isPending && { opacity: 0.3 }]}>{step.icon}</Text>
+                  </View>
+                  {i < STEPS.length - 1 && (
+                    <View style={[s.line, isDone && s.lineDone]} />
+                  )}
+                </View>
+                {/* Text */}
+                <View style={s.stepText}>
+                  <Text style={[
+                    s.stepLabel,
+                    isCurrent && { color: Colors.accentSage, fontWeight: '800' },
+                    isPending && { color: Colors.textMuted },
+                  ]}>{step.label}</Text>
+                  <Text style={[s.stepDesc, isPending && { color: Colors.cardBorder }]}>{step.desc}</Text>
+                </View>
+              </View>
+            );
+          })}
+        </View>
+
+        {/* Return info */}
+        <View style={s.returnCard}>
+          <Text style={s.returnTitle}>📅 Return Information</Text>
+          <Text style={s.returnItem}>Return deadline: <Text style={{ fontWeight: '800', color: Colors.textPrimary }}>March 17, 2026</Text></Text>
+          <Text style={s.returnItem}>Late fee: <Text style={{ fontWeight: '800', color: Colors.warning }}>₹2/day after deadline</Text></Text>
+          <Text style={s.returnItem}>Return window: <Text style={{ fontWeight: '700', color: Colors.textPrimary }}>Mon–Sat, 9 AM–6 PM</Text></Text>
+        </View>
+
+        <TouchableOpacity style={s.btnGhost} activeOpacity={0.82}>
+          <Text style={s.btnGhostText}>🔔 Return this book</Text>
+        </TouchableOpacity>
+
+        <View style={{ height: Spacing.xxl }} />
+      </ScrollView>
+    </SafeAreaView>
+  );
+}
+
+const s = StyleSheet.create({
+  safe: { flex: 1, backgroundColor: Colors.background },
+  scroll: { paddingHorizontal: Spacing.xl, paddingBottom: Spacing.xl },
+
+  backBtn: { marginTop: Spacing.md, marginBottom: Spacing.lg },
+  backText: { fontSize: Typography.body, color: Colors.accentSage, fontWeight: '700' },
+
+  title: { fontSize: Typography.display, fontWeight: '800', color: Colors.accentSage },
+  orderId: { fontSize: Typography.label, color: Colors.textMuted, fontWeight: '600', marginBottom: Spacing.lg },
+
+  bookCard: {
+    flexDirection: 'row', alignItems: 'center', gap: Spacing.md,
+    backgroundColor: Colors.card, borderRadius: Radius.lg, padding: Spacing.md,
+    borderWidth: 1, borderColor: Colors.cardBorder, marginBottom: Spacing.md,
+  },
+  bookEmoji: { fontSize: 36 },
+  bookTitle: { fontSize: Typography.body, fontWeight: '800', color: Colors.textPrimary },
+  bookAuthor: { fontSize: Typography.label, color: Colors.textSecondary, marginTop: 2 },
+  statusPill: {
+    backgroundColor: Colors.buttonPrimary, borderRadius: Radius.full,
+    paddingHorizontal: 10, paddingVertical: 5,
+  },
+  statusText: { fontSize: Typography.label - 1, fontWeight: '700', color: Colors.buttonPrimaryText },
+
+  etaBanner: {
+    flexDirection: 'row', alignItems: 'center', gap: Spacing.md,
+    backgroundColor: Colors.accentSage, borderRadius: Radius.lg,
+    padding: Spacing.md, marginBottom: Spacing.xl,
+  },
+  etaEmoji: { fontSize: 28 },
+  etaTitle: { fontSize: Typography.body, fontWeight: '800', color: Colors.textOnDark },
+  etaSub: { fontSize: Typography.label, color: '#C5DDB8', marginTop: 2 },
+
+  stepperCard: {
+    backgroundColor: Colors.card, borderRadius: Radius.xl, padding: Spacing.lg,
+    borderWidth: 1, borderColor: Colors.cardBorder, marginBottom: Spacing.xl,
+  },
+  stepRow: { flexDirection: 'row', gap: Spacing.md, marginBottom: 0 },
+  connectorCol: { alignItems: 'center', width: 44 },
+  stepCircle: {
+    width: 44, height: 44, borderRadius: Radius.full,
+    alignItems: 'center', justifyContent: 'center',
+    backgroundColor: Colors.cardBorder,
+  },
+  stepCircleDone:    { backgroundColor: Colors.accentSageLight },
+  stepCircleCurrent: { backgroundColor: Colors.buttonPrimary },
+  stepCirclePending: { backgroundColor: Colors.background },
+  stepIcon: { fontSize: 20 },
+  line: {
+    width: 2, flex: 1, minHeight: 24, backgroundColor: Colors.cardBorder, marginVertical: 2,
+  },
+  lineDone: { backgroundColor: Colors.accentSageLight },
+  stepText: { flex: 1, paddingTop: 10, paddingBottom: 16 },
+  stepLabel: { fontSize: Typography.body, fontWeight: '700', color: Colors.textPrimary },
+  stepDesc: { fontSize: Typography.label, color: Colors.textSecondary, marginTop: 2 },
+
+  returnCard: {
+    backgroundColor: Colors.readSurface, borderRadius: Radius.lg, padding: Spacing.md,
+    marginBottom: Spacing.md, gap: 8,
+    borderWidth: 1, borderColor: Colors.cardBorder,
+  },
+  returnTitle: { fontSize: Typography.body, fontWeight: '800', color: Colors.textPrimary, marginBottom: 4 },
+  returnItem: { fontSize: Typography.body - 1, color: Colors.textSecondary, lineHeight: 22 },
+
+  btnGhost: {
+    borderRadius: Radius.full, paddingVertical: 14, alignItems: 'center',
+    borderWidth: 1.5, borderColor: Colors.cardBorder,
+  },
+  btnGhostText: { fontSize: Typography.body, fontWeight: '700', color: Colors.textSecondary },
+});

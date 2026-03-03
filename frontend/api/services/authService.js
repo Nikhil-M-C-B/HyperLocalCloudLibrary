@@ -13,7 +13,26 @@ const authService = {
      */
     register: async (userData) => {
         const response = await api.post('/auth/register', userData);
-        return response.data;
+        // Backend wraps in { status, data: { user, token } }
+        return response.data.data;
+    },
+
+    /**
+     * Add a child profile to an existing user account.
+     * @param {string} parentId
+     * @param {{ name: string, ageGroup: string, preferredGenres?: string[] }} profile
+     */
+    addChildProfile: async (parentId, profile) => {
+        const response = await api.post(`/users/${parentId}/children`, profile);
+        return response.data.data;
+    },
+
+    /**
+     * Get current user from token.
+     */
+    getMe: async () => {
+        const response = await api.get('/auth/me');
+        return response.data.data;
     },
 
     /**
@@ -25,10 +44,11 @@ const authService = {
      */
     login: async (email, password) => {
         const response = await api.post('/auth/login', { email, password });
-        const { user, token } = response.data;
+        // Backend wraps in { status, data: { user, token } }
+        const { user, token } = response.data.data;
 
-        // Persist token securely
-        await secureStorage.setToken(token);
+        // Persist token
+        await secureStorage.setToken(token).catch(() => {});
 
         return { user, token };
     },

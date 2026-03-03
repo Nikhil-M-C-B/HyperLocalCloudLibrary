@@ -1,0 +1,228 @@
+import { useState } from 'react';
+import { useRouter } from 'expo-router';
+import {
+  View, Text, TouchableOpacity, StyleSheet, SafeAreaView,
+  ScrollView, FlatList, Dimensions,
+} from 'react-native';
+import { Colors, Radius, Spacing, Typography } from '@/constants/theme';
+import { MOCK_BOOKS, GENRES, type Book } from '@/constants/mockData';
+import { BookCover } from '@/components/BookCover';
+
+const { width } = Dimensions.get('window');
+const CARD_W = (width - Spacing.xl * 2 - Spacing.md) / 2;
+const CARD_H = CARD_W * 1.4;
+const BOOKS_PER_PAGE = 6;
+
+// ─── Genre pill ───────────────────────────────────────────────────────────────
+function GenrePill({ label, active, onPress }: { label: string; active: boolean; onPress: () => void }) {
+  return (
+    <TouchableOpacity
+      style={[pill.base, active && pill.active]}
+      onPress={onPress}
+      activeOpacity={0.75}
+    >
+      <Text style={[pill.text, active && pill.textActive]}>{label}</Text>
+    </TouchableOpacity>
+  );
+}
+const pill = StyleSheet.create({
+  base: {
+    paddingHorizontal: 18, paddingVertical: 8,
+    borderRadius: Radius.full, backgroundColor: Colors.card,
+    borderWidth: 1.5, borderColor: Colors.cardBorder, marginRight: Spacing.xs,
+  },
+  active: { backgroundColor: Colors.accentSage, borderColor: Colors.accentSage },
+  text: { fontSize: Typography.label + 1, fontWeight: '600', color: Colors.textSecondary },
+  textActive: { color: Colors.textOnDark },
+});
+
+// ─── Book card ────────────────────────────────────────────────────────────────
+function ChildBookCard({ book, onPress }: { book: Book; onPress: () => void }) {
+  const stars = '★'.repeat(Math.round(book.rating)) + '☆'.repeat(5 - Math.round(book.rating));
+  return (
+    <TouchableOpacity style={card.wrap} activeOpacity={0.82} onPress={onPress}>
+      <BookCover book={book} width={CARD_W} height={CARD_H} fontSize={12} />
+      <Text style={card.title} numberOfLines={2}>{book.title}</Text>
+      <Text style={card.stars}>{stars}</Text>
+    </TouchableOpacity>
+  );
+}
+const card = StyleSheet.create({
+  wrap: { width: CARD_W, gap: 6 },
+  title: { fontSize: Typography.label + 1, fontWeight: '700', color: Colors.textPrimary, lineHeight: 18 },
+  stars: { fontSize: 12, color: Colors.accentPeach, letterSpacing: 1 },
+});
+
+// ─── Page dots ────────────────────────────────────────────────────────────────
+function PageDots({ total, current }: { total: number; current: number }) {
+  return (
+    <View style={{ flexDirection: 'row', gap: 6, justifyContent: 'center', marginVertical: Spacing.md }}>
+      {Array.from({ length: total }).map((_, i) => (
+        <View
+          key={i}
+          style={{
+            width: i === current ? 20 : 8, height: 8,
+            borderRadius: Radius.full,
+            backgroundColor: i === current ? Colors.accentSage : Colors.cardBorder,
+          }}
+        />
+      ))}
+    </View>
+  );
+}
+
+// ─── Main ─────────────────────────────────────────────────────────────────────
+export default function ChildHome() {
+  const router = useRouter();
+  const [genre, setGenre] = useState('All');
+  const [page, setPage] = useState(0);
+
+  const filtered = genre === 'All'
+    ? MOCK_BOOKS
+    : MOCK_BOOKS.filter(b => b.genres.includes(genre));
+
+  const totalPages = Math.ceil(filtered.length / BOOKS_PER_PAGE);
+  const pageBooks = filtered.slice(page * BOOKS_PER_PAGE, (page + 1) * BOOKS_PER_PAGE);
+
+  // Reset to page 0 when genre changes
+  const handleGenre = (g: string) => { setGenre(g); setPage(0); };
+
+  return (
+    <SafeAreaView style={s.safe}>
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={s.scroll}>
+
+        {/* ── Header ── */}
+        <View style={s.header}>
+          <View>
+            <Text style={s.greeting}>Hi Aarav! 👋</Text>
+            <Text style={s.subGreeting}>What will we read today?</Text>
+          </View>
+          <TouchableOpacity
+            style={s.profileBtn}
+            onPress={() => router.replace('/(select-profile)')}
+          >
+            <Text style={s.profileEmoji}>🧒</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* ── Genre filter ── */}
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={s.genreRow}
+        >
+          {GENRES.map(g => (
+            <GenrePill key={g} label={g} active={genre === g} onPress={() => handleGenre(g)} />
+          ))}
+        </ScrollView>
+
+        {/* ── Section title ── */}
+        <View style={s.sectionRow}>
+          <Text style={s.sectionTitle}>📚 Books</Text>
+          <Text style={s.pageLabel}>Page {page + 1} of {totalPages}</Text>
+        </View>
+
+        {/* ── Book grid (PAGED — no infinite scroll) ── */}
+        <View style={s.grid}>
+          {pageBooks.map(book => (
+            <ChildBookCard
+              key={book.id}
+              book={book}
+              onPress={() => router.push(`/(child)/book/${book.id}`)}
+            />
+          ))}
+          {/* Pad odd count */}
+          {pageBooks.length % 2 !== 0 && <View style={{ width: CARD_W }} />}
+        </View>
+
+        {/* ── Page navigation ── */}
+        <PageDots total={totalPages} current={page} />
+        <View style={s.pageNav}>
+          <TouchableOpacity
+            style={[s.pageBtn, page === 0 && s.pageBtnDisabled]}
+            onPress={() => setPage(p => Math.max(0, p - 1))}
+            disabled={page === 0}
+          >
+            <Text style={s.pageBtnText}>← Prev</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[s.pageBtn, page === totalPages - 1 && s.pageBtnDisabled]}
+            onPress={() => setPage(p => Math.min(totalPages - 1, p + 1))}
+            disabled={page === totalPages - 1}
+          >
+            <Text style={s.pageBtnText}>Next →</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* bottom padding for FAB */}
+        <View style={{ height: 90 }} />
+      </ScrollView>
+
+      {/* ── Chatbot FAB ── */}
+      <TouchableOpacity style={s.fab} activeOpacity={0.85}>
+        <Text style={s.fabEmoji}>🦉</Text>
+        <Text style={s.fabLabel}>Ask Owl</Text>
+      </TouchableOpacity>
+    </SafeAreaView>
+  );
+}
+
+const s = StyleSheet.create({
+  safe: { flex: 1, backgroundColor: Colors.browseSurface },
+  scroll: { paddingBottom: Spacing.xl },
+
+  header: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: Spacing.xl, paddingTop: Spacing.xl, paddingBottom: Spacing.md,
+  },
+  greeting: { fontSize: Typography.titleChild, fontWeight: '800', color: Colors.accentSage },
+  subGreeting: { fontSize: Typography.bodyChild - 2, color: Colors.textSecondary, marginTop: 2 },
+  profileBtn: {
+    width: 52, height: 52, borderRadius: Radius.full,
+    backgroundColor: Colors.card, alignItems: 'center', justifyContent: 'center',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08, shadowRadius: 6, elevation: 3,
+  },
+  profileEmoji: { fontSize: 26 },
+
+  genreRow: { paddingHorizontal: Spacing.xl, paddingBottom: Spacing.md },
+
+  sectionRow: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: Spacing.xl, marginBottom: Spacing.md,
+  },
+  sectionTitle: { fontSize: Typography.body + 2, fontWeight: '800', color: Colors.textPrimary },
+  pageLabel: { fontSize: Typography.label, color: Colors.textMuted, fontWeight: '600' },
+
+  grid: {
+    flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.md,
+    paddingHorizontal: Spacing.xl,
+  },
+
+  // Page nav
+  pageNav: {
+    flexDirection: 'row', justifyContent: 'center', gap: Spacing.md,
+    paddingHorizontal: Spacing.xl,
+  },
+  pageBtn: {
+    flex: 1, backgroundColor: Colors.card, borderRadius: Radius.full,
+    paddingVertical: 12, alignItems: 'center',
+    borderWidth: 1.5, borderColor: Colors.cardBorder,
+  },
+  pageBtnDisabled: { opacity: 0.35 },
+  pageBtnText: { fontSize: Typography.body, fontWeight: '700', color: Colors.accentSage },
+
+  // FAB
+  fab: {
+    position: 'absolute', bottom: 28, right: 24,
+    backgroundColor: Colors.accentSage,
+    borderRadius: Radius.full,
+    paddingVertical: 12, paddingHorizontal: 18,
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    shadowColor: Colors.accentSage,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.4, shadowRadius: 12, elevation: 8,
+  },
+  fabEmoji: { fontSize: 22 },
+  fabLabel: { fontSize: Typography.label + 1, fontWeight: '800', color: Colors.textOnDark },
+});

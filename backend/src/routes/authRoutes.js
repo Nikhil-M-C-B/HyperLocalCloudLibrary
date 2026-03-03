@@ -12,6 +12,7 @@ const registerSchema = Joi.object({
   password: Joi.string().min(6).required(),
   phone: Joi.string().required(),
   name: Joi.string().required(),
+  role: Joi.string().valid('USER', 'LIBRARIAN', 'ADMIN').default('USER'),
   preferredGenres: Joi.array().items(Joi.string())
 });
 
