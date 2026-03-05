@@ -1,9 +1,10 @@
 import { useState } from 'react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import {
-  View, Text, TouchableOpacity, StyleSheet, SafeAreaView,
+  View, Text, TouchableOpacity, StyleSheet,
   ScrollView,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Colors, Radius, Spacing, Typography } from '@/constants/theme';
 import { MOCK_BOOKS } from '@/constants/mockData';
 import { BookCover } from '@/components/BookCover';

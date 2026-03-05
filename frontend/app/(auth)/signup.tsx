@@ -1,54 +1,28 @@
-import { useState } from 'react';
-import { useRouter } from 'expo-router';
-import {
-  View, Text, TextInput, TouchableOpacity, StyleSheet,
-  SafeAreaView, KeyboardAvoidingView, Platform, ScrollView, ActivityIndicator,
-} from 'react-native';
-import { Colors, Radius, Spacing, Typography } from '@/constants/theme';
 import { API_BASE_URL } from '@/constants/config';
-import useAppStore, { AppRole, numToAgeGroup, AppProfile } from '@/store/useAppStore';
+import { Colors, Radius, Spacing, Typography } from '@/constants/theme';
+import useAppStore, { numToAgeGroup } from '@/store/useAppStore';
+import { useRouter } from 'expo-router';
+import { useState } from 'react';
+import {
+  ActivityIndicator,
+  Keyboard,
+  KeyboardAvoidingView, Platform,
+  ScrollView,
+  StyleSheet,
+  Text, TextInput, TouchableOpacity, TouchableWithoutFeedback,
+  View,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
-type Role = 'user' | 'librarian' | 'admin';
 interface ProfileForm { name: string; age: string; }
-
-const ROLES: { id: Role; emoji: string; title: string; desc: string; tint: string }[] = [
-  { id: 'user',     emoji: '📖', title: 'Reader',    desc: 'Browse and order books for your family.', tint: Colors.userTint },
-  { id: 'librarian',emoji: '📚', title: 'Librarian', desc: 'Manage inventory, issues and returns.',   tint: Colors.librarianTint },
-  { id: 'admin',    emoji: '🏛️', title: 'Admin',     desc: 'Oversee all branches and analytics.',     tint: Colors.adminTint },
-];
 
 function StepIndicator({ total, current }: { total: number; current: number }) {
   return (
     <View style={{ flexDirection: 'row', gap: 8, marginBottom: Spacing.xl }}>
       {Array.from({ length: total }).map((_, i) => (
         <View key={i} style={[st.dot,
-          i < current ? st.dotDone : i === current ? st.dotActive : st.dotInactive]} />
+        i < current ? st.dotDone : i === current ? st.dotActive : st.dotInactive]} />
       ))}
-    </View>
-  );
-}
-
-function StepRole({ selected, onSelect, onNext }: { selected: Role | null; onSelect: (r: Role) => void; onNext: () => void }) {
-  return (
-    <View style={{ gap: Spacing.md }}>
-      <Text style={st.stepTitle}>I am a…</Text>
-      <Text style={st.stepSubtitle}>Choose the account type that describes you.</Text>
-      {ROLES.map(role => (
-        <TouchableOpacity key={role.id}
-          style={[st.roleCard, { backgroundColor: role.tint }, selected === role.id && st.roleCardSelected]}
-          activeOpacity={0.8} onPress={() => onSelect(role.id)}>
-          <Text style={st.roleEmoji}>{role.emoji}</Text>
-          <View style={{ flex: 1 }}>
-            <Text style={st.roleTitle}>{role.title}</Text>
-            <Text style={st.roleDesc}>{role.desc}</Text>
-          </View>
-          {selected === role.id && <Text style={st.roleTick}>✓</Text>}
-        </TouchableOpacity>
-      ))}
-      <TouchableOpacity style={[st.btnPrimary, !selected && st.btnDisabled]}
-        activeOpacity={0.82} onPress={onNext} disabled={!selected}>
-        <Text style={st.btnPrimaryText}>Continue →</Text>
-      </TouchableOpacity>
     </View>
   );
 }
@@ -60,16 +34,16 @@ function StepDetails({ form, onChange, onNext, onBack, error }: {
 }) {
   const [showPw, setShowPw] = useState(false);
   const fields = [
-    { key: 'name',    label: 'Full Name',       placeholder: 'Your name',          keyboard: 'default' },
-    { key: 'email',   label: 'Email address',   placeholder: 'you@example.com',    keyboard: 'email-address' },
-    { key: 'phone',   label: 'Phone number',    placeholder: '+91 99999 99999',    keyboard: 'phone-pad' },
-    { key: 'password',label: 'Password',        placeholder: 'Min. 6 characters',  keyboard: 'default', secure: true },
-    { key: 'confirm', label: 'Confirm Password',placeholder: 'Repeat password',    keyboard: 'default', secure: true },
+    { key: 'name', label: 'Full Name', placeholder: 'Your name', keyboard: 'default' },
+    { key: 'email', label: 'Email address', placeholder: 'you@example.com', keyboard: 'email-address' },
+    { key: 'phone', label: 'Phone number', placeholder: '+91 99999 99999', keyboard: 'phone-pad' },
+    { key: 'password', label: 'Password', placeholder: 'Min. 6 characters', keyboard: 'default', secure: true },
+    { key: 'confirm', label: 'Confirm Password', placeholder: 'Repeat password', keyboard: 'default', secure: true },
   ];
   return (
     <View style={{ gap: Spacing.md }}>
       <Text style={st.stepTitle}>Create account</Text>
-      <Text style={st.stepSubtitle}>Fill in your details to get started.</Text>
+      <Text style={st.stepSubtitle}>Fill in your details to get started as a Reader.</Text>
       {fields.map(f => (
         <View key={f.key} style={{ gap: Spacing.xs }}>
           <Text style={st.label}>{f.label}</Text>
@@ -153,8 +127,8 @@ function StepAddProfile({ profiles, onAddProfile, onFinish, onBack, loading }: {
 export default function SignupScreen() {
   const router = useRouter();
   const { setAuth, addProfile } = useAppStore();
+  // Two-step flow: 0 = Account Details, 1 = Add Profiles
   const [step, setStep] = useState(0);
-  const [role, setRole] = useState<Role | null>(null);
   const [details, setDetails] = useState({ name: '', email: '', phone: '', password: '', confirm: '' });
   const [profiles, setProfiles] = useState<ProfileForm[]>([]);
   const [detailsError, setDetailsError] = useState('');
@@ -169,15 +143,14 @@ export default function SignupScreen() {
     if (password.length < 6) { setDetailsError('Password must be at least 6 characters.'); return; }
     if (password !== confirm) { setDetailsError('Passwords do not match.'); return; }
     setDetailsError('');
-    // Skip profile step for librarian/admin
-    if (role === 'librarian' || role === 'admin') { handleFinish([]); } else { setStep(2); }
+    setStep(1);
   };
 
   const handleFinish = async (childProfiles: ProfileForm[]) => {
     setLoading(true);
     setGlobalError('');
     try {
-      const backendRole = role === 'librarian' ? 'LIBRARIAN' : role === 'admin' ? 'ADMIN' : 'USER';
+      // Always register as USER — Admin/Librarian accounts are managed separately
       const res = await fetch(`${API_BASE_URL}/auth/register`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -186,15 +159,14 @@ export default function SignupScreen() {
           password: details.password,
           phone: details.phone.replace(/\s/g, ''),
           name: details.name.trim(),
-          role: backendRole,
+          role: 'USER',
         }),
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.message || 'Registration failed');
       const { token, user } = json.data;
-      const appRole: AppRole = backendRole as AppRole;
       // Seed with the main profile from backend
-      await setAuth({ userId: user.id, email: user.email, token, role: appRole, profiles: user.profiles ?? [] });
+      await setAuth({ userId: user.id, email: user.email, token, role: 'USER', profiles: user.profiles ?? [] });
       // Add each child profile to backend + local store
       for (const cp of childProfiles) {
         const ageNum = parseInt(cp.age, 10);
@@ -218,9 +190,8 @@ export default function SignupScreen() {
           await addProfile({ profileId: String(Date.now() + Math.random()), name: cp.name, accountType: 'CHILD', ageGroup, age: ageNum });
         }
       }
-      if (appRole === 'LIBRARIAN') router.replace('/(librarian)');
-      else if (appRole === 'ADMIN') router.replace('/(admin)');
-      else router.replace('/(select-profile)');
+      // All public signups are readers → go to profile selection
+      router.replace('/(select-profile)');
     } catch (e: any) {
       setGlobalError(e.message || 'Registration failed. Please try again.');
       setLoading(false);
@@ -229,25 +200,36 @@ export default function SignupScreen() {
 
   return (
     <SafeAreaView style={st.safe}>
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
-        <ScrollView contentContainerStyle={st.scroll} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
-          {step === 0 && <TouchableOpacity style={st.backBtn} onPress={() => router.back()}><Text style={st.backArrow}>←</Text></TouchableOpacity>}
-          <StepIndicator total={3} current={step} />
-          {globalError ? <Text style={[st.errorText, { marginBottom: Spacing.md }]}>{globalError}</Text> : null}
-          {step === 0 && <StepRole selected={role} onSelect={setRole} onNext={() => setStep(1)} />}
-          {step === 1 && <StepDetails form={details} onChange={(k, v) => setDetails(p => ({ ...p, [k]: v }))}
-            onNext={handleDetailsNext} onBack={() => setStep(0)} error={detailsError} />}
-          {step === 2 && <StepAddProfile profiles={profiles} onAddProfile={p => setProfiles(prev => [...prev, p])}
-            onFinish={() => handleFinish(profiles)} onBack={() => setStep(1)} loading={loading} />}
-          {step === 0 && (
-            <View style={st.footerRow}>
-              <Text style={st.footerText}>Already have an account? </Text>
-              <TouchableOpacity onPress={() => router.replace('/(auth)/login')}>
-                <Text style={st.footerLink}>Sign In</Text>
-              </TouchableOpacity>
-            </View>
-          )}
-        </ScrollView>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={{ flex: 1 }}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
+      >
+        <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+          <ScrollView
+            contentContainerStyle={st.scroll}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+          >
+            <TouchableOpacity style={st.backBtn} onPress={() => router.back()}>
+              <Text style={st.backArrow}>←</Text>
+            </TouchableOpacity>
+            <StepIndicator total={2} current={step} />
+            {globalError ? <Text style={[st.errorText, { marginBottom: Spacing.md }]}>{globalError}</Text> : null}
+            {step === 0 && <StepDetails form={details} onChange={(k, v) => setDetails(p => ({ ...p, [k]: v }))}
+              onNext={handleDetailsNext} onBack={() => router.back()} error={detailsError} />}
+            {step === 1 && <StepAddProfile profiles={profiles} onAddProfile={p => setProfiles(prev => [...prev, p])}
+              onFinish={() => handleFinish(profiles)} onBack={() => setStep(0)} loading={loading} />}
+            {step === 0 && (
+              <View style={st.footerRow}>
+                <Text style={st.footerText}>Already have an account? </Text>
+                <TouchableOpacity onPress={() => router.replace('/(auth)/login')}>
+                  <Text style={st.footerLink}>Sign In</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+          </ScrollView>
+        </TouchableWithoutFeedback>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -255,7 +237,7 @@ export default function SignupScreen() {
 
 const st = StyleSheet.create({
   safe: { flex: 1, backgroundColor: Colors.background },
-  scroll: { flexGrow: 1, paddingHorizontal: Spacing.xl, paddingTop: Spacing.md, paddingBottom: Spacing.xxl },
+  scroll: { flexGrow: 1, paddingHorizontal: Spacing.xl, paddingTop: Spacing.md, paddingBottom: 120 },
   backBtn: { marginTop: Spacing.xs, width: 44, height: 44, borderRadius: Radius.full, backgroundColor: Colors.card, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: Colors.cardBorder },
   backArrow: { fontSize: 20, color: Colors.accentSage, fontWeight: '700' },
   dot: { height: 8, borderRadius: Radius.full },
@@ -264,12 +246,6 @@ const st = StyleSheet.create({
   dotInactive: { backgroundColor: Colors.cardBorder, width: 16 },
   stepTitle: { fontSize: Typography.title + 2, fontWeight: '800', color: Colors.accentSage },
   stepSubtitle: { fontSize: Typography.body, color: Colors.textSecondary, lineHeight: 22 },
-  roleCard: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md, borderRadius: Radius.xl, padding: Spacing.md, borderWidth: 2, borderColor: 'transparent' },
-  roleCardSelected: { borderColor: Colors.accentSage },
-  roleEmoji: { fontSize: 32 },
-  roleTitle: { fontSize: Typography.body, fontWeight: '700', color: Colors.textPrimary },
-  roleDesc: { fontSize: Typography.label, color: Colors.textSecondary, marginTop: 2, lineHeight: 18 },
-  roleTick: { fontSize: 20, color: Colors.accentSage, fontWeight: '800' },
   label: { fontSize: Typography.label, fontWeight: '600', color: Colors.textSecondary, textTransform: 'uppercase', letterSpacing: 0.8 },
   input: { backgroundColor: Colors.card, borderRadius: Radius.lg, paddingHorizontal: Spacing.md, paddingVertical: 14, fontSize: Typography.body, color: Colors.textPrimary, borderWidth: 1.5, borderColor: Colors.cardBorder },
   togglePw: { fontSize: Typography.label, color: Colors.accentPeriwinkle, fontWeight: '600' },

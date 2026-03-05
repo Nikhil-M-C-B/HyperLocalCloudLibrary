@@ -1,10 +1,24 @@
-import { useRouter } from 'expo-router';
-import {
-  View, Text, TouchableOpacity, StyleSheet,
-  SafeAreaView, FlatList, Dimensions,
-} from 'react-native';
+import { API_BASE_URL } from '@/constants/config';
 import { Colors, Radius, Spacing, Typography } from '@/constants/theme';
-import useAppStore, { AppProfile } from '@/store/useAppStore';
+import useAppStore, { AppProfile, numToAgeGroup } from '@/store/useAppStore';
+import { useRouter } from 'expo-router';
+import { useState } from 'react';
+import {
+  ActivityIndicator,
+  Dimensions,
+  FlatList,
+  Keyboard,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  TouchableWithoutFeedback,
+  View,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 const { width } = Dimensions.get('window');
 const CARD_GAP = Spacing.md;
@@ -15,7 +29,7 @@ const avatarColor = (i: number) => AVATAR_COLORS[i % AVATAR_COLORS.length];
 
 function getEmoji(age: number, isChild: boolean): string {
   if (!isChild) return '👤';
-  if (age <= 3)  return '👶';
+  if (age <= 3) return '👶';
   if (age <= 10) return '🧒';
   return '🧑';
 }
@@ -48,7 +62,12 @@ function AddProfileCard({ onPress }: { onPress: () => void }) {
 
 export default function SelectProfileScreen() {
   const router = useRouter();
-  const { profiles, clearAuth } = useAppStore();
+  const { profiles, clearAuth, addProfile, userId, token } = useAppStore();
+  const [modalVisible, setModalVisible] = useState(false);
+  const [name, setName] = useState('');
+  const [age, setAge] = useState('');
+  const [error, setError] = useState('');
+  const [saving, setSaving] = useState(false);
 
   const handleSelectProfile = (profile: AppProfile) => {
     if (profile.accountType === 'CHILD') {
@@ -61,6 +80,47 @@ export default function SelectProfileScreen() {
   const handleSignOut = async () => {
     await clearAuth();
     router.replace('/(auth)/welcome');
+  };
+
+  const handleAddProfile = async () => {
+    if (!name.trim()) { setError('Please enter a name.'); return; }
+    const ageNum = parseInt(age, 10);
+    if (!age || isNaN(ageNum) || ageNum < 1 || ageNum > 120) { setError('Please enter a valid age.'); return; }
+    setError('');
+    setSaving(true);
+    const ageGroup = numToAgeGroup(ageNum);
+
+    try {
+      // Try to add to backend
+      const res = await fetch(`${API_BASE_URL}/users/${userId}/children`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ name: name.trim(), ageGroup }),
+      });
+      const json = await res.json();
+      const backendProfile = json?.data?.profile;
+      await addProfile({
+        profileId: backendProfile?.profileId ?? String(Date.now() + Math.random()),
+        name: name.trim(),
+        accountType: 'CHILD',
+        ageGroup,
+        age: ageNum,
+      });
+    } catch {
+      // Add locally even if backend fails
+      await addProfile({
+        profileId: String(Date.now() + Math.random()),
+        name: name.trim(),
+        accountType: 'CHILD',
+        ageGroup,
+        age: ageNum,
+      });
+    } finally {
+      setSaving(false);
+      setName('');
+      setAge('');
+      setModalVisible(false);
+    }
   };
 
   type ListItem = AppProfile | { id: '__add__' };
@@ -82,7 +142,7 @@ export default function SelectProfileScreen() {
         contentContainerStyle={s.grid}
         renderItem={({ item, index }) =>
           (item as any).id === '__add__' ? (
-            <AddProfileCard onPress={() => router.push('/(auth)/signup')} />
+            <AddProfileCard onPress={() => { setError(''); setModalVisible(true); }} />
           ) : (
             <ProfileCard
               profile={item as AppProfile}
@@ -96,6 +156,68 @@ export default function SelectProfileScreen() {
       <TouchableOpacity style={s.signOutBtn} onPress={handleSignOut}>
         <Text style={s.signOutText}>← Sign out</Text>
       </TouchableOpacity>
+
+      {/* ── Add Profile Modal ── */}
+      <Modal transparent visible={modalVisible} animationType="fade" onRequestClose={() => setModalVisible(false)}>
+        <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+          <View style={s.modalOverlay}>
+            <KeyboardAvoidingView
+              behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+              style={s.modalCenter}
+            >
+              <View style={s.modalCard}>
+                <Text style={s.modalTitle}>Add a profile</Text>
+                <Text style={s.modalSubtitle}>For a child or another family member</Text>
+
+                <View style={{ gap: Spacing.xs }}>
+                  <Text style={s.label}>Name</Text>
+                  <TextInput
+                    style={s.input}
+                    placeholder="e.g. Aarav"
+                    placeholderTextColor={Colors.textMuted}
+                    autoCapitalize="words"
+                    value={name}
+                    onChangeText={setName}
+                  />
+                </View>
+
+                <View style={{ gap: Spacing.xs }}>
+                  <Text style={s.label}>Age</Text>
+                  <TextInput
+                    style={s.input}
+                    placeholder="e.g. 8"
+                    placeholderTextColor={Colors.textMuted}
+                    keyboardType="numeric"
+                    value={age}
+                    onChangeText={setAge}
+                  />
+                </View>
+
+                {error ? <Text style={s.errorText}>{error}</Text> : null}
+
+                <TouchableOpacity
+                  style={[s.btnPrimary, saving && { opacity: 0.7 }]}
+                  activeOpacity={0.82}
+                  onPress={handleAddProfile}
+                  disabled={saving}
+                >
+                  {saving
+                    ? <ActivityIndicator color={Colors.buttonPrimaryText} />
+                    : <Text style={s.btnPrimaryText}>Add Profile</Text>
+                  }
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={s.btnCancel}
+                  onPress={() => { setModalVisible(false); setError(''); setName(''); setAge(''); }}
+                >
+                  <Text style={s.btnCancelText}>Cancel</Text>
+                </TouchableOpacity>
+              </View>
+            </KeyboardAvoidingView>
+          </View>
+        </TouchableWithoutFeedback>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -119,4 +241,28 @@ const s = StyleSheet.create({
   addLabel: { fontSize: Typography.body, fontWeight: '700', color: Colors.accentSage },
   signOutBtn: { alignSelf: 'center', paddingVertical: Spacing.md, paddingHorizontal: Spacing.xl, marginBottom: Spacing.lg },
   signOutText: { fontSize: Typography.body, color: Colors.textSecondary, fontWeight: '600' },
+
+  // Modal styles
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', alignItems: 'center' },
+  modalCenter: { width: '100%', alignItems: 'center' },
+  modalCard: {
+    backgroundColor: Colors.card, borderRadius: Radius.xl, padding: Spacing.xl,
+    width: width - Spacing.xl * 2, gap: Spacing.md,
+    borderWidth: 1, borderColor: Colors.cardBorder,
+  },
+  modalTitle: { fontSize: Typography.title, fontWeight: '800', color: Colors.accentSage, textAlign: 'center' },
+  modalSubtitle: { fontSize: Typography.body, color: Colors.textSecondary, textAlign: 'center' },
+  label: { fontSize: Typography.label, fontWeight: '600', color: Colors.textSecondary, textTransform: 'uppercase', letterSpacing: 0.8 },
+  input: {
+    backgroundColor: Colors.background, borderRadius: Radius.lg,
+    paddingHorizontal: Spacing.md, paddingVertical: 14,
+    fontSize: Typography.body, color: Colors.textPrimary,
+    borderWidth: 1.5, borderColor: Colors.cardBorder,
+  },
+  errorText: { fontSize: Typography.label, color: Colors.error, textAlign: 'center' },
+  btnPrimary: { backgroundColor: Colors.buttonPrimary, borderRadius: Radius.full, paddingVertical: 16, alignItems: 'center' },
+  btnPrimaryText: { fontSize: Typography.body, fontWeight: '700', color: Colors.buttonPrimaryText },
+  btnCancel: { borderRadius: Radius.full, paddingVertical: 14, alignItems: 'center', borderWidth: 1.5, borderColor: Colors.cardBorder },
+  btnCancelText: { fontSize: Typography.body, fontWeight: '600', color: Colors.textSecondary },
 });
+
