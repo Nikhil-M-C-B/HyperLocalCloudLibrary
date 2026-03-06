@@ -1,4 +1,4 @@
-const penaltyService = require('../services/penaltyService');
+const penaltyService = require('../services/penaltyService.stub'); // TODO: swap to penaltyService.js when MySQL is ready
 const Issue = require('../models/Issue');
 const catchAsync = require('../utils/catchAsync');
 

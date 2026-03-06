@@ -25,6 +25,9 @@ const profileSchema = new mongoose.Schema({
   preferredLanguages: [{
     type: String
   }],
+  userprofileURL: {
+    type: String
+  },
   readingHistory: [{
     bookId: {
       type: mongoose.Schema.Types.ObjectId,

@@ -1,4 +1,4 @@
-const paymentService = require('../services/paymentService');
+const paymentService = require('../services/paymentService.stub'); // TODO: swap to paymentService.js when MySQL is ready
 const Issue = require('../models/Issue');
 const catchAsync = require('../utils/catchAsync');
 

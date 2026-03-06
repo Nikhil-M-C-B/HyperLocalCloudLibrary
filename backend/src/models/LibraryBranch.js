@@ -26,6 +26,13 @@ const libraryBranchSchema = new mongoose.Schema({
   librarian: {
     type: String,
   },
+  BranchMailId: {
+    type: String,
+    unique: true,
+    sparse: true,
+    lowercase: true,
+    trim: true
+  },
   serviceRadiusKm: {
     type: Number,
     default: 8

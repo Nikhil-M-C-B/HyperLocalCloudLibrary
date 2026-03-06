@@ -33,6 +33,10 @@ const bookSchema = new mongoose.Schema({
     type: String,
     trim: true
   },
+  bookURL: {
+    type: String,
+    trim: true
+  },
   summary: {
     type: String,
     maxlength: 1000

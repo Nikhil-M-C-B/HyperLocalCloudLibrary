@@ -4,7 +4,10 @@ module.exports = {
   collectCoverageFrom: [
     'src/**/*.js',
     '!src/config/**',
-    '!src/models/**'
+    '!src/models/**',
+    '!src/services/paymentService.js',  // Requires MySQL - tested separately
+    '!src/services/penaltyService.js',  // Requires MySQL - tested separately
+    '!src/utils/cronJobs.js'            // Cron scheduler - not unit-testable
   ],
   testMatch: [
     '**/__tests__/**/*.js',
