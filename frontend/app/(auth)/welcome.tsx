@@ -1,13 +1,13 @@
+import { Colors, Radius, Spacing, Typography } from '@/constants/theme';
 import { useRouter } from 'expo-router';
 import {
-  View,
+  Dimensions,
+  StyleSheet,
   Text,
   TouchableOpacity,
-  StyleSheet,
-  Dimensions,
+  View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Colors, Radius, Spacing, Typography } from '@/constants/theme';
 
 const { width, height } = Dimensions.get('window');
 

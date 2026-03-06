@@ -1,9 +1,9 @@
-import { Stack } from 'expo-router';
-import { StatusBar } from 'expo-status-bar';
-import { Colors } from '@/constants/theme';
+import { Colors } from "@/constants/theme";
+import { Stack } from "expo-router";
+import { StatusBar } from "expo-status-bar";
 
 export const unstable_settings = {
-  anchor: '(auth)',
+  anchor: "(auth)",
 };
 
 export default function RootLayout() {
@@ -19,6 +19,7 @@ export default function RootLayout() {
         <Stack.Screen name="(admin)" />
         {/* keep legacy tabs accessible for now */}
         <Stack.Screen name="(tabs)" />
+        <Stack.Screen name="modal" options={{ presentation: "modal" }} />
       </Stack>
       <StatusBar style="dark" backgroundColor={Colors.background} />
     </>

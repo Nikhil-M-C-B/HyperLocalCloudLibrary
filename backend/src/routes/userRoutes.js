@@ -24,13 +24,15 @@ const updateUserSchema = Joi.object({
 const createProfileSchema = Joi.object({
   name: Joi.string().required(),
   ageGroup: Joi.string().valid('0-3', '4-6', '6-8', '8-10', '10-12', '12-15', '15+').required(),
-  preferredGenres: Joi.array().items(Joi.string())
+  preferredGenres: Joi.array().items(Joi.string()),
+  preferredLanguages: Joi.array().items(Joi.string())
 });
 
 const updateProfileSchema = Joi.object({
   name: Joi.string(),
   ageGroup: Joi.string().valid('0-3', '4-6', '6-8', '8-10', '10-12', '12-15', '15+'),
-  preferredGenres: Joi.array().items(Joi.string())
+  preferredGenres: Joi.array().items(Joi.string()),
+  preferredLanguages: Joi.array().items(Joi.string())
 });
 
 // All routes require authentication

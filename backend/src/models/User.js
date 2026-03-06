@@ -22,6 +22,9 @@ const profileSchema = new mongoose.Schema({
   preferredGenres: [{
     type: String
   }],
+  preferredLanguages: [{
+    type: String
+  }],
   readingHistory: [{
     bookId: {
       type: mongoose.Schema.Types.ObjectId,
@@ -57,6 +60,10 @@ const userSchema = new mongoose.Schema({
     type: String,
     enum: ['ACTIVE', 'BLOCKED'],
     default: 'ACTIVE'
+  },
+  emailVerified: {
+    type: Boolean,
+    default: false
   },
   profiles: [profileSchema],
   deliveryAddress: {

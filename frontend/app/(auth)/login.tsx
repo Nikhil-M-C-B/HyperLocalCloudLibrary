@@ -5,12 +5,10 @@ import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import {
   ActivityIndicator,
-  Keyboard,
   KeyboardAvoidingView, Platform, ScrollView,
   StyleSheet,
   Text, TextInput, TouchableOpacity,
-  TouchableWithoutFeedback,
-  View,
+  View
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -58,50 +56,48 @@ export default function LoginScreen() {
         style={{ flex: 1 }}
         keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
       >
-        <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-          <ScrollView
-            contentContainerStyle={st.scroll}
-            keyboardShouldPersistTaps="handled"
-            showsVerticalScrollIndicator={false}
-          >
-            <TouchableOpacity style={st.backBtn} onPress={() => router.back()}>
-              <Text style={st.backArrow}>←</Text>
+        <ScrollView
+          contentContainerStyle={st.scroll}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          <TouchableOpacity style={st.backBtn} onPress={() => router.back()}>
+            <Text style={st.backArrow}>←</Text>
+          </TouchableOpacity>
+          <View style={st.header}>
+            <Text style={st.emoji}>👋</Text>
+            <Text style={st.title}>Welcome back</Text>
+            <Text style={st.subtitle}>Sign in to your account</Text>
+          </View>
+          <View style={st.form}>
+            <View style={st.fieldGroup}>
+              <Text style={st.label}>Email address</Text>
+              <TextInput style={st.input} placeholder="you@example.com" placeholderTextColor={Colors.textMuted}
+                keyboardType="email-address" autoCapitalize="none" autoCorrect={false} value={email} onChangeText={setEmail} />
+            </View>
+            <View style={st.fieldGroup}>
+              <Text style={st.label}>Password</Text>
+              <View style={st.passwordRow}>
+                <TextInput style={[st.input, { flex: 1 }]} placeholder="Enter your password" placeholderTextColor={Colors.textMuted}
+                  secureTextEntry={!showPassword} autoCapitalize="none" value={password} onChangeText={setPassword} />
+                <TouchableOpacity style={st.eyeBtn} onPress={() => setShowPassword(v => !v)}>
+                  <Text style={st.eyeIcon}>{showPassword ? '🙈' : '👁️'}</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+            <TouchableOpacity style={st.forgotBtn}><Text style={st.forgotText}>Forgot password?</Text></TouchableOpacity>
+            {error ? <Text style={st.errorText}>{error}</Text> : null}
+            <TouchableOpacity style={[st.btnPrimary, loading && { opacity: 0.7 }]} onPress={handleSignIn} activeOpacity={0.82} disabled={loading}>
+              {loading ? <ActivityIndicator color={Colors.buttonPrimaryText} /> : <Text style={st.btnPrimaryText}>Sign In</Text>}
             </TouchableOpacity>
-            <View style={st.header}>
-              <Text style={st.emoji}>👋</Text>
-              <Text style={st.title}>Welcome back</Text>
-              <Text style={st.subtitle}>Sign in to your account</Text>
-            </View>
-            <View style={st.form}>
-              <View style={st.fieldGroup}>
-                <Text style={st.label}>Email address</Text>
-                <TextInput style={st.input} placeholder="you@example.com" placeholderTextColor={Colors.textMuted}
-                  keyboardType="email-address" autoCapitalize="none" autoCorrect={false} value={email} onChangeText={setEmail} />
-              </View>
-              <View style={st.fieldGroup}>
-                <Text style={st.label}>Password</Text>
-                <View style={st.passwordRow}>
-                  <TextInput style={[st.input, { flex: 1 }]} placeholder="Enter your password" placeholderTextColor={Colors.textMuted}
-                    secureTextEntry={!showPassword} autoCapitalize="none" value={password} onChangeText={setPassword} />
-                  <TouchableOpacity style={st.eyeBtn} onPress={() => setShowPassword(v => !v)}>
-                    <Text style={st.eyeIcon}>{showPassword ? '🙈' : '👁️'}</Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-              <TouchableOpacity style={st.forgotBtn}><Text style={st.forgotText}>Forgot password?</Text></TouchableOpacity>
-              {error ? <Text style={st.errorText}>{error}</Text> : null}
-              <TouchableOpacity style={[st.btnPrimary, loading && { opacity: 0.7 }]} onPress={handleSignIn} activeOpacity={0.82} disabled={loading}>
-                {loading ? <ActivityIndicator color={Colors.buttonPrimaryText} /> : <Text style={st.btnPrimaryText}>Sign In</Text>}
-              </TouchableOpacity>
-            </View>
-            <View style={st.footerRow}>
-              <Text style={st.footerText}>New here? </Text>
-              <TouchableOpacity onPress={() => router.replace('/(auth)/signup')}>
-                <Text style={st.footerLink}>Create an account</Text>
-              </TouchableOpacity>
-            </View>
-          </ScrollView>
-        </TouchableWithoutFeedback>
+          </View>
+          <View style={st.footerRow}>
+            <Text style={st.footerText}>New here? </Text>
+            <TouchableOpacity onPress={() => router.replace('/signup')}>
+              <Text style={st.footerLink}>Create an account</Text>
+            </TouchableOpacity>
+          </View>
+        </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );

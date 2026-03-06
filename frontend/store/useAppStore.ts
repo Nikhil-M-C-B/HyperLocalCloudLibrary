@@ -4,8 +4,8 @@
  * Persists to AsyncStorage so the session survives refreshes.
  * Works on web (uses AsyncStorage, not SecureStore for storage key).
  */
-import { create } from 'zustand';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { create } from 'zustand';
 
 export type AppRole = 'USER' | 'LIBRARIAN' | 'ADMIN';
 
@@ -16,6 +16,7 @@ export interface AppProfile {
   ageGroup?: string;
   age: number; // numeric, derived from ageGroup or set directly
   preferredGenres?: string[];
+  preferredLanguages?: string[];
 }
 
 interface SetAuthPayload {
@@ -24,13 +25,14 @@ interface SetAuthPayload {
   token: string;
   role: AppRole;
   profiles: Omit<AppProfile, 'age'>[] &
-    Partial<Pick<AppProfile, 'age'>>[];
+  Partial<Pick<AppProfile, 'age'>>[];
 }
 
 interface AppStore {
   userId: string | null;
   email: string | null;
   token: string | null;
+  activeProfileId: string | null;
   role: AppRole;
   profiles: AppProfile[];
   isAuthenticated: boolean;
@@ -39,6 +41,7 @@ interface AppStore {
   hydrate: () => Promise<void>;
   setAuth: (data: SetAuthPayload) => Promise<void>;
   addProfile: (profile: Omit<AppProfile, 'age'> & { age?: number }) => Promise<void>;
+  setActiveProfile: (profileId: string) => Promise<void>;
   clearAuth: () => Promise<void>;
 }
 
@@ -53,9 +56,9 @@ export function ageGroupToNum(ag?: string): number {
 
 /** Convert a numeric age to the closest backend ageGroup. */
 export function numToAgeGroup(age: number): AppProfile['ageGroup'] {
-  if (age <= 3)  return '0-3';
-  if (age <= 6)  return '4-6';
-  if (age <= 8)  return '6-8';
+  if (age <= 3) return '0-3';
+  if (age <= 6) return '4-6';
+  if (age <= 8) return '6-8';
   if (age <= 10) return '8-10';
   if (age <= 12) return '10-12';
   if (age <= 15) return '12-15';
@@ -66,6 +69,7 @@ const useAppStore = create<AppStore>((set, get) => ({
   userId: null,
   email: null,
   token: null,
+  activeProfileId: null,
   role: 'USER',
   profiles: [],
   isAuthenticated: false,
@@ -96,6 +100,7 @@ const useAppStore = create<AppStore>((set, get) => ({
       ageGroup: (p as any).ageGroup,
       age: (p as any).age ?? ageGroupToNum((p as any).ageGroup),
       preferredGenres: (p as any).preferredGenres ?? [],
+      preferredLanguages: (p as any).preferredLanguages ?? [],
     }));
     const state = {
       userId, email, token, role, profiles: augmented, isAuthenticated: true,
@@ -113,6 +118,7 @@ const useAppStore = create<AppStore>((set, get) => ({
       ageGroup: profile.ageGroup ?? numToAgeGroup(profile.age ?? 10),
       age: profile.age ?? ageGroupToNum(profile.ageGroup),
       preferredGenres: profile.preferredGenres ?? [],
+      preferredLanguages: profile.preferredLanguages ?? [],
     };
     const profiles = [...get().profiles, p];
     set({ profiles });
@@ -125,11 +131,23 @@ const useAppStore = create<AppStore>((set, get) => ({
     } catch { /* non-critical */ }
   },
 
+  // ── Set active profile ──────────────────────────────────────────────────────
+  setActiveProfile: async (profileId) => {
+    set({ activeProfileId: profileId });
+    try {
+      const json = await AsyncStorage.getItem(STORAGE_KEY);
+      if (json) {
+        const data = JSON.parse(json);
+        await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify({ ...data, activeProfileId: profileId }));
+      }
+    } catch { /* non-critical */ }
+  },
+
   // ── Sign out ────────────────────────────────────────────────────────────────
   clearAuth: async () => {
     await AsyncStorage.removeItem(STORAGE_KEY);
     set({
-      userId: null, email: null, token: null, role: 'USER',
+      userId: null, email: null, token: null, activeProfileId: null, role: 'USER',
       profiles: [], isAuthenticated: false,
     });
   },

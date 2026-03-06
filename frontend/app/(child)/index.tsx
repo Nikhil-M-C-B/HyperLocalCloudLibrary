@@ -1,13 +1,17 @@
-import { useState } from 'react';
+import { BookCover } from '@/components/BookCover';
+import { GENRES, MOCK_BOOKS, type Book } from '@/constants/mockData';
+import { Colors, Radius, Spacing, Typography } from '@/constants/theme';
+import useAppStore from '@/store/useAppStore';
 import { useRouter } from 'expo-router';
+import { useState } from 'react';
 import {
-  View, Text, TouchableOpacity, StyleSheet,
-  ScrollView, FlatList, Dimensions,
+  Dimensions,
+  ScrollView,
+  StyleSheet,
+  Text, TouchableOpacity,
+  View
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Colors, Radius, Spacing, Typography } from '@/constants/theme';
-import { MOCK_BOOKS, GENRES, type Book } from '@/constants/mockData';
-import { BookCover } from '@/components/BookCover';
 
 const { width } = Dimensions.get('window');
 const CARD_W = (width - Spacing.xl * 2 - Spacing.md) / 2;
@@ -75,12 +79,21 @@ function PageDots({ total, current }: { total: number; current: number }) {
 // ─── Main ─────────────────────────────────────────────────────────────────────
 export default function ChildHome() {
   const router = useRouter();
+  const { profiles, activeProfileId } = useAppStore();
   const [genre, setGenre] = useState('All');
   const [page, setPage] = useState(0);
+
+  const activeProfile = profiles.find(p => p.profileId === activeProfileId);
+  const preferredGenres = activeProfile?.preferredGenres || [];
+  const firstName = activeProfile?.name?.split(' ')[0] || 'Friend';
 
   const filtered = genre === 'All'
     ? MOCK_BOOKS
     : MOCK_BOOKS.filter(b => b.genres.includes(genre));
+
+  const recommendedBooks = MOCK_BOOKS.filter(b =>
+    b.genres.some(g => preferredGenres.includes(g))
+  );
 
   const totalPages = Math.ceil(filtered.length / BOOKS_PER_PAGE);
   const pageBooks = filtered.slice(page * BOOKS_PER_PAGE, (page + 1) * BOOKS_PER_PAGE);
@@ -95,7 +108,7 @@ export default function ChildHome() {
         {/* ── Header ── */}
         <View style={s.header}>
           <View>
-            <Text style={s.greeting}>Hi Aarav! 👋</Text>
+            <Text style={s.greeting}>Hi {firstName}! 👋</Text>
             <Text style={s.subGreeting}>What will we read today?</Text>
           </View>
           <TouchableOpacity
@@ -105,6 +118,28 @@ export default function ChildHome() {
             <Text style={s.profileEmoji}>🧒</Text>
           </TouchableOpacity>
         </View>
+
+        {/* ── Based on Your interests ── */}
+        {recommendedBooks.length > 0 && (
+          <View style={{ marginBottom: Spacing.xl }}>
+            <View style={s.sectionRow}>
+              <Text style={s.sectionTitle}>✨ Based on Your interests</Text>
+            </View>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={{ paddingHorizontal: Spacing.xl, gap: Spacing.md }}
+            >
+              {recommendedBooks.map(book => (
+                <ChildBookCard
+                  key={`rec-${book.id}`}
+                  book={book}
+                  onPress={() => router.push(`/(child)/book/${book.id}`)}
+                />
+              ))}
+            </ScrollView>
+          </View>
+        )}
 
         {/* ── Genre filter ── */}
         <ScrollView
@@ -119,7 +154,7 @@ export default function ChildHome() {
 
         {/* ── Section title ── */}
         <View style={s.sectionRow}>
-          <Text style={s.sectionTitle}>📚 Books</Text>
+          <Text style={s.sectionTitle}>📚 All Books</Text>
           <Text style={s.pageLabel}>Page {page + 1} of {totalPages}</Text>
         </View>
 

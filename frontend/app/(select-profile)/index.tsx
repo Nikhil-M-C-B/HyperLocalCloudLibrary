@@ -1,3 +1,5 @@
+import GenreSelector from '@/components/GenreSelector';
+import LanguageSelector from '@/components/LanguageSelector';
 import { API_BASE_URL } from '@/constants/config';
 import { Colors, Radius, Spacing, Typography } from '@/constants/theme';
 import useAppStore, { AppProfile, numToAgeGroup } from '@/store/useAppStore';
@@ -7,7 +9,6 @@ import {
   ActivityIndicator,
   Dimensions,
   FlatList,
-  Keyboard,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -15,8 +16,7 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
-  TouchableWithoutFeedback,
-  View,
+  View
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -62,14 +62,20 @@ function AddProfileCard({ onPress }: { onPress: () => void }) {
 
 export default function SelectProfileScreen() {
   const router = useRouter();
-  const { profiles, clearAuth, addProfile, userId, token } = useAppStore();
+  const { profiles, clearAuth, addProfile, userId, token, setActiveProfile } = useAppStore();
+
+  // Modal State
   const [modalVisible, setModalVisible] = useState(false);
+  const [step, setStep] = useState<0 | 1 | 2>(0); // 0 = details, 1 = language, 2 = genres
   const [name, setName] = useState('');
   const [age, setAge] = useState('');
+  const [languages, setLanguages] = useState<string[]>([]);
+  const [genres, setGenres] = useState<string[]>([]);
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
 
-  const handleSelectProfile = (profile: AppProfile) => {
+  const handleSelectProfile = async (profile: AppProfile) => {
+    await setActiveProfile(profile.profileId);
     if (profile.accountType === 'CHILD') {
       router.replace('/(child)');
     } else {
@@ -82,20 +88,37 @@ export default function SelectProfileScreen() {
     router.replace('/(auth)/welcome');
   };
 
-  const handleAddProfile = async () => {
-    if (!name.trim()) { setError('Please enter a name.'); return; }
-    const ageNum = parseInt(age, 10);
-    if (!age || isNaN(ageNum) || ageNum < 1 || ageNum > 120) { setError('Please enter a valid age.'); return; }
+  const handleNextStep = () => {
+    if (step === 0) {
+      if (!name.trim()) { setError('Please enter a name.'); return; }
+      const ageNum = parseInt(age, 10);
+      if (!age || isNaN(ageNum) || ageNum < 1 || ageNum > 120) { setError('Please enter a valid age.'); return; }
+      setError('');
+      setStep(1);
+      return;
+    }
+    if (step === 1) {
+      if (languages.length < 1) { setError('Please select at least 1 language.'); return; }
+      setError('');
+      setStep(2);
+      return;
+    }
+    // Step 2 -> Save
+    if (genres.length < 1) { setError('Please select at least 1 genre.'); return; }
+    handleSaveProfile();
+  };
+
+  const handleSaveProfile = async () => {
     setError('');
     setSaving(true);
+    const ageNum = parseInt(age, 10);
     const ageGroup = numToAgeGroup(ageNum);
 
     try {
-      // Try to add to backend
       const res = await fetch(`${API_BASE_URL}/users/${userId}/children`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ name: name.trim(), ageGroup }),
+        body: JSON.stringify({ name: name.trim(), ageGroup, preferredGenres: genres, preferredLanguages: languages }),
       });
       const json = await res.json();
       const backendProfile = json?.data?.profile;
@@ -105,22 +128,33 @@ export default function SelectProfileScreen() {
         accountType: 'CHILD',
         ageGroup,
         age: ageNum,
+        preferredGenres: genres,
+        preferredLanguages: languages,
       });
     } catch {
-      // Add locally even if backend fails
       await addProfile({
         profileId: String(Date.now() + Math.random()),
         name: name.trim(),
         accountType: 'CHILD',
         ageGroup,
         age: ageNum,
+        preferredGenres: genres,
+        preferredLanguages: languages,
       });
     } finally {
       setSaving(false);
-      setName('');
-      setAge('');
-      setModalVisible(false);
+      handleCloseModal();
     }
+  };
+
+  const handleCloseModal = () => {
+    setModalVisible(false);
+    setStep(0);
+    setName('');
+    setAge('');
+    setLanguages([]);
+    setGenres([]);
+    setError('');
   };
 
   type ListItem = AppProfile | { id: '__add__' };
@@ -140,6 +174,7 @@ export default function SelectProfileScreen() {
         numColumns={2}
         columnWrapperStyle={{ gap: CARD_GAP, justifyContent: 'center' }}
         contentContainerStyle={s.grid}
+        showsVerticalScrollIndicator={false}
         renderItem={({ item, index }) =>
           (item as any).id === '__add__' ? (
             <AddProfileCard onPress={() => { setError(''); setModalVisible(true); }} />
@@ -158,65 +193,82 @@ export default function SelectProfileScreen() {
       </TouchableOpacity>
 
       {/* ── Add Profile Modal ── */}
-      <Modal transparent visible={modalVisible} animationType="fade" onRequestClose={() => setModalVisible(false)}>
-        <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-          <View style={s.modalOverlay}>
-            <KeyboardAvoidingView
-              behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-              style={s.modalCenter}
-            >
-              <View style={s.modalCard}>
-                <Text style={s.modalTitle}>Add a profile</Text>
-                <Text style={s.modalSubtitle}>For a child or another family member</Text>
+      <Modal transparent visible={modalVisible} animationType="fade" onRequestClose={handleCloseModal}>
+        <View style={s.modalOverlay}>
+          <KeyboardAvoidingView
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            style={s.modalCenter}
+          >
+            <View style={s.modalCard}>
 
-                <View style={{ gap: Spacing.xs }}>
-                  <Text style={s.label}>Name</Text>
-                  <TextInput
-                    style={s.input}
-                    placeholder="e.g. Aarav"
-                    placeholderTextColor={Colors.textMuted}
-                    autoCapitalize="words"
-                    value={name}
-                    onChangeText={setName}
-                  />
+              {step === 0 && (
+                <>
+                  <Text style={s.modalTitle}>Add a profile</Text>
+                  <Text style={s.modalSubtitle}>For a child or another family member</Text>
+
+                  <View style={{ gap: Spacing.xs }}>
+                    <Text style={s.label}>Name</Text>
+                    <TextInput
+                      style={s.input}
+                      placeholder="e.g. Aarav"
+                      placeholderTextColor={Colors.textMuted}
+                      autoCapitalize="words"
+                      value={name}
+                      onChangeText={setName}
+                    />
+                  </View>
+
+                  <View style={{ gap: Spacing.xs }}>
+                    <Text style={s.label}>Age</Text>
+                    <TextInput
+                      style={s.input}
+                      placeholder="e.g. 8"
+                      placeholderTextColor={Colors.textMuted}
+                      keyboardType="numeric"
+                      value={age}
+                      onChangeText={setAge}
+                    />
+                  </View>
+                </>
+              )}
+
+              {step === 1 && (
+                <View style={{ paddingVertical: Spacing.md }}>
+                  <LanguageSelector selectedLanguages={languages} onLanguagesChange={setLanguages} />
                 </View>
+              )}
 
-                <View style={{ gap: Spacing.xs }}>
-                  <Text style={s.label}>Age</Text>
-                  <TextInput
-                    style={s.input}
-                    placeholder="e.g. 8"
-                    placeholderTextColor={Colors.textMuted}
-                    keyboardType="numeric"
-                    value={age}
-                    onChangeText={setAge}
-                  />
+              {step === 2 && (
+                <View style={{ paddingVertical: Spacing.md }}>
+                  <GenreSelector selectedGenres={genres} onGenresChange={setGenres} isChild={parseInt(age, 10) <= 12} />
                 </View>
+              )}
 
-                {error ? <Text style={s.errorText}>{error}</Text> : null}
+              {error ? <Text style={s.errorText}>{error}</Text> : null}
 
+              <View style={{ flexDirection: 'row', gap: Spacing.sm }}>
                 <TouchableOpacity
-                  style={[s.btnPrimary, saving && { opacity: 0.7 }]}
+                  style={[s.btnPrimary, { flex: 1 }, saving && { opacity: 0.7 }]}
                   activeOpacity={0.82}
-                  onPress={handleAddProfile}
+                  onPress={handleNextStep}
                   disabled={saving}
                 >
                   {saving
                     ? <ActivityIndicator color={Colors.buttonPrimaryText} />
-                    : <Text style={s.btnPrimaryText}>Add Profile</Text>
+                    : <Text style={s.btnPrimaryText}>{step === 2 ? 'Add Profile' : 'Next →'}</Text>
                   }
                 </TouchableOpacity>
-
                 <TouchableOpacity
-                  style={s.btnCancel}
-                  onPress={() => { setModalVisible(false); setError(''); setName(''); setAge(''); }}
+                  style={[s.btnCancel, { flex: 1 }]}
+                  onPress={() => step > 0 ? setStep(s => (s - 1) as any) : handleCloseModal()}
                 >
-                  <Text style={s.btnCancelText}>Cancel</Text>
+                  <Text style={s.btnCancelText}>{step > 0 ? 'Back' : 'Cancel'}</Text>
                 </TouchableOpacity>
               </View>
-            </KeyboardAvoidingView>
-          </View>
-        </TouchableWithoutFeedback>
+
+            </View>
+          </KeyboardAvoidingView>
+        </View>
       </Modal>
     </SafeAreaView>
   );
@@ -265,4 +317,3 @@ const s = StyleSheet.create({
   btnCancel: { borderRadius: Radius.full, paddingVertical: 14, alignItems: 'center', borderWidth: 1.5, borderColor: Colors.cardBorder },
   btnCancelText: { fontSize: Typography.body, fontWeight: '600', color: Colors.textSecondary },
 });
-
