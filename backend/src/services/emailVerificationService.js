@@ -12,6 +12,9 @@ const AppError = require("../utils/AppError");
  */
 const otpStore = new Map();
 
+/** Separate OTP store for password resets so signup verification & resets don't collide. */
+const passwordResetOtpStore = new Map();
+
 const OTP_LENGTH = 6;
 const OTP_EXPIRY_MINUTES = 10;
 
@@ -144,5 +147,75 @@ exports.verifyOTP = (email, otp) => {
 
   // OTP is valid — remove it so it can't be reused
   otpStore.delete(email.toLowerCase());
+  return true;
+};
+
+/**
+ * Send a password-reset OTP to the given email.
+ */
+exports.sendPasswordResetOTP = async (email) => {
+  const otp = generateOTP();
+  const expiresAt = Date.now() + OTP_EXPIRY_MINUTES * 60 * 1000;
+
+  passwordResetOtpStore.set(email.toLowerCase(), { otp, expiresAt });
+
+  const transporter = await getTransporter();
+
+  const info = await transporter.sendMail({
+    from: config.smtp?.from || '"Cloud Library" <noreply@cloudlibrary.dev>',
+    to: email,
+    subject: "Reset your password — Cloud Library",
+    text: `Your password reset code is: ${otp}\n\nThis code expires in ${OTP_EXPIRY_MINUTES} minutes.`,
+    html: `
+      <div style="font-family: system-ui, sans-serif; max-width: 480px; margin: 0 auto; padding: 32px;">
+        <h2 style="color: #6B8F71;">Cloud Library</h2>
+        <p>Your password reset code is:</p>
+        <div style="font-size: 36px; font-weight: bold; letter-spacing: 8px; 
+                    text-align: center; padding: 24px; background: #f5f5f5; 
+                    border-radius: 12px; margin: 16px 0; color: #333;">
+          ${otp}
+        </div>
+        <p style="color: #888; font-size: 14px;">
+          This code expires in ${OTP_EXPIRY_MINUTES} minutes. If you didn't request
+          a password reset, you can safely ignore this email. Your password will remain unchanged.
+        </p>
+      </div>
+    `,
+  });
+
+  const previewUrl = nodemailer.getTestMessageUrl(info);
+  if (previewUrl) {
+    console.log(`📧 Reset Email preview: ${previewUrl}`);
+  }
+
+  return {
+    message: "Password reset OTP sent",
+    previewUrl: previewUrl || undefined,
+  };
+};
+
+/**
+ * Verify a password-reset OTP.
+ */
+exports.verifyPasswordResetOTP = (email, otp) => {
+  const entry = passwordResetOtpStore.get(email.toLowerCase());
+  if (!entry) {
+    throw new AppError(
+      "No reset code found for this email. Please request a new one.",
+      400,
+    );
+  }
+  if (Date.now() > entry.expiresAt) {
+    passwordResetOtpStore.delete(email.toLowerCase());
+    throw new AppError(
+      "Reset code has expired. Please request a new one.",
+      400,
+    );
+  }
+  if (entry.otp !== otp) {
+    throw new AppError("Please enter a correct OTP", 400);
+  }
+
+  passwordResetOtpStore.delete(email.toLowerCase());
   return true;
 };

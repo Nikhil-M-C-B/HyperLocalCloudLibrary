@@ -17,17 +17,19 @@ const authSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
     required: true
-  }
+  },
+  resetPasswordToken: String,
+  resetPasswordExpires: Date
 }, {
   timestamps: true
 });
 
 // Hash password before saving
-authSchema.pre('save', async function(next) {
+authSchema.pre('save', async function (next) {
   if (!this.isModified('password')) {
     return next();
   }
-  
+
   try {
     const salt = await bcrypt.genSalt(10);
     this.password = await bcrypt.hash(this.password, salt);
@@ -38,7 +40,7 @@ authSchema.pre('save', async function(next) {
 });
 
 // Method to compare passwords
-authSchema.methods.comparePassword = async function(candidatePassword) {
+authSchema.methods.comparePassword = async function (candidatePassword) {
   return await bcrypt.compare(candidatePassword, this.password);
 };
 

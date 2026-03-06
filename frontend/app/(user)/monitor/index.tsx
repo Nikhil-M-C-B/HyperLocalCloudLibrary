@@ -1,11 +1,17 @@
-import { useState } from 'react';
+import issueService from '@/api/services/issueService';
+import { Colors, Radius, Spacing, Typography } from '@/constants/theme';
+import useAppStore from '@/store/useAppStore';
 import { useRouter } from 'expo-router';
+import { useEffect, useState } from 'react';
 import {
-  View, Text, TouchableOpacity, StyleSheet,
-  ScrollView, Dimensions,
+  Dimensions,
+  Image,
+  ScrollView,
+  StyleSheet,
+  Text, TouchableOpacity,
+  View
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Colors, Radius, Spacing, Typography } from '@/constants/theme';
 
 const { width } = Dimensions.get('window');
 
@@ -21,7 +27,7 @@ interface ChildProfile {
   avgQuizScore: number;
   lastRead?: string;
   currentBook?: string;
-  recentBooks: { title: string; date: string; pagesRead: number; totalPages: number }[];
+  recentBooks: { title: string; date: string; pagesRead: number; totalPages: number; coverImage?: string; coverColor?: string; coverAccent?: string; book?: any }[];
 }
 
 const CHILDREN: ChildProfile[] = [
@@ -38,9 +44,9 @@ const CHILDREN: ChildProfile[] = [
     lastRead: 'Yesterday at 6:30 PM',
     currentBook: 'Charlotte\'s Web',
     recentBooks: [
-      { title: 'Charlotte\'s Web',    date: 'Yesterday', pagesRead: 48,  totalPages: 184 },
+      { title: 'Charlotte\'s Web', date: 'Yesterday', pagesRead: 48, totalPages: 184 },
       { title: 'The Very Hungry Caterpillar', date: 'Feb 28', pagesRead: 30, totalPages: 30 },
-      { title: 'Matilda',             date: 'Feb 20', pagesRead: 240, totalPages: 240 },
+      { title: 'Matilda', date: 'Feb 20', pagesRead: 240, totalPages: 240 },
     ],
   },
   {
@@ -56,10 +62,10 @@ const CHILDREN: ChildProfile[] = [
     lastRead: 'Today at 4:15 PM',
     currentBook: 'The Very Hungry Caterpillar',
     recentBooks: [
-      { title: 'The Very Hungry Caterpillar', date: 'Today',  pagesRead: 30,  totalPages: 30  },
-      { title: 'Goodnight Moon',              date: 'Feb 28', pagesRead: 32,  totalPages: 32  },
-      { title: 'Where the Wild Things Are',   date: 'Feb 26', pagesRead: 40,  totalPages: 40  },
-      { title: 'Green Eggs and Ham',          date: 'Feb 24', pagesRead: 62,  totalPages: 62  },
+      { title: 'The Very Hungry Caterpillar', date: 'Today', pagesRead: 30, totalPages: 30 },
+      { title: 'Goodnight Moon', date: 'Feb 28', pagesRead: 32, totalPages: 32 },
+      { title: 'Where the Wild Things Are', date: 'Feb 26', pagesRead: 40, totalPages: 40 },
+      { title: 'Green Eggs and Ham', date: 'Feb 24', pagesRead: 62, totalPages: 62 },
     ],
   },
 ];
@@ -86,8 +92,60 @@ const pr = StyleSheet.create({
 
 export default function MonitorChildren() {
   const router = useRouter();
-  const [selected, setSelected] = useState<string>(CHILDREN[0].id);
-  const child = CHILDREN.find(c => c.id === selected)!;
+  const { userId, profiles } = useAppStore();
+  const childrenProfiles = profiles.filter(p => p.accountType === 'CHILD');
+
+  const defaultChildId = childrenProfiles.length > 0 ? childrenProfiles[0].profileId : CHILDREN[0].id;
+  const [selected, setSelected] = useState<string>(defaultChildId);
+  const [activeIssues, setActiveIssues] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    const loadIssues = async () => {
+      if (!userId || !selected) return;
+      setLoading(true);
+      try {
+        const response = await issueService.getUserIssues(userId, selected);
+        if (active && response.data?.issues) {
+          setActiveIssues(response.data.issues);
+        }
+      } catch (err) {
+        console.warn('Failed to fetch child issues', err);
+      } finally {
+        if (active) setLoading(false);
+      }
+    };
+    loadIssues();
+    return () => { active = false; };
+  }, [userId, selected]);
+
+  // Combine real profile data with mock stats since backend doesn't natively support quizzes yet
+  const realProfile = childrenProfiles.find(p => p.profileId === selected);
+  const baseMock = CHILDREN[0];
+
+  const activeBooks = activeIssues.map(i => {
+    const d = new Date(i.issueDate);
+    return {
+      title: i.bookId?.title || 'Unknown Title',
+      date: `${d.toLocaleString('default', { month: 'short' })} ${d.getDate()}`,
+      pagesRead: i.bookId?.pages ? Math.floor(i.bookId.pages * 0.4) : 30, // Mock progress for visual consistency
+      totalPages: i.bookId?.pages || 100,
+      coverImage: i.bookId?.coverImage,
+      coverColor: i.bookId?.coverColor || '#C5DDB8',
+      coverAccent: i.bookId?.coverAccent || '#4A7C59',
+      book: i.bookId
+    };
+  });
+
+  const child = {
+    ...baseMock,
+    id: selected,
+    name: realProfile?.name || baseMock.name,
+    age: realProfile?.age || baseMock.age,
+    currentBook: activeBooks.length > 0 ? activeBooks[0].title : undefined,
+    recentBooks: activeBooks.length > 0 ? activeBooks : baseMock.recentBooks
+  };
 
   return (
     <SafeAreaView style={s.safe}>
@@ -104,7 +162,17 @@ export default function MonitorChildren() {
 
         {/* Child selector */}
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.childRow}>
-          {CHILDREN.map(c => (
+          {childrenProfiles.length > 0 ? childrenProfiles.map(c => (
+            <TouchableOpacity
+              key={c.profileId}
+              style={[s.childChip, selected === c.profileId && s.childChipActive]}
+              onPress={() => setSelected(c.profileId)}
+            >
+              <Text style={s.childEmoji}>🧒</Text>
+              <Text style={[s.childName, selected === c.profileId && s.childNameActive]}>{c.name}</Text>
+              <Text style={[s.childAge, selected === c.profileId && { color: Colors.textOnDark + 'CC' }]}>Age {c.age}</Text>
+            </TouchableOpacity>
+          )) : CHILDREN.map(c => (
             <TouchableOpacity
               key={c.id}
               style={[s.childChip, selected === c.id && s.childChipActive]}
@@ -158,7 +226,7 @@ export default function MonitorChildren() {
             <Text style={s.quizSubtext}>Average score across {child.quizzesTaken} quiz{child.quizzesTaken === 1 ? '' : 'zes'}</Text>
             <Text style={[s.quizGrade, {
               color: child.avgQuizScore >= 80 ? Colors.success
-                  : child.avgQuizScore >= 60 ? Colors.warning
+                : child.avgQuizScore >= 60 ? Colors.warning
                   : Colors.error
             }]}>
               {child.avgQuizScore >= 80 ? '🌟 Excellent!' : child.avgQuizScore >= 60 ? '👍 Good' : '💪 Needs practice'}
@@ -175,14 +243,20 @@ export default function MonitorChildren() {
             const done = pct >= 100;
             return (
               <View key={i} style={s.bookRow}>
-                <View style={[s.bookDot, { backgroundColor: done ? Colors.success : Colors.buttonPrimary }]} />
+                {book.coverImage ? (
+                  <Image source={{ uri: book.coverImage }} style={{ width: 40, height: 56, borderRadius: 4 }} resizeMode="cover" />
+                ) : (
+                  <View style={[s.bookDot, { backgroundColor: done ? Colors.success : Colors.buttonPrimary }]} />
+                )}
                 <View style={s.bookMeta}>
                   <Text style={s.bookTitle} numberOfLines={1}>{book.title}</Text>
                   <Text style={s.bookDate}>{book.date} · {book.pagesRead}/{book.totalPages} pages</Text>
                   {/* Mini progress bar */}
                   <View style={s.progBg}>
-                    <View style={[s.progFill, { width: `${Math.min(pct, 100)}%` as any,
-                      backgroundColor: done ? Colors.success : Colors.accentSage }]}
+                    <View style={[s.progFill, {
+                      width: `${Math.min(pct, 100)}%` as any,
+                      backgroundColor: done ? Colors.success : Colors.accentSage
+                    }]}
                     />
                   </View>
                 </View>

@@ -85,7 +85,7 @@ export default function LoginScreen() {
                 </TouchableOpacity>
               </View>
             </View>
-            <TouchableOpacity style={st.forgotBtn}><Text style={st.forgotText}>Forgot password?</Text></TouchableOpacity>
+            <TouchableOpacity style={st.forgotBtn} onPress={() => router.push('/(auth)/forgot-password')}><Text style={st.forgotText}>Forgot password?</Text></TouchableOpacity>
             {error ? <Text style={st.errorText}>{error}</Text> : null}
             <TouchableOpacity style={[st.btnPrimary, loading && { opacity: 0.7 }]} onPress={handleSignIn} activeOpacity={0.82} disabled={loading}>
               {loading ? <ActivityIndicator color={Colors.buttonPrimaryText} /> : <Text style={st.btnPrimaryText}>Sign In</Text>}

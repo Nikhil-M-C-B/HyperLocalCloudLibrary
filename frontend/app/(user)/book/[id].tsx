@@ -1,13 +1,40 @@
-import { useState } from 'react';
+import bookService from '@/api/services/bookService';
+import { BookCover } from '@/components/BookCover';
+import { MOCK_BOOKS, type Book } from '@/constants/mockData';
+import { Colors, Radius, Spacing, Typography } from '@/constants/theme';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useEffect, useState } from 'react';
 import {
-  View, Text, TouchableOpacity, StyleSheet,
+  ActivityIndicator,
   ScrollView,
+  StyleSheet,
+  Text, TouchableOpacity,
+  View
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Colors, Radius, Spacing, Typography } from '@/constants/theme';
-import { MOCK_BOOKS } from '@/constants/mockData';
-import { BookCover } from '@/components/BookCover';
+
+function mapBook(b: any): Book {
+  return {
+    id: b._id || b.id,
+    title: b.title || 'Unknown Title',
+    author: b.author || 'Unknown Author',
+    pages: 200,
+    releaseYear: new Date(b.createdAt || Date.now()).getFullYear(),
+    genres: b.genre || [],
+    summary: b.summary || '',
+    rating: 4.5,
+    coverColor: '#C5DDB8',
+    coverAccent: '#4A7C59',
+    isDigital: true,
+    isPhysical: true,
+    availableCopies: parseInt(b.availableCopies || 1),
+    nearestLibrary: 'Local Library',
+    ageMin: parseInt(b.ageRating?.split('-')[0]) || 0,
+    ageMax: parseInt(b.ageRating?.split('-')[1]) || 99,
+    keyWords: [],
+    coverImage: b.coverImage
+  };
+}
 
 const MOCK_REVIEWS = [
   { user: 'Rohan M.', rating: 5, text: 'Absolutely loved it! My daughter read it twice.' },
@@ -26,10 +53,42 @@ function StarRow({ rating }: { rating: number }) {
 export default function UserBookDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
-  const book = MOCK_BOOKS.find(b => b.id === id) ?? MOCK_BOOKS[0];
   const [showAllReviews, setShowAllReviews] = useState(false);
+  const [book, setBook] = useState<Book | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let active = true;
+    const fetchBook = async () => {
+      try {
+        const response = await bookService.getBookById(id as string);
+        if (active && response?.data?.book) {
+          setBook(mapBook(response.data.book));
+        } else if (active) {
+          setBook(MOCK_BOOKS.find(b => b.id === id) ?? MOCK_BOOKS[0]);
+        }
+      } catch (err) {
+        console.warn('Failed to fetch book detail, falling back to mock:', err);
+        if (active) setBook(MOCK_BOOKS.find(b => b.id === id) ?? MOCK_BOOKS[0]);
+      } finally {
+        if (active) setLoading(false);
+      }
+    };
+    fetchBook();
+    return () => { active = false; };
+  }, [id]);
 
   const reviews = showAllReviews ? MOCK_REVIEWS : MOCK_REVIEWS.slice(0, 2);
+
+  if (loading) {
+    return (
+      <SafeAreaView style={[s.safe, { justifyContent: 'center', alignItems: 'center' }]}>
+        <ActivityIndicator size="large" color={Colors.accentSage} />
+      </SafeAreaView>
+    );
+  }
+
+  if (!book) return null;
 
   return (
     <SafeAreaView style={s.safe}>

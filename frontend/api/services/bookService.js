@@ -10,8 +10,8 @@ const bookService = {
      * Fetch the full book catalog.
      * The response is cached in AsyncStorage by the bookStore.
      */
-    getBooks: async () => {
-        const response = await api.get('/books');
+    getBooks: async (params = {}) => {
+        const response = await api.get('/books', { params });
         return response.data;
     },
 
@@ -21,6 +21,15 @@ const bookService = {
      */
     searchBooks: async (query) => {
         const response = await api.get('/books/search', { params: { q: query } });
+        return response.data;
+    },
+
+    /**
+     * Get a single book by ID
+     * @param {string} bookId 
+     */
+    getBookById: async (bookId) => {
+        const response = await api.get(`/books/${bookId}`);
         return response.data;
     },
 
@@ -44,11 +53,12 @@ const bookService = {
 
     /**
      * Issue (rent) a book copy to a profile.
-     * @param {string} copyId - BookCopy ID (not Book ID)
-     * @param {string} profileId
+     * @param {string} bookId - Book ID
+     * @param {string} branchId - Library branch ID
+     * @param {string} profileId - User Profile ID
      */
-    issueBook: async (copyId, profileId) => {
-        const response = await api.post('/books/issue', { copyId, profileId });
+    issueBook: async (bookId, branchId, profileId) => {
+        const response = await api.post('/issues', { bookId, branchId, profileId, type: 'PHYSICAL' });
         return response.data;
     },
 
@@ -57,7 +67,7 @@ const bookService = {
      * @param {string} issueId
      */
     returnBook: async (issueId) => {
-        const response = await api.post('/books/return', { issueId });
+        const response = await api.put(`/issues/${issueId}/return`);
         return response.data;
     },
 };

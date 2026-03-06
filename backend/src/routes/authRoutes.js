@@ -14,6 +14,8 @@ const registerSchema = Joi.object({
   name: Joi.string().required(),
   role: Joi.string().valid("USER", "LIBRARIAN", "ADMIN").default("USER"),
   preferredGenres: Joi.array().items(Joi.string()),
+  preferredLanguages: Joi.array().items(Joi.string()),
+  emailVerified: Joi.boolean(),
 });
 
 const loginSchema = Joi.object({
@@ -39,6 +41,16 @@ const verifyOTPSchema = Joi.object({
   otp: Joi.string().length(6).required(),
 });
 
+const forgotPasswordSchema = Joi.object({
+  email: Joi.string().email().required(),
+});
+
+const resetPasswordSchema = Joi.object({
+  email: Joi.string().email().required(),
+  otp: Joi.string().length(6).required(),
+  newPassword: Joi.string().min(6).required(),
+});
+
 // Routes
 router.post("/send-otp", validate(sendOTPSchema), authController.sendOTP);
 router.post("/verify-otp", validate(verifyOTPSchema), authController.verifyOTP);
@@ -56,6 +68,16 @@ router.put(
   protect,
   validate(changePasswordSchema),
   authController.changePassword,
+);
+router.post(
+  "/forgot-password",
+  validate(forgotPasswordSchema),
+  authController.forgotPassword,
+);
+router.post(
+  "/reset-password",
+  validate(resetPasswordSchema),
+  authController.resetPassword,
 );
 
 module.exports = router;

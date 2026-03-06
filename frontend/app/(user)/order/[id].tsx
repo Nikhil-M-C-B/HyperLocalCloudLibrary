@@ -1,32 +1,105 @@
-import { useState } from 'react';
+import bookService from '@/api/services/bookService';
+import { BookCover } from '@/components/BookCover';
+import { type Book } from '@/constants/mockData';
+import { Colors, Radius, Spacing, Typography } from '@/constants/theme';
+import useAppStore from '@/store/useAppStore';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useEffect, useState } from 'react';
 import {
-  View, Text, TouchableOpacity, StyleSheet,
+  ActivityIndicator,
   ScrollView,
+  StyleSheet,
+  Text, TouchableOpacity,
+  View
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Colors, Radius, Spacing, Typography } from '@/constants/theme';
-import { MOCK_BOOKS } from '@/constants/mockData';
-import { BookCover } from '@/components/BookCover';
 
-const LIBRARIES = [
-  { id: 'lib1', name: 'Koramangala Branch', distance: '1.2 km', eta: '1–2 working days', stock: 3 },
-  { id: 'lib2', name: 'Indiranagar Branch', distance: '3.5 km', eta: '2–3 working days', stock: 1 },
-  { id: 'lib3', name: 'HSR Layout Branch', distance: '5.8 km', eta: '2–3 working days', stock: 4 },
-];
+interface LibraryBranch {
+  branchId: string;
+  branchName: string;
+  distance: number;
+  availableCopies: number;
+  isWithinReach: boolean;
+}
+
+function mapBook(b: any): Book {
+  return {
+    id: b._id || b.id,
+    title: b.title || 'Unknown Title',
+    author: b.author || 'Unknown Author',
+    pages: 200,
+    releaseYear: new Date(b.createdAt || Date.now()).getFullYear(),
+    genres: b.genre || [],
+    summary: b.summary || '',
+    rating: 4.5,
+    coverColor: '#C5DDB8',
+    coverAccent: '#4A7C59',
+    isDigital: true,
+    isPhysical: true,
+    availableCopies: parseInt(b.availableCopies || 1),
+    nearestLibrary: 'Local Library',
+    ageMin: parseInt(b.ageRating?.split('-')[0]) || 0,
+    ageMax: parseInt(b.ageRating?.split('-')[1]) || 99,
+    keyWords: [],
+    coverImage: b.coverImage
+  };
+}
 
 const RETURN_PERIODS = ['7 days', '14 days', '21 days'];
 
 export default function OrderScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
-  const book = MOCK_BOOKS.find(b => b.id === id) ?? MOCK_BOOKS[0];
+
+  const { activeProfileId } = useAppStore();
+
+  const [book, setBook] = useState<Book | null>(null);
+  const [libraries, setLibraries] = useState<LibraryBranch[]>([]);
+  const [loading, setLoading] = useState(true);
 
   const [selectedLib, setSelectedLib] = useState<string | null>(null);
   const [returnDays, setReturnDays] = useState('14 days');
   const [step, setStep] = useState<'select' | 'confirm' | 'placed'>('select');
+  const [orderProcessing, setOrderProcessing] = useState(false);
 
-  const lib = LIBRARIES.find(l => l.id === selectedLib);
+  useEffect(() => {
+    let active = true;
+    const fetchDetails = async () => {
+      try {
+        const bookRes = await bookService.getBookById(id as string);
+        if (active && bookRes?.data?.book) {
+          setBook(mapBook(bookRes.data.book));
+        }
+
+        const availRes = await bookService.getBookAvailability(id as string);
+        if (active && availRes?.data?.branches) {
+          setLibraries(availRes.data.branches);
+        }
+      } catch (err) {
+        console.warn('Failed to load book data for order', err);
+      } finally {
+        if (active) setLoading(false);
+      }
+    };
+    fetchDetails();
+    return () => { active = false; };
+  }, [id]);
+
+  const confirmOrder = async () => {
+    if (!book || !selectedLib || !activeProfileId) return;
+    setOrderProcessing(true);
+    try {
+      await bookService.issueBook(book.id, selectedLib, activeProfileId);
+      setStep('placed');
+    } catch (err: any) {
+      console.warn('Failed to issue book', err);
+      alert(err.response?.data?.message || 'Failed to process order');
+    } finally {
+      setOrderProcessing(false);
+    }
+  };
+
+  const lib = libraries.find(l => l.branchId === selectedLib);
   const DELIVERY_FEE = 20;
   const LATE_FEE_PER_DAY = 2;
 
@@ -37,7 +110,7 @@ export default function OrderScreen() {
           <Text style={s.successEmoji}>🎉</Text>
           <Text style={s.successTitle}>Order Placed!</Text>
           <Text style={s.successSub}>
-            Your book will arrive in {lib?.eta ?? '2–3 working days'}.{'\n'}
+            Your book will arrive in 1–2 working days.{'\n'}
             You'll get a notification when it ships.
           </Text>
           <TouchableOpacity
@@ -50,6 +123,14 @@ export default function OrderScreen() {
             <Text style={s.btnGhostText}>← Back home</Text>
           </TouchableOpacity>
         </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (loading || !book) {
+    return (
+      <SafeAreaView style={[s.safe, { justifyContent: 'center', alignItems: 'center' }]}>
+        <ActivityIndicator size="large" color={Colors.accentSage} />
       </SafeAreaView>
     );
   }
@@ -77,21 +158,34 @@ export default function OrderScreen() {
         {step === 'select' && (
           <>
             {/* Library picker */}
-            <Text style={s.sectionTitle}>Choose a library</Text>
-            {LIBRARIES.map(lib => (
+            <Text style={s.sectionTitle}>Choose an available library</Text>
+            {libraries.length === 0 && (
+              <Text style={{ color: Colors.textMuted, marginVertical: Spacing.sm }}>
+                No branches currently have this book in stock nearby.
+              </Text>
+            )}
+            {libraries.map(lib => (
               <TouchableOpacity
-                key={lib.id}
-                style={[s.libCard, selectedLib === lib.id && s.libCardSelected]}
-                onPress={() => setSelectedLib(lib.id)}
-                activeOpacity={0.82}
+                key={lib.branchId}
+                style={[
+                  s.libCard,
+                  selectedLib === lib.branchId && s.libCardSelected,
+                  !lib.isWithinReach && { opacity: 0.6, borderColor: Colors.cardBorder }
+                ]}
+                onPress={() => lib.isWithinReach && setSelectedLib(lib.branchId)}
+                activeOpacity={lib.isWithinReach ? 0.82 : 1}
               >
                 <View style={{ flex: 1, gap: 3 }}>
-                  <Text style={s.libName}>{lib.name}</Text>
-                  <Text style={s.libMeta}>📍 {lib.distance}  ·  🕐 {lib.eta}</Text>
-                  <Text style={s.libStock}>{lib.stock} copies available</Text>
+                  <Text style={[s.libName, !lib.isWithinReach && { color: Colors.textSecondary }]}>{lib.branchName}</Text>
+                  <Text style={s.libMeta}>📍 {lib.distance} km  ·  🕐 1–2 working days</Text>
+                  {lib.isWithinReach ? (
+                    <Text style={s.libStock}>{lib.availableCopies} copies available</Text>
+                  ) : (
+                    <Text style={[s.libStock, { color: Colors.error }]}>✗ Out of delivery radius</Text>
+                  )}
                 </View>
-                <View style={[s.radio, selectedLib === lib.id && s.radioSelected]}>
-                  {selectedLib === lib.id && <View style={s.radioFill} />}
+                <View style={[s.radio, selectedLib === lib.branchId && s.radioSelected, !lib.isWithinReach && { opacity: 0.4 }]}>
+                  {selectedLib === lib.branchId && <View style={s.radioFill} />}
                 </View>
               </TouchableOpacity>
             ))}
@@ -133,9 +227,9 @@ export default function OrderScreen() {
             <View style={s.confirmCard}>
               {[
                 ['Book', book.title],
-                ['Library', lib.name],
-                ['Distance', lib.distance],
-                ['Expected delivery', lib.eta],
+                ['Library', lib.branchName],
+                ['Distance', `${lib.distance} km`],
+                ['Expected delivery', '1–2 working days'],
                 ['Return by', returnDays + ' from delivery'],
                 ['Delivery fee', `₹${DELIVERY_FEE}`],
                 ['Late fee (if any)', `₹${LATE_FEE_PER_DAY}/day`],
@@ -152,11 +246,12 @@ export default function OrderScreen() {
             </Text>
 
             <TouchableOpacity
-              style={s.btnPrimary}
+              style={[s.btnPrimary, orderProcessing && s.btnDisabled]}
               activeOpacity={0.82}
-              onPress={() => setStep('placed')}
+              onPress={confirmOrder}
+              disabled={orderProcessing}
             >
-              <Text style={s.btnPrimaryText}>Pay ₹{DELIVERY_FEE} & confirm →</Text>
+              <Text style={s.btnPrimaryText}>{orderProcessing ? 'Processing…' : `Pay ₹${DELIVERY_FEE} & confirm →`}</Text>
             </TouchableOpacity>
 
             <TouchableOpacity style={s.btnGhost} onPress={() => setStep('select')}>

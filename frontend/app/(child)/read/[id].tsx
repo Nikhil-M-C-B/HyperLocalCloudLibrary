@@ -1,12 +1,15 @@
-import { useState } from 'react';
+import bookService from '@/api/services/bookService';
+import { Colors, Radius, Spacing } from '@/constants/theme';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useEffect, useState } from 'react';
 import {
-  View, Text, TouchableOpacity, StyleSheet,
-  ScrollView, Dimensions,
+  Dimensions,
+  ScrollView,
+  StyleSheet,
+  Text, TouchableOpacity,
+  View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Colors, Radius, Spacing } from '@/constants/theme';
-import { MOCK_BOOKS } from '@/constants/mockData';
 
 const { width, height } = Dimensions.get('window');
 
@@ -26,12 +29,39 @@ const DEFAULT_SIZE = 24;
 export default function ReadingView() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
-  const book = MOCK_BOOKS.find(b => b.id === id) ?? MOCK_BOOKS[0];
+  const [book, setBook] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
 
   const [page, setPage] = useState(0);
   const [fontSize, setFontSize] = useState(DEFAULT_SIZE);
 
+  useEffect(() => {
+    let active = true;
+    const fetchBook = async () => {
+      try {
+        const response = await bookService.getBookById(id);
+        if (active && response.data?.book) {
+          setBook(response.data.book);
+        }
+      } catch (err) {
+        console.warn('Failed to fetch book', err);
+      } finally {
+        if (active) setLoading(false);
+      }
+    };
+    fetchBook();
+    return () => { active = false; };
+  }, [id]);
+
   const progress = (page + 1) / SAMPLE_PAGES.length;
+
+  if (loading || !book) {
+    return (
+      <SafeAreaView style={[s.safe, { justifyContent: 'center', alignItems: 'center' }]}>
+        <Text style={{ color: Colors.textMuted }}>Loading story...</Text>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={s.safe}>
@@ -161,8 +191,7 @@ const s = StyleSheet.create({
     flex: 1, marginHorizontal: Spacing.md, marginVertical: Spacing.sm,
     backgroundColor: Colors.card, borderRadius: Radius.xl,
     borderWidth: 1, borderColor: Colors.cardBorder,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06, shadowRadius: 8, elevation: 2,
+    boxShadow: '0px 2px 8px rgba(0, 0, 0, 0.06)', elevation: 2,
   },
   pageContent: {
     padding: Spacing.xl, flexGrow: 1, justifyContent: 'center',

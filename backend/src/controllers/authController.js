@@ -16,12 +16,10 @@ exports.checkEmail = catchAsync(async (req, res) => {
 
   const exists = await authService.checkEmailExists(email);
   if (exists) {
-    return res
-      .status(200)
-      .json({
-        status: "success",
-        data: { available: false, message: "Email already registered" },
-      });
+    return res.status(200).json({
+      status: "success",
+      data: { available: false, message: "Email already registered" },
+    });
   }
 
   res.status(200).json({ status: "success", data: { available: true } });
@@ -134,5 +132,49 @@ exports.changePassword = catchAsync(async (req, res) => {
   res.status(200).json({
     status: "success",
     data: result,
+  });
+});
+
+/**
+ * Request password reset
+ * POST /auth/forgot-password
+ */
+exports.forgotPassword = catchAsync(async (req, res) => {
+  const { email } = req.body;
+  if (!email) {
+    return res
+      .status(400)
+      .json({ status: "error", message: "Email is required" });
+  }
+
+  const result = await authService.requestPasswordReset(email);
+
+  res.status(200).json({
+    status: "success",
+    message: result.message,
+  });
+});
+
+/**
+ * Reset password
+ * POST /auth/reset-password
+ */
+exports.resetPassword = catchAsync(async (req, res) => {
+  const { email, otp, newPassword } = req.body;
+
+  if (!email || !otp || !newPassword) {
+    return res
+      .status(400)
+      .json({
+        status: "error",
+        message: "Email, OTP, and newPassword are required",
+      });
+  }
+
+  const result = await authService.resetPassword(email, otp, newPassword);
+
+  res.status(200).json({
+    status: "success",
+    message: result.message,
   });
 });

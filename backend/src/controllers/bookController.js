@@ -12,11 +12,12 @@ exports.getAllBooks = catchAsync(async (req, res) => {
     language: req.query.language,
     search: req.query.search,
     sort: req.query.sort,
-    limit: req.query.limit
+    limit: req.query.limit,
+    daysAgo: req.query.daysAgo
   };
-  
+
   const books = await bookService.getAllBooks(filters);
-  
+
   res.status(200).json({
     status: 'success',
     results: books.length,
@@ -30,7 +31,7 @@ exports.getAllBooks = catchAsync(async (req, res) => {
  */
 exports.getBook = catchAsync(async (req, res) => {
   const book = await bookService.getBookById(req.params.bookId);
-  
+
   res.status(200).json({
     status: 'success',
     data: { book }
@@ -43,7 +44,7 @@ exports.getBook = catchAsync(async (req, res) => {
  */
 exports.createBook = catchAsync(async (req, res) => {
   const book = await bookService.createBook(req.body);
-  
+
   res.status(201).json({
     status: 'success',
     data: { book }
@@ -56,7 +57,7 @@ exports.createBook = catchAsync(async (req, res) => {
  */
 exports.updateBook = catchAsync(async (req, res) => {
   const book = await bookService.updateBook(req.params.bookId, req.body);
-  
+
   res.status(200).json({
     status: 'success',
     data: { book }
@@ -69,7 +70,7 @@ exports.updateBook = catchAsync(async (req, res) => {
  */
 exports.deleteBook = catchAsync(async (req, res) => {
   await bookService.deleteBook(req.params.bookId);
-  
+
   res.status(204).json({
     status: 'success',
     data: null
@@ -86,7 +87,7 @@ exports.checkAvailability = catchAsync(async (req, res) => {
     latitude: parseFloat(req.query.lat),
     longitude: parseFloat(req.query.lng)
   };
-  
+
   if (!userLocation.latitude || !userLocation.longitude) {
     // Get from user's delivery address
     const user = req.user;
@@ -95,9 +96,9 @@ exports.checkAvailability = catchAsync(async (req, res) => {
       userLocation.longitude = user.deliveryAddress.location.coordinates[0];
     }
   }
-  
+
   const availability = await bookService.checkAvailability(req.params.bookId, userLocation);
-  
+
   res.status(200).json({
     status: 'success',
     data: availability

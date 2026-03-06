@@ -2,10 +2,10 @@
  * BookCover — placeholder cover using the book's color palette.
  * Swap the inner content for an <Image> once real cover assets exist.
  */
-import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
-import { Radius } from '@/constants/theme';
 import type { Book } from '@/constants/mockData';
+import { Radius } from '@/constants/theme';
+import React from 'react';
+import { Image, StyleSheet, Text, View } from 'react-native';
 
 interface Props {
   book: Book;
@@ -15,7 +15,17 @@ interface Props {
 }
 
 export function BookCover({ book, width, height, fontSize = 13 }: Props) {
-  // Spine line accent
+  if (book.coverImage) {
+    return (
+      <Image
+        source={{ uri: book.coverImage }}
+        style={[styles.cover, { width, height, borderRadius: Radius.md, backgroundColor: '#f0f0f0' }]}
+        resizeMode="cover"
+      />
+    );
+  }
+
+  // Fallback to spine line accent
   return (
     <View style={[styles.cover, { width, height, backgroundColor: book.coverColor, borderRadius: Radius.md }]}>
       {/* Spine */}

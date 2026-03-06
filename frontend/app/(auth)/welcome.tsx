@@ -89,10 +89,7 @@ const illusStyles = StyleSheet.create({
     height: 60,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 6,
+    boxShadow: '0px 2px 6px rgba(0, 0, 0, 0.1)',
     elevation: 4,
   },
   owl: {
@@ -202,10 +199,7 @@ const styles = StyleSheet.create({
     borderRadius: Radius.full,
     paddingVertical: 16,
     alignItems: 'center',
-    shadowColor: Colors.accentPeach,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
+    boxShadow: '0px 4px 8px rgba(232, 168, 124, 0.3)',
     elevation: 4,
   },
   btnPrimaryText: {

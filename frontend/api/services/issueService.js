@@ -8,10 +8,11 @@ import api from '../axiosInstance';
 const issueService = {
     /**
      * Get all issues for a profile.
+     * @param {string} userId
      * @param {string} profileId
      */
-    getUserIssues: async (profileId) => {
-        const response = await api.get('/issues', { params: { profileId } });
+    getUserIssues: async (userId, profileId) => {
+        const response = await api.get(`/users/${userId}/issues`, { params: { profileId } });
         return response.data;
     },
 

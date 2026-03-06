@@ -1,11 +1,18 @@
-import { useState } from 'react';
+import issueService from '@/api/services/issueService';
+import { Colors, Radius, Spacing, Typography } from '@/constants/theme';
+import useAppStore from '@/store/useAppStore';
 import { useRouter } from 'expo-router';
+import { useEffect, useState } from 'react';
 import {
-  View, Text, TouchableOpacity, StyleSheet,
-  ScrollView, Dimensions,
+  ActivityIndicator,
+  Dimensions,
+  Image,
+  ScrollView,
+  StyleSheet,
+  Text, TouchableOpacity,
+  View
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Colors, Radius, Spacing, Typography } from '@/constants/theme';
 
 const { width } = Dimensions.get('window');
 
@@ -18,6 +25,7 @@ interface BorrowRecord {
   author: string;
   coverColor: string;
   coverAccent: string;
+  coverImage?: string;
   borrowedDate: string;
   dueDate: string;
   returnedDate?: string;
@@ -26,43 +34,10 @@ interface BorrowRecord {
   library: string;
 }
 
-const BORROW_HISTORY: BorrowRecord[] = [
-  {
-    id: 'r1', bookId: '2', title: 'Harry Potter and the Philosopher\'s Stone',
-    author: 'J.K. Rowling', coverColor: '#4A7C59', coverAccent: '#FFD700',
-    borrowedDate: 'Feb 10', dueDate: 'Mar 2', status: 'overdue',
-    fine: 8, library: 'Koramangala',
-  },
-  {
-    id: 'r2', bookId: '5', title: 'The Alchemist',
-    author: 'Paulo Coelho', coverColor: '#8080C0', coverAccent: '#FFDAB9',
-    borrowedDate: 'Feb 20', dueDate: 'Mar 12', status: 'active',
-    library: 'Indiranagar',
-  },
-  {
-    id: 'r3', bookId: '3', title: 'The Great Gatsby',
-    author: 'F. Scott Fitzgerald', coverColor: '#E8A87C', coverAccent: '#4A7C59',
-    borrowedDate: 'Jan 5', dueDate: 'Jan 25', returnedDate: 'Jan 23', status: 'returned',
-    library: 'HSR Layout',
-  },
-  {
-    id: 'r4', bookId: '4', title: 'To Kill a Mockingbird',
-    author: 'Harper Lee', coverColor: '#FFDAB9', coverAccent: '#E57373',
-    borrowedDate: 'Dec 15', dueDate: 'Jan 4', returnedDate: 'Jan 3', status: 'returned',
-    library: 'Koramangala',
-  },
-  {
-    id: 'r5', bookId: '7', title: 'The Hobbit',
-    author: 'J.R.R. Tolkien', coverColor: '#4A7C59', coverAccent: '#C5DDB8',
-    borrowedDate: 'Nov 20', dueDate: 'Dec 10', returnedDate: 'Dec 9', status: 'returned',
-    library: 'Whitefield',
-  },
-];
-
 const STATUS_CONFIG: Record<BookStatus, { label: string; bg: string; text: string }> = {
-  active:   { label: '📖 Borrowed',   bg: '#E8F5E9', text: Colors.success },
-  returned: { label: '✅ Returned',   bg: Colors.accentSageLight + '50', text: Colors.accentSage },
-  overdue:  { label: '⚠️ Overdue',   bg: '#FFEBEE', text: Colors.error },
+  active: { label: '📖 Borrowed', bg: '#E8F5E9', text: Colors.success },
+  returned: { label: '✅ Returned', bg: Colors.accentSageLight + '50', text: Colors.accentSage },
+  overdue: { label: '⚠️ Overdue', bg: '#FFEBEE', text: Colors.error },
 };
 
 type Filter = 'all' | BookStatus;
@@ -72,14 +47,71 @@ export default function MyBooks() {
   const [filter, setFilter] = useState<Filter>('all');
 
   const filters: { id: Filter; label: string }[] = [
-    { id: 'all',      label: 'All' },
-    { id: 'active',   label: '📖 Borrowed' },
-    { id: 'overdue',  label: '⚠️ Overdue' },
+    { id: 'all', label: 'All' },
+    { id: 'active', label: '📖 Borrowed' },
+    { id: 'overdue', label: '⚠️ Overdue' },
     { id: 'returned', label: '✅ Returned' },
   ];
 
-  const shown = filter === 'all' ? BORROW_HISTORY : BORROW_HISTORY.filter(b => b.status === filter);
-  const totalFine = BORROW_HISTORY.filter(b => b.fine).reduce((a, b) => a + (b.fine ?? 0), 0);
+  const { userId, activeProfileId } = useAppStore();
+  const [borrowHistory, setBorrowHistory] = useState<BorrowRecord[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let active = true;
+    const loadIssues = async () => {
+      if (!userId || !activeProfileId) {
+        if (active) setLoading(false);
+        return;
+      }
+      try {
+        const response = await issueService.getUserIssues(userId, activeProfileId);
+        if (active && response.data?.issues) {
+          const mapped: BorrowRecord[] = response.data.issues.map((i: any) => {
+            const isReturned = i.status === 'RETURNED';
+            const dueObj = new Date(i.dueDate);
+            const isOverdue = !isReturned && new Date() > dueObj;
+
+            const fmt = (d: Date) => `${d.toLocaleString('default', { month: 'short' })} ${d.getDate()}`;
+
+            return {
+              id: i._id,
+              bookId: i.bookId?._id || i.bookId,
+              title: i.bookId?.title || 'Unknown Title',
+              author: i.bookId?.author || 'Unknown Author',
+              coverColor: i.bookId?.coverColor || '#C5DDB8',
+              coverAccent: i.bookId?.coverAccent || '#4A7C59',
+              coverImage: i.bookId?.coverImage,
+              borrowedDate: fmt(new Date(i.issueDate)),
+              dueDate: fmt(dueObj),
+              returnedDate: i.returnDate ? fmt(new Date(i.returnDate)) : undefined,
+              status: isReturned ? 'returned' : isOverdue ? 'overdue' : 'active',
+              fine: i.fineAmount > 0 ? i.fineAmount : undefined,
+              library: i.branchId?.name || 'Local Library',
+            };
+          });
+          setBorrowHistory(mapped);
+        }
+      } catch (err) {
+        console.warn('Failed to fetch user issues', err);
+      } finally {
+        if (active) setLoading(false);
+      }
+    };
+    loadIssues();
+    return () => { active = false; };
+  }, [userId, activeProfileId]);
+
+  const shown = filter === 'all' ? borrowHistory : borrowHistory.filter(b => b.status === filter);
+  const totalFine = borrowHistory.filter(b => b.fine).reduce((a, b) => a + (b.fine ?? 0), 0);
+
+  if (loading) {
+    return (
+      <SafeAreaView style={[s.safe, { justifyContent: 'center', alignItems: 'center' }]}>
+        <ActivityIndicator size="large" color={Colors.accentSage} />
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={s.safe}>
@@ -107,9 +139,9 @@ export default function MyBooks() {
         {/* Summary strip */}
         <View style={s.summaryStrip}>
           {[
-            ['📖', `${BORROW_HISTORY.filter(b => b.status === 'active').length}`, 'Active'],
-            ['⚠️', `${BORROW_HISTORY.filter(b => b.status === 'overdue').length}`, 'Overdue'],
-            ['✅', `${BORROW_HISTORY.filter(b => b.status === 'returned').length}`, 'Returned'],
+            ['📖', `${borrowHistory.filter(b => b.status === 'active').length}`, 'Active'],
+            ['⚠️', `${borrowHistory.filter(b => b.status === 'overdue').length}`, 'Overdue'],
+            ['✅', `${borrowHistory.filter(b => b.status === 'returned').length}`, 'Returned'],
           ].map(([icon, val, label]) => (
             <View key={label} style={s.summaryItem}>
               <Text style={s.summaryIcon}>{icon}</Text>
@@ -154,9 +186,13 @@ export default function MyBooks() {
                 onPress={() => record.status !== 'returned' && router.push(`/(user)/track/${record.bookId}`)}
               >
                 {/* Mini cover */}
-                <View style={[s.miniCover, { backgroundColor: record.coverColor }]}>
-                  <View style={[s.miniCoverAccent, { backgroundColor: record.coverAccent }]} />
-                </View>
+                {record.coverImage ? (
+                  <Image source={{ uri: record.coverImage }} style={s.miniCover} resizeMode="cover" />
+                ) : (
+                  <View style={[s.miniCover, { backgroundColor: record.coverColor }]}>
+                    <View style={[s.miniCoverAccent, { backgroundColor: record.coverAccent }]} />
+                  </View>
+                )}
 
                 <View style={s.bookInfo}>
                   <Text style={s.bookTitle} numberOfLines={1}>{record.title}</Text>

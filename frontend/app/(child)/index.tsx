@@ -1,9 +1,10 @@
+import bookService from '@/api/services/bookService';
 import { BookCover } from '@/components/BookCover';
-import { GENRES, MOCK_BOOKS, type Book } from '@/constants/mockData';
+import { GENRES, type Book } from '@/constants/mockData';
 import { Colors, Radius, Spacing, Typography } from '@/constants/theme';
 import useAppStore from '@/store/useAppStore';
 import { useRouter } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Dimensions,
   ScrollView,
@@ -17,6 +18,29 @@ const { width } = Dimensions.get('window');
 const CARD_W = (width - Spacing.xl * 2 - Spacing.md) / 2;
 const CARD_H = CARD_W * 1.4;
 const BOOKS_PER_PAGE = 6;
+
+function mapBook(b: any): Book {
+  return {
+    id: b._id || b.id,
+    title: b.title || 'Unknown Title',
+    author: b.author || 'Unknown Author',
+    pages: 200,
+    releaseYear: new Date(b.createdAt || Date.now()).getFullYear(),
+    genres: b.genre || [],
+    summary: b.summary || '',
+    rating: 4.5,
+    coverColor: '#C5DDB8',
+    coverAccent: '#4A7C59',
+    isDigital: true,
+    isPhysical: true,
+    availableCopies: parseInt(b.availableCopies || 1),
+    nearestLibrary: 'Local Library',
+    ageMin: parseInt(b.ageRating?.split('-')[0]) || 0,
+    ageMax: parseInt(b.ageRating?.split('-')[1]) || 99,
+    keyWords: [],
+    coverImage: b.coverImage
+  };
+}
 
 // ─── Genre pill ───────────────────────────────────────────────────────────────
 function GenrePill({ label, active, onPress }: { label: string; active: boolean; onPress: () => void }) {
@@ -82,16 +106,33 @@ export default function ChildHome() {
   const { profiles, activeProfileId } = useAppStore();
   const [genre, setGenre] = useState('All');
   const [page, setPage] = useState(0);
+  const [books, setBooks] = useState<Book[]>([]);
+
+  useEffect(() => {
+    let active = true;
+    const fetchBooks = async () => {
+      try {
+        const response = await bookService.getBooks({ limit: 50 });
+        if (active && response.data?.books) {
+          setBooks(response.data.books.map(mapBook));
+        }
+      } catch (err) {
+        console.warn('Failed to fetch child books', err);
+      }
+    };
+    fetchBooks();
+    return () => { active = false; };
+  }, []);
 
   const activeProfile = profiles.find(p => p.profileId === activeProfileId);
   const preferredGenres = activeProfile?.preferredGenres || [];
   const firstName = activeProfile?.name?.split(' ')[0] || 'Friend';
 
   const filtered = genre === 'All'
-    ? MOCK_BOOKS
-    : MOCK_BOOKS.filter(b => b.genres.includes(genre));
+    ? books
+    : books.filter(b => b.genres.includes(genre));
 
-  const recommendedBooks = MOCK_BOOKS.filter(b =>
+  const recommendedBooks = books.filter(b =>
     b.genres.some(g => preferredGenres.includes(g))
   );
 
@@ -216,8 +257,7 @@ const s = StyleSheet.create({
   profileBtn: {
     width: 52, height: 52, borderRadius: Radius.full,
     backgroundColor: Colors.card, alignItems: 'center', justifyContent: 'center',
-    shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08, shadowRadius: 6, elevation: 3,
+    boxShadow: '0px 2px 6px rgba(0, 0, 0, 0.08)', elevation: 3,
   },
   profileEmoji: { fontSize: 26 },
 
@@ -255,9 +295,7 @@ const s = StyleSheet.create({
     borderRadius: Radius.full,
     paddingVertical: 12, paddingHorizontal: 18,
     flexDirection: 'row', alignItems: 'center', gap: 6,
-    shadowColor: Colors.accentSage,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.4, shadowRadius: 12, elevation: 8,
+    boxShadow: '0px 4px 12px rgba(74, 124, 89, 0.4)', elevation: 8,
   },
   fabEmoji: { fontSize: 22 },
   fabLabel: { fontSize: Typography.label + 1, fontWeight: '800', color: Colors.textOnDark },

@@ -1,13 +1,44 @@
-import { useState } from 'react';
+import bookService from '@/api/services/bookService';
+import { BookCover } from '@/components/BookCover';
+import { GENRES, type Book } from '@/constants/mockData';
+import { Colors, Radius, Spacing, Typography } from '@/constants/theme';
+import useAppStore from '@/store/useAppStore';
 import { useRouter } from 'expo-router';
+import { useEffect, useState } from 'react';
 import {
-  View, Text, TouchableOpacity, StyleSheet,
-  ScrollView, TextInput, Dimensions, FlatList,
+  ActivityIndicator,
+  Dimensions,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Colors, Radius, Spacing, Typography } from '@/constants/theme';
-import { MOCK_BOOKS, GENRES, type Book } from '@/constants/mockData';
-import { BookCover } from '@/components/BookCover';
+
+function mapBook(b: any): Book {
+  return {
+    id: b._id || b.id,
+    title: b.title || 'Unknown Title',
+    author: b.author || 'Unknown Author',
+    pages: 200,
+    releaseYear: new Date(b.createdAt || Date.now()).getFullYear(),
+    genres: b.genre || [],
+    summary: b.summary || '',
+    rating: 4.5,
+    coverColor: '#C5DDB8',
+    coverAccent: '#4A7C59',
+    isDigital: true,
+    isPhysical: true,
+    availableCopies: parseInt(b.availableCopies || 1),
+    nearestLibrary: 'Local Library',
+    ageMin: parseInt(b.ageRating?.split('-')[0]) || 0,
+    ageMax: parseInt(b.ageRating?.split('-')[1]) || 99,
+    keyWords: [],
+    coverImage: b.coverImage
+  };
+}
 
 const { width } = Dimensions.get('window');
 const HRCARD_W = 130;
@@ -90,17 +121,73 @@ export default function UserHome() {
   const [query, setQuery] = useState('');
   const [activeGenre, setActiveGenre] = useState('All');
 
-  const searching = query.trim().length > 0;
-  const searchResults = MOCK_BOOKS.filter(b =>
-    b.title.toLowerCase().includes(query.toLowerCase()) ||
-    b.author.toLowerCase().includes(query.toLowerCase()) ||
-    b.keyWords.some(k => k.toLowerCase().includes(query.toLowerCase()))
-  );
+  const { profiles, activeProfileId } = useAppStore();
+  const activeProfile = profiles.find(p => p.profileId === activeProfileId);
+  const preferredGenres = activeProfile?.preferredGenres?.length ? activeProfile.preferredGenres : ['Fantasy', 'Picture Book'];
 
-  const recommended = MOCK_BOOKS.filter(b => b.rating >= 4.7);
-  const byGenre = activeGenre === 'All'
-    ? MOCK_BOOKS
-    : MOCK_BOOKS.filter(b => b.genres.includes(activeGenre));
+  const [recommended, setRecommended] = useState<Book[]>([]);
+  const [newArrivals, setNewArrivals] = useState<Book[]>([]);
+  const [byGenre, setByGenre] = useState<Book[]>([]);
+  const [searchResults, setSearchResults] = useState<Book[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  // Fetch initial sections
+  useEffect(() => {
+    let active = true;
+    const fetchSections = async () => {
+      setLoading(true);
+      try {
+        const recRes = await bookService.getBooks({ genre: preferredGenres, limit: 10 });
+        if (active) setRecommended((recRes?.data?.books || []).map(mapBook));
+
+        const newRes = await bookService.getBooks({ daysAgo: 10, limit: 10 });
+        if (active) setNewArrivals((newRes?.data?.books || []).map(mapBook));
+      } catch (error) {
+        console.warn('Failed to fetch sections:', error);
+      } finally {
+        if (active) setLoading(false);
+      }
+    };
+    fetchSections();
+    return () => { active = false; };
+  }, [preferredGenres]);
+
+  // Fetch browse feed
+  useEffect(() => {
+    let active = true;
+    const fetchBrowse = async () => {
+      try {
+        const filters: any = { limit: 20 };
+        if (activeGenre !== 'All') filters.genre = activeGenre;
+        const res = await bookService.getBooks(filters);
+        if (active) setByGenre((res?.data?.books || []).map(mapBook));
+      } catch (error) {
+        console.warn('Failed to fetch browse books:', error);
+      }
+    };
+    fetchBrowse();
+    return () => { active = false; };
+  }, [activeGenre]);
+
+  // Fetch search results
+  useEffect(() => {
+    let active = true;
+    if (!query.trim()) {
+      setSearchResults([]);
+      return;
+    }
+    const timer = setTimeout(async () => {
+      try {
+        const res = await bookService.getBooks({ search: query, limit: 20 });
+        if (active) setSearchResults((res?.data?.books || []).map(mapBook));
+      } catch (error) {
+        console.warn('Failed to fetch search results:', error);
+      }
+    }, 500);
+    return () => { active = false; clearTimeout(timer); };
+  }, [query]);
+
+  const searching = query.trim().length > 0;
 
   return (
     <SafeAreaView style={s.safe}>
@@ -109,7 +196,7 @@ export default function UserHome() {
         {/* ── Header ── */}
         <View style={s.header}>
           <View>
-            <Text style={s.greeting}>Hello, Priya 👋</Text>
+            <Text style={s.greeting}>Hello, {activeProfile?.name || 'Priya'} 👋</Text>
             <Text style={s.subGreeting}>What are you looking for today?</Text>
           </View>
           <TouchableOpacity
@@ -139,8 +226,9 @@ export default function UserHome() {
           )}
         </View>
 
-        {/* ── Search results ── */}
-        {searching ? (
+        {loading && !searching ? (
+          <ActivityIndicator size="large" color={Colors.accentSage} style={{ marginTop: 40 }} />
+        ) : searching ? (
           <View style={s.section}>
             <SectionHeader title={`Results (${searchResults.length})`} />
             {searchResults.length === 0 ? (
@@ -163,15 +251,29 @@ export default function UserHome() {
               <Text style={s.orderBannerArrow}>→</Text>
             </TouchableOpacity>
 
-            {/* ── Recommended ── */}
-            <View style={s.section}>
-              <SectionHeader title="⭐ Recommended for you" />
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: Spacing.md }}>
-                {recommended.map(b => (
-                  <HorizBookCard key={b.id} book={b} onPress={() => router.push(`/(user)/book/${b.id}`)} />
-                ))}
-              </ScrollView>
-            </View>
+            {/* ── Based on Your Preferences ── */}
+            {recommended.length > 0 && (
+              <View style={s.section}>
+                <SectionHeader title="⭐ Based on Your Preferences" />
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: Spacing.md }}>
+                  {recommended.map(b => (
+                    <HorizBookCard key={b.id} book={b} onPress={() => router.push(`/(user)/book/${b.id}`)} />
+                  ))}
+                </ScrollView>
+              </View>
+            )}
+
+            {/* ── New Arrivals ── */}
+            {newArrivals.length > 0 && (
+              <View style={s.section}>
+                <SectionHeader title="🆕 New Arrivals" />
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: Spacing.md }}>
+                  {newArrivals.map(b => (
+                    <HorizBookCard key={b.id} book={b} onPress={() => router.push(`/(user)/book/${b.id}`)} />
+                  ))}
+                </ScrollView>
+              </View>
+            )}
 
             {/* ── Genre filter ── */}
             <View style={s.section}>
@@ -190,6 +292,9 @@ export default function UserHome() {
               {byGenre.map(b => (
                 <SearchRow key={b.id} book={b} onPress={() => router.push(`/(user)/book/${b.id}`)} />
               ))}
+              {byGenre.length === 0 && (
+                <Text style={s.empty}>No books found in this genre.</Text>
+              )}
             </View>
 
             {/* ── My Books ── */}

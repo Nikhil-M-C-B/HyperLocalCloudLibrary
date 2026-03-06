@@ -19,6 +19,7 @@ export interface Book {
   ageMin: number;
   ageMax: number;
   keyWords: string[];
+  coverImage?: string;
 }
 
 export const MOCK_BOOKS: Book[] = [
