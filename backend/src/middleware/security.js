@@ -39,33 +39,40 @@ const helmetMiddleware = helmet({
 
 // ── Rate Limiters ──────────────────────────────────────
 
+// Skip rate limiting entirely in test environment to avoid 429s
+const isTest = process.env.NODE_ENV === 'test';
+
 /**
  * General API rate limiter — 100 req / 15 min per IP
  */
-const apiLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 100,
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: {
-    status: 'error',
-    message: 'Too many requests — please try again after 15 minutes'
-  }
-});
+const apiLimiter = isTest
+  ? (req, res, next) => next()
+  : rateLimit({
+      windowMs: 15 * 60 * 1000,
+      max: 100,
+      standardHeaders: true,
+      legacyHeaders: false,
+      message: {
+        status: 'error',
+        message: 'Too many requests — please try again after 15 minutes'
+      }
+    });
 
 /**
  * Auth rate limiter — 10 req / 15 min per IP (login, register)
  */
-const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 10,
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: {
-    status: 'error',
-    message: 'Too many authentication attempts — please try again later'
-  }
-});
+const authLimiter = isTest
+  ? (req, res, next) => next()
+  : rateLimit({
+      windowMs: 15 * 60 * 1000,
+      max: 10,
+      standardHeaders: true,
+      legacyHeaders: false,
+      message: {
+        status: 'error',
+        message: 'Too many authentication attempts — please try again later'
+      }
+    });
 
 /**
  * Strict rate limiter — 5 req / 15 min (password reset, etc.)

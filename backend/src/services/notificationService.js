@@ -23,6 +23,13 @@ let firebaseInitialized = false;
 const initializeFirebase = () => {
   if (firebaseInitialized) return;
 
+  // Don't attempt init when project ID is missing — avoids a silent broken state
+  if (!config.firebase.projectId) {
+    console.warn('⚠️  Firebase not configured — push notifications disabled');
+    console.warn('   Set FIREBASE_PROJECT_ID & service account to enable FCM');
+    return;
+  }
+
   try {
     if (config.firebase.serviceAccountPath) {
       const serviceAccount = require(config.firebase.serviceAccountPath);
@@ -39,8 +46,8 @@ const initializeFirebase = () => {
     firebaseInitialized = true;
     console.log('🔥 Firebase Admin SDK initialized');
   } catch (error) {
-    console.warn('⚠️  Firebase not configured — push notifications disabled');
-    console.warn('   Set FIREBASE_PROJECT_ID & service account to enable FCM');
+    console.warn('⚠️  Firebase init failed — push notifications disabled');
+    console.warn('   Error:', error.message);
   }
 };
 
@@ -280,5 +287,3 @@ async function _persistNotification(userId, title, body, data) {
 
 // Initialize Firebase when module loads
 initializeFirebase();
-
-module.exports = exports;

@@ -34,8 +34,8 @@ router.delete('/remove-token', notificationController.removeToken);
 // ── Notification History ───────────────────────────────
 
 router.get('/', notificationController.getNotifications);
+router.put('/read-all', notificationController.markAllAsRead);  // must come before /:id
 router.put('/:id/read', notificationController.markAsRead);
-router.put('/read-all', notificationController.markAllAsRead);
 
 // ── Admin: Test Notification ───────────────────────────
 

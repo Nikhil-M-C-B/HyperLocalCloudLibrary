@@ -2,8 +2,6 @@ const cron = require('node-cron');
 const queueService = require('../services/queueService');
 const notificationService = require('../services/notificationService');
 const Issue = require('../models/Issue');
-const Book = require('../models/Book');
-const User = require('../models/User');
 
 /**
  * =====================================================
@@ -42,9 +40,10 @@ const registerBullWorkers = () => {
       }
 
       // Send penalty push notification
+      const bookTitle = issue.copyId?.bookId?.title || 'a book';
       await notificationService.sendPenaltyAlert(
         issue.userId,
-        issue.bookTitle || 'a book',
+        bookTitle,
         fineAmount,
         daysOverdue
       );
@@ -132,7 +131,10 @@ async function _getOverdueIssues() {
   return Issue.find({
     status: { $in: ['ISSUED', 'OVERDUE'] },
     dueDate: { $lt: new Date() }
-  }).populate('copyId');
+  }).populate({
+    path: 'copyId',
+    populate: { path: 'bookId', select: 'title' }
+  });
 }
 
 async function _processOverduePenaltiesFallback() {
@@ -147,9 +149,10 @@ async function _processOverduePenaltiesFallback() {
       await issue.save();
     }
 
+    const bookTitle = issue.copyId?.bookId?.title || 'a book';
     await notificationService.sendPenaltyAlert(
       issue.userId,
-      'a book',
+      bookTitle,
       fineAmount,
       daysOverdue
     );
