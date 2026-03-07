@@ -28,11 +28,8 @@ const app = express();
 // ── Security Middleware (Platform Services — Aryan 2) ──
 app.use(helmetMiddleware);       // Helmet: HSTS, CSP, X-Frame, etc.
 app.use(enforceHTTPS);           // HTTPS redirect in production
-// Rate limiting disabled in test environment to prevent 429s in test suites
-if (process.env.NODE_ENV !== 'test') {
-  app.use('/api/', apiLimiter);    // 100 req / 15 min (general)
-  app.use('/api/v1/auth', authLimiter); // 10 req / 15 min (auth)
-}
+app.use('/api/', apiLimiter);         // 100 req / 15 min (passthrough in test)
+app.use('/api/v1/auth', authLimiter); // 10 req / 15 min (passthrough in test)
 
 // Middleware
 app.use(cors());
