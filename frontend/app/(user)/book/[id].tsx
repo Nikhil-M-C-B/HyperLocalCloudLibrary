@@ -1,6 +1,6 @@
 import bookService from '@/api/services/bookService';
 import { BookCover } from '@/components/BookCover';
-import { MOCK_BOOKS, type Book } from '@/constants/mockData';
+import type { Book } from '@/constants/mockData';
 import { Colors, Radius, Spacing, Typography } from '@/constants/theme';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
@@ -36,12 +36,6 @@ function mapBook(b: any): Book {
   };
 }
 
-const MOCK_REVIEWS = [
-  { user: 'Rohan M.', rating: 5, text: 'Absolutely loved it! My daughter read it twice.' },
-  { user: 'Kavya S.', rating: 4, text: 'Beautiful story, great for kids around age 8.' },
-  { user: 'Aarav (Age 9)', rating: 5, text: 'The best book ever!! I want more like this.' },
-];
-
 function StarRow({ rating }: { rating: number }) {
   return (
     <Text style={{ color: Colors.accentPeach, fontSize: 14, letterSpacing: 1 }}>
@@ -53,7 +47,6 @@ function StarRow({ rating }: { rating: number }) {
 export default function UserBookDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
-  const [showAllReviews, setShowAllReviews] = useState(false);
   const [book, setBook] = useState<Book | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -65,11 +58,11 @@ export default function UserBookDetail() {
         if (active && response?.data?.book) {
           setBook(mapBook(response.data.book));
         } else if (active) {
-          setBook(MOCK_BOOKS.find(b => b.id === id) ?? MOCK_BOOKS[0]);
+          setBook(null);
         }
       } catch (err) {
-        console.warn('Failed to fetch book detail, falling back to mock:', err);
-        if (active) setBook(MOCK_BOOKS.find(b => b.id === id) ?? MOCK_BOOKS[0]);
+        console.warn('Failed to fetch book detail', err);
+        if (active) setBook(null);
       } finally {
         if (active) setLoading(false);
       }
@@ -77,8 +70,6 @@ export default function UserBookDetail() {
     fetchBook();
     return () => { active = false; };
   }, [id]);
-
-  const reviews = showAllReviews ? MOCK_REVIEWS : MOCK_REVIEWS.slice(0, 2);
 
   if (loading) {
     return (
@@ -159,27 +150,6 @@ export default function UserBookDetail() {
           <Text style={s.summaryText}>{book.summary}</Text>
         </View>
 
-        {/* Reviews */}
-        <View style={s.reviewsSection}>
-          <Text style={s.reviewsTitle}>Reviews & Comments</Text>
-          {reviews.map((r, i) => (
-            <View key={i} style={s.reviewCard}>
-              <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
-                <Text style={s.reviewUser}>{r.user}</Text>
-                <StarRow rating={r.rating} />
-              </View>
-              <Text style={s.reviewText}>{r.text}</Text>
-            </View>
-          ))}
-          {MOCK_REVIEWS.length > 2 && (
-            <TouchableOpacity onPress={() => setShowAllReviews(v => !v)}>
-              <Text style={s.showMore}>
-                {showAllReviews ? 'Show less' : `+${MOCK_REVIEWS.length - 2} more reviews`}
-              </Text>
-            </TouchableOpacity>
-          )}
-        </View>
-
         {/* Actions */}
         <View style={s.actions}>
           {book.availableCopies > 0 ? (
@@ -251,16 +221,6 @@ const s = StyleSheet.create({
   },
   summaryLabel: { fontSize: Typography.body, fontWeight: '800', color: Colors.textPrimary },
   summaryText: { fontSize: Typography.body, color: Colors.textSecondary, lineHeight: 24 },
-
-  reviewsSection: { marginBottom: Spacing.xl },
-  reviewsTitle: { fontSize: Typography.body + 1, fontWeight: '800', color: Colors.textPrimary, marginBottom: Spacing.md },
-  reviewCard: {
-    backgroundColor: Colors.card, borderRadius: Radius.lg, padding: Spacing.md,
-    marginBottom: Spacing.sm, borderWidth: 1, borderColor: Colors.cardBorder,
-  },
-  reviewUser: { fontSize: Typography.body, fontWeight: '700', color: Colors.textPrimary },
-  reviewText: { fontSize: Typography.body - 1, color: Colors.textSecondary, lineHeight: 22 },
-  showMore: { fontSize: Typography.body, color: Colors.accentSage, fontWeight: '700', textAlign: 'center', paddingVertical: Spacing.sm },
 
   actions: { gap: Spacing.md },
   btnPrimary: {

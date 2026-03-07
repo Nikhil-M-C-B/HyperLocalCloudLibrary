@@ -13,9 +13,9 @@ exports.issueBook = catchAsync(async (req, res) => {
     branchId: req.body.branchId,
     type: req.body.type || 'PHYSICAL'
   };
-  
+
   const result = await circulationService.issueBook(issueData);
-  
+
   res.status(201).json({
     status: 'success',
     data: result
@@ -28,10 +28,28 @@ exports.issueBook = catchAsync(async (req, res) => {
  */
 exports.returnBook = catchAsync(async (req, res) => {
   const result = await circulationService.returnBook(req.params.issueId);
-  
+
   res.status(200).json({
     status: 'success',
     data: result
+  });
+});
+
+/**
+ * Get all issues (Librarian/Admin)
+ * GET /issues
+ */
+exports.getAllIssues = catchAsync(async (req, res) => {
+  const filters = {
+    status: req.query.status,
+  };
+
+  const issues = await circulationService.getAllIssues(filters);
+
+  res.status(200).json({
+    status: 'success',
+    results: issues.length,
+    data: { issues }
   });
 });
 
@@ -44,9 +62,9 @@ exports.getUserIssues = catchAsync(async (req, res) => {
     status: req.query.status,
     profileId: req.query.profileId
   };
-  
+
   const issues = await circulationService.getUserIssues(req.params.userId, filters);
-  
+
   res.status(200).json({
     status: 'success',
     results: issues.length,
@@ -60,7 +78,7 @@ exports.getUserIssues = catchAsync(async (req, res) => {
  */
 exports.getIssue = catchAsync(async (req, res) => {
   const result = await circulationService.getIssueById(req.params.issueId);
-  
+
   res.status(200).json({
     status: 'success',
     data: result
@@ -73,7 +91,7 @@ exports.getIssue = catchAsync(async (req, res) => {
  */
 exports.getBookHistory = catchAsync(async (req, res) => {
   const history = await circulationService.getBookIssueHistory(req.params.bookId);
-  
+
   res.status(200).json({
     status: 'success',
     results: history.length,

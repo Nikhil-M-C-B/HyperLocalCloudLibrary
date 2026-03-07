@@ -1,22 +1,60 @@
-import { useRouter } from 'expo-router';
+import issueService from '@/api/services/issueService';
+import { Colors, Radius, Spacing, Typography } from '@/constants/theme';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useEffect, useState } from 'react';
 import {
-  View, Text, TouchableOpacity, StyleSheet, ScrollView,
+  ScrollView,
+  StyleSheet,
+  Text, TouchableOpacity,
+  View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Colors, Radius, Spacing, Typography } from '@/constants/theme';
 
 const STEPS = [
-  { key: 'placed',   label: 'Order Placed',      icon: '📋', desc: 'Mar 3, 2026 · 10:22 AM' },
-  { key: 'packed',   label: 'Packed at Library',  icon: '📦', desc: 'Mar 3, 2026 · 2:15 PM' },
-  { key: 'shipped',  label: 'Shipped',             icon: '🚚', desc: 'Mar 4, 2026 · 9:00 AM' },
-  { key: 'out',      label: 'Out for Delivery',    icon: '🛵', desc: 'Estimated today by 7 PM' },
-  { key: 'delivered',label: 'Delivered',           icon: '✅', desc: 'Pending' },
+  { key: 'placed', label: 'Order Placed', icon: '📋', desc: 'Mar 3, 2026 · 10:22 AM' },
+  { key: 'packed', label: 'Packed at Library', icon: '📦', desc: 'Mar 3, 2026 · 2:15 PM' },
+  { key: 'shipped', label: 'Shipped', icon: '🚚', desc: 'Mar 4, 2026 · 9:00 AM' },
+  { key: 'out', label: 'Out for Delivery', icon: '🛵', desc: 'Estimated today by 7 PM' },
+  { key: 'delivered', label: 'Delivered', icon: '✅', desc: 'Pending' },
 ];
-
-const CURRENT_STEP = 3; // 0-indexed — out for delivery
 
 export default function TrackOrderScreen() {
   const router = useRouter();
+  const { id } = useLocalSearchParams<{ id: string }>();
+
+  const [issue, setIssue] = useState<any>(null);
+  const [delivery, setDelivery] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let active = true;
+    const loadIssue = async () => {
+      try {
+        const response = await issueService.getIssueDetails(id);
+        if (active && response.data) {
+          setIssue(response.data.issue);
+          setDelivery(response.data.delivery);
+        }
+      } catch (err) {
+        console.warn('Failed to load issue', err);
+      } finally {
+        if (active) setLoading(false);
+      }
+    };
+    loadIssue();
+    return () => { active = false; };
+  }, [id]);
+
+  const getStepIndex = () => {
+    if (!delivery) return 0;
+    if (delivery.status === 'DELIVERED' || issue?.status === 'RETURNED') return 4;
+    if (delivery.status === 'OUT_FOR_DELIVERY') return 3;
+    if (delivery.status === 'IN_TRANSIT') return 2;
+    if (delivery.status === 'SCHEDULED') return 1;
+    return 0; // PLACED
+  };
+
+  const CURRENT_STEP = getStepIndex();
 
   return (
     <SafeAreaView style={s.safe}>
@@ -27,17 +65,17 @@ export default function TrackOrderScreen() {
         </TouchableOpacity>
 
         <Text style={s.title}>Track Order</Text>
-        <Text style={s.orderId}>Order #ORD-2026-001</Text>
+        <Text style={s.orderId}>Issue #{issue ? issue._id.substring(0, 8).toUpperCase() : '...'}</Text>
 
         {/* Book info */}
         <View style={s.bookCard}>
           <Text style={s.bookEmoji}>📖</Text>
           <View style={{ flex: 1 }}>
-            <Text style={s.bookTitle}>Matilda</Text>
-            <Text style={s.bookAuthor}>by Roald Dahl · Koramangala Branch</Text>
+            <Text style={s.bookTitle}>{issue?.copyId?.bookId?.title || 'Loading book...'}</Text>
+            <Text style={s.bookAuthor}>{issue ? `by ${issue.copyId?.bookId?.author} · ${issue.copyId?.branchId?.name}` : 'Loading...'}</Text>
           </View>
           <View style={s.statusPill}>
-            <Text style={s.statusText}>🛵 Out for delivery</Text>
+            <Text style={s.statusText}>{STEPS[CURRENT_STEP]?.label || 'Loading...'}</Text>
           </View>
         </View>
 
@@ -45,15 +83,15 @@ export default function TrackOrderScreen() {
         <View style={s.etaBanner}>
           <Text style={s.etaEmoji}>⏱️</Text>
           <View>
-            <Text style={s.etaTitle}>Expected today by 7 PM</Text>
-            <Text style={s.etaSub}>Return by: March 17, 2026 (14 days)</Text>
+            <Text style={s.etaTitle}>{delivery?.status === 'DELIVERED' ? 'Delivered!' : `Expected by ${delivery?.scheduledAt ? new Date(delivery.scheduledAt).toLocaleDateString() : 'soon'}`}</Text>
+            <Text style={s.etaSub}>Return by: {issue?.dueDate ? new Date(issue.dueDate).toLocaleDateString() : '...'}</Text>
           </View>
         </View>
 
         {/* Progress stepper */}
         <View style={s.stepperCard}>
           {STEPS.map((step, i) => {
-            const isDone    = i < CURRENT_STEP;
+            const isDone = i < CURRENT_STEP;
             const isCurrent = i === CURRENT_STEP;
             const isPending = i > CURRENT_STEP;
             return (
@@ -62,7 +100,7 @@ export default function TrackOrderScreen() {
                 <View style={s.connectorCol}>
                   <View style={[
                     s.stepCircle,
-                    isDone    && s.stepCircleDone,
+                    isDone && s.stepCircleDone,
                     isCurrent && s.stepCircleCurrent,
                     isPending && s.stepCirclePending,
                   ]}>
@@ -89,7 +127,7 @@ export default function TrackOrderScreen() {
         {/* Return info */}
         <View style={s.returnCard}>
           <Text style={s.returnTitle}>📅 Return Information</Text>
-          <Text style={s.returnItem}>Return deadline: <Text style={{ fontWeight: '800', color: Colors.textPrimary }}>March 17, 2026</Text></Text>
+          <Text style={s.returnItem}>Return deadline: <Text style={{ fontWeight: '800', color: Colors.textPrimary }}>{issue?.dueDate ? new Date(issue.dueDate).toLocaleDateString() : '...'}</Text></Text>
           <Text style={s.returnItem}>Late fee: <Text style={{ fontWeight: '800', color: Colors.warning }}>₹2/day after deadline</Text></Text>
           <Text style={s.returnItem}>Return window: <Text style={{ fontWeight: '700', color: Colors.textPrimary }}>Mon–Sat, 9 AM–6 PM</Text></Text>
         </View>
@@ -148,7 +186,7 @@ const s = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
     backgroundColor: Colors.cardBorder,
   },
-  stepCircleDone:    { backgroundColor: Colors.accentSageLight },
+  stepCircleDone: { backgroundColor: Colors.accentSageLight },
   stepCircleCurrent: { backgroundColor: Colors.buttonPrimary },
   stepCirclePending: { backgroundColor: Colors.background },
   stepIcon: { fontSize: 20 },

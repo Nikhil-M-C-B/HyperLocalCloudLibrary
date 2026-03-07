@@ -1,32 +1,37 @@
-const BookCopy = require('../models/BookCopy');
-const LibraryBranch = require('../models/LibraryBranch');
-const AppError = require('../utils/AppError');
+const BookCopy = require("../models/BookCopy");
+const LibraryBranch = require("../models/LibraryBranch");
+const AppError = require("../utils/AppError");
 
 /**
  * Add book copies to inventory
  */
-exports.addBookCopies = async (bookId, branchId, quantity, condition = 'GOOD') => {
+exports.addBookCopies = async (
+  bookId,
+  branchId,
+  quantity,
+  condition = "GOOD",
+) => {
   const branch = await LibraryBranch.findById(branchId);
-  
+
   if (!branch) {
-    throw new AppError('Library branch not found', 404);
+    throw new AppError("Library branch not found", 404);
   }
-  
+
   const copies = [];
-  
+
   for (let i = 0; i < quantity; i++) {
     const barcode = `${branchId}-${bookId}-${Date.now()}-${i}`;
-    
+
     const copy = await BookCopy.create({
       bookId,
       branchId,
       barcode,
-      condition
+      condition,
     });
-    
+
     copies.push(copy);
   }
-  
+
   return copies;
 };
 
@@ -37,13 +42,13 @@ exports.updateCopyStatus = async (copyId, status) => {
   const copy = await BookCopy.findByIdAndUpdate(
     copyId,
     { status },
-    { new: true, runValidators: true }
+    { new: true, runValidators: true },
   );
-  
+
   if (!copy) {
-    throw new AppError('Book copy not found', 404);
+    throw new AppError("Book copy not found", 404);
   }
-  
+
   return copy;
 };
 
@@ -52,43 +57,46 @@ exports.updateCopyStatus = async (copyId, status) => {
  */
 exports.getInventoryByBranch = async (branchId) => {
   const inventory = await BookCopy.find({ branchId })
-    .populate('bookId')
-    .sort('-createdAt');
-  
+    .populate("bookId")
+    .sort("-createdAt");
+
   return inventory;
 };
 
 /**
  * Get available copies for a book at a branch
  */
-exports.getAvailableCopies = async (bookId, branchId) => {
-  const copies = await BookCopy.find({
+exports.getAvailableCopies = async (bookId, branchId, session = null) => {
+  let query = BookCopy.find({
     bookId,
     branchId,
-    status: 'AVAILABLE'
+    status: "AVAILABLE",
   });
-  
-  return copies;
+  if (session) query = query.session(session);
+
+  return await query;
 };
 
 /**
  * Mark copy as issued
  */
-exports.markAsIssued = async (copyId) => {
-  const copy = await BookCopy.findById(copyId);
-  
+exports.markAsIssued = async (copyId, session = null) => {
+  let query = BookCopy.findById(copyId);
+  if (session) query = query.session(session);
+  const copy = await query;
+
   if (!copy) {
-    throw new AppError('Book copy not found', 404);
+    throw new AppError("Book copy not found", 404);
   }
-  
-  if (copy.status !== 'AVAILABLE') {
-    throw new AppError('Book copy is not available', 400);
+
+  if (copy.status !== "AVAILABLE") {
+    throw new AppError("Book copy is not available", 400);
   }
-  
-  copy.status = 'ISSUED';
+
+  copy.status = "ISSUED";
   copy.lastIssuedAt = new Date();
-  await copy.save();
-  
+  await copy.save({ session });
+
   return copy;
 };
 
@@ -97,15 +105,15 @@ exports.markAsIssued = async (copyId) => {
  */
 exports.markAsReturned = async (copyId) => {
   const copy = await BookCopy.findById(copyId);
-  
+
   if (!copy) {
-    throw new AppError('Book copy not found', 404);
+    throw new AppError("Book copy not found", 404);
   }
-  
-  copy.status = 'AVAILABLE';
+
+  copy.status = "AVAILABLE";
   copy.lastReturnedAt = new Date();
   await copy.save();
-  
+
   return copy;
 };
 
@@ -114,16 +122,25 @@ exports.markAsReturned = async (copyId) => {
  */
 exports.getBranchInventoryStats = async (branchId) => {
   const totalBooks = await BookCopy.countDocuments({ branchId });
-  const availableBooks = await BookCopy.countDocuments({ branchId, status: 'AVAILABLE' });
-  const issuedBooks = await BookCopy.countDocuments({ branchId, status: 'ISSUED' });
-  const damagedBooks = await BookCopy.countDocuments({ branchId, status: 'DAMAGED' });
-  const lostBooks = await BookCopy.countDocuments({ branchId, status: 'LOST' });
-  
+  const availableBooks = await BookCopy.countDocuments({
+    branchId,
+    status: "AVAILABLE",
+  });
+  const issuedBooks = await BookCopy.countDocuments({
+    branchId,
+    status: "ISSUED",
+  });
+  const damagedBooks = await BookCopy.countDocuments({
+    branchId,
+    status: "DAMAGED",
+  });
+  const lostBooks = await BookCopy.countDocuments({ branchId, status: "LOST" });
+
   return {
     total: totalBooks,
     available: availableBooks,
     issued: issuedBooks,
     damaged: damagedBooks,
-    lost: lostBooks
+    lost: lostBooks,
   };
 };

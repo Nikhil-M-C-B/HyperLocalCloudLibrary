@@ -1,6 +1,6 @@
-const User = require('../models/User');
-const AppError = require('../utils/AppError');
-const mongoose = require('mongoose');
+const User = require("../models/User");
+const AppError = require("../utils/AppError");
+const mongoose = require("mongoose");
 
 /**
  * Get user by ID
@@ -9,7 +9,7 @@ exports.getUserById = async (userId) => {
   const user = await User.findById(userId);
 
   if (!user) {
-    throw new AppError('User not found', 404);
+    throw new AppError("User not found", 404);
   }
 
   return user;
@@ -19,10 +19,10 @@ exports.getUserById = async (userId) => {
  * Update user details
  */
 exports.updateUser = async (userId, updateData) => {
-  const allowedUpdates = ['phone', 'deliveryAddress'];
+  const allowedUpdates = ["phone", "deliveryAddress"];
   const updates = {};
 
-  Object.keys(updateData).forEach(key => {
+  Object.keys(updateData).forEach((key) => {
     if (allowedUpdates.includes(key)) {
       updates[key] = updateData[key];
     }
@@ -30,11 +30,11 @@ exports.updateUser = async (userId, updateData) => {
 
   const user = await User.findByIdAndUpdate(userId, updates, {
     new: true,
-    runValidators: true
+    runValidators: true,
   });
 
   if (!user) {
-    throw new AppError('User not found', 404);
+    throw new AppError("User not found", 404);
   }
 
   return user;
@@ -47,17 +47,18 @@ exports.createChildProfile = async (parentId, profileData) => {
   const user = await User.findById(parentId);
 
   if (!user) {
-    throw new AppError('User not found', 404);
+    throw new AppError("User not found", 404);
   }
 
   // Create new profile
   const newProfile = {
     profileId: new mongoose.Types.ObjectId(),
     name: profileData.name,
-    accountType: 'CHILD',
+    accountType: "CHILD",
     ageGroup: profileData.ageGroup,
     preferredGenres: profileData.preferredGenres || [],
-    preferredLanguages: profileData.preferredLanguages || []
+    preferredLanguages: profileData.preferredLanguages || [],
+    userprofileURL: profileData.userprofileURL || undefined,
   };
 
   user.profiles.push(newProfile);
@@ -73,10 +74,10 @@ exports.getChildProfiles = async (parentId) => {
   const user = await User.findById(parentId);
 
   if (!user) {
-    throw new AppError('User not found', 404);
+    throw new AppError("User not found", 404);
   }
 
-  const childProfiles = user.profiles.filter(p => p.accountType === 'CHILD');
+  const childProfiles = user.profiles.filter((p) => p.accountType === "CHILD");
   return childProfiles;
 };
 
@@ -87,18 +88,26 @@ exports.updateProfile = async (userId, profileId, updateData) => {
   const user = await User.findById(userId);
 
   if (!user) {
-    throw new AppError('User not found', 404);
+    throw new AppError("User not found", 404);
   }
 
-  const profile = user.profiles.id(profileId);
+  const profile = user.profiles.find(
+    (p) => p.profileId.toString() === profileId.toString(),
+  );
 
   if (!profile) {
-    throw new AppError('Profile not found', 404);
+    throw new AppError("Profile not found", 404);
   }
 
   // Update allowed fields
-  const allowedUpdates = ['name', 'ageGroup', 'preferredGenres', 'preferredLanguages'];
-  Object.keys(updateData).forEach(key => {
+  const allowedUpdates = [
+    "name",
+    "ageGroup",
+    "preferredGenres",
+    "preferredLanguages",
+    "userprofileURL",
+  ];
+  Object.keys(updateData).forEach((key) => {
     if (allowedUpdates.includes(key)) {
       profile[key] = updateData[key];
     }
@@ -115,41 +124,51 @@ exports.deleteProfile = async (userId, profileId) => {
   const user = await User.findById(userId);
 
   if (!user) {
-    throw new AppError('User not found', 404);
+    throw new AppError("User not found", 404);
   }
 
   // Don't allow deleting the last parent profile
-  const parentProfiles = user.profiles.filter(p => p.accountType === 'PARENT');
-  const profileToDelete = user.profiles.id(profileId);
+  const parentProfiles = user.profiles.filter(
+    (p) => p.accountType === "PARENT",
+  );
+  const profileToDelete = user.profiles.find(
+    (p) => p.profileId.toString() === profileId.toString(),
+  );
 
   if (!profileToDelete) {
-    throw new AppError('Profile not found', 404);
+    throw new AppError("Profile not found", 404);
   }
 
-  if (profileToDelete.accountType === 'PARENT' && parentProfiles.length === 1) {
-    throw new AppError('Cannot delete the last parent profile', 400);
+  if (profileToDelete.accountType === "PARENT" && parentProfiles.length === 1) {
+    throw new AppError("Cannot delete the last parent profile", 400);
   }
 
-  user.profiles.pull(profileId);
+  user.profiles = user.profiles.filter(
+    (p) => p.profileId.toString() !== profileId.toString(),
+  );
   await user.save();
 
-  return { message: 'Profile deleted successfully' };
+  return { message: "Profile deleted successfully" };
 };
 
 /**
  * Get profile reading history
  */
 exports.getReadingHistory = async (userId, profileId) => {
-  const user = await User.findById(userId).populate('profiles.readingHistory.bookId');
+  const user = await User.findById(userId).populate(
+    "profiles.readingHistory.bookId",
+  );
 
   if (!user) {
-    throw new AppError('User not found', 404);
+    throw new AppError("User not found", 404);
   }
 
-  const profile = user.profiles.id(profileId);
+  const profile = user.profiles.find(
+    (p) => p.profileId.toString() === profileId.toString(),
+  );
 
   if (!profile) {
-    throw new AppError('Profile not found', 404);
+    throw new AppError("Profile not found", 404);
   }
 
   return profile.readingHistory;
@@ -162,18 +181,20 @@ exports.addToReadingHistory = async (userId, profileId, bookId) => {
   const user = await User.findById(userId);
 
   if (!user) {
-    throw new AppError('User not found', 404);
+    throw new AppError("User not found", 404);
   }
 
-  const profile = user.profiles.id(profileId);
+  const profile = user.profiles.find(
+    (p) => p.profileId.toString() === profileId.toString(),
+  );
 
   if (!profile) {
-    throw new AppError('Profile not found', 404);
+    throw new AppError("Profile not found", 404);
   }
 
   profile.readingHistory.push({
     bookId,
-    readAt: new Date()
+    readAt: new Date(),
   });
 
   await user.save();

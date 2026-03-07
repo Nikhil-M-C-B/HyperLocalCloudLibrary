@@ -19,6 +19,7 @@ router.use(protect);
 
 // Issue and return books
 router.post('/', validate(issueBookSchema), circulationController.issueBook);
+router.get('/', restrictTo('LIBRARIAN', 'ADMIN'), circulationController.getAllIssues);
 router.put('/:issueId/return', circulationController.returnBook);
 router.get('/:issueId', circulationController.getIssue);
 

@@ -16,18 +16,21 @@ interface Props {
 }
 
 export function BookCover({ book, width, height, fontSize = 13 }: Props) {
+  const [hasError, setHasError] = React.useState(false);
+
   let coverUrl = book.coverImage;
   if (!coverUrl && book.isbn) {
-    coverUrl = `https://covers.openlibrary.org/b/isbn/${book.isbn}-M.jpg`;
+    coverUrl = `https://covers.openlibrary.org/b/isbn/${book.isbn}-M.jpg?default=false`;
   }
 
-  if (coverUrl) {
+  if (coverUrl && !hasError) {
     return (
       <Image
         source={{ uri: coverUrl }}
         style={[styles.cover, { width, height, borderRadius: Radius.md, backgroundColor: '#f0f0f0' }]}
         contentFit="cover"
         transition={200}
+        onError={() => setHasError(true)}
       />
     );
   }

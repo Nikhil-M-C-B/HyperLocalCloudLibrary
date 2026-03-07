@@ -1,9 +1,10 @@
+import librarianService from '@/api/services/librarianService';
 import GenreSelector from '@/components/GenreSelector';
 import { API_BASE_URL } from '@/constants/config';
 import { Colors, Radius, Spacing, Typography } from '@/constants/theme';
 import useAppStore from '@/store/useAppStore';
 import { useRouter } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   ActivityIndicator, Alert, KeyboardAvoidingView,
   Modal,
@@ -17,21 +18,8 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-const ISSUED_BOOKS = [
-  { id: 'i1', title: 'Matilda', user: 'Priya Sharma', due: 'Mar 17', daysLeft: 14, overdue: false },
-  { id: 'i2', title: 'Where the Wild Things Are', user: 'Aarav (Child)', due: 'Mar 5', daysLeft: 2, overdue: false },
-  { id: 'i3', title: "Charlotte's Web", user: 'Ravi Kumar', due: 'Feb 28', daysLeft: -3, overdue: true },
-  { id: 'i4', title: 'Harry Potter', user: 'Neha Singh', due: 'Mar 10', daysLeft: 7, overdue: false },
-];
-
-const PENDING_RETURNS = ISSUED_BOOKS.filter(b => b.overdue);
-
-const STATS = [
-  { label: 'Total Books', value: '248', icon: '📚', tint: Colors.accentSageLight },
-  { label: 'Issued Today', value: '12', icon: '📤', tint: Colors.browseSurface },
-  { label: 'Overdue', value: '3', icon: '⚠️', tint: '#FDE8E8' },
-  { label: 'Returned', value: '7', icon: '✅', tint: '#E8F5E9' },
-];
+// Stats configuration without hardcoded values
+const STAT_TINTS = [Colors.accentSageLight, Colors.browseSurface, '#FDE8E8', '#E8F5E9'];
 
 type Tab = 'issued' | 'returns' | 'add';
 
@@ -63,6 +51,62 @@ export default function LibrarianDashboard() {
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({ title: '', author: '', isbn: '', minAge: '', maxAge: '', summary: '' });
   const [selectedGenres, setSelectedGenres] = useState<string[]>([]);
+  const [rawIssues, setRawIssues] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetchIssues();
+  }, [tab]);
+
+  const fetchIssues = async () => {
+    try {
+      setLoading(true);
+      const res = await librarianService.getIssuedBooks();
+      setRawIssues(res.data?.issues || []);
+    } catch (err) {
+      console.warn('Failed to fetch issues', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleReturn = async (issueId: string) => {
+    try {
+      await fetch(`${API_BASE_URL}/issues/${issueId}/return`, {
+        method: 'PUT',
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      fetchIssues();
+    } catch (err) {
+      Alert.alert('Error', 'Could not process return.');
+    }
+  };
+
+  const mappedIssues = rawIssues.filter(iss => iss.status !== 'RETURNED').map(iss => {
+    const today = new Date();
+    const due = new Date(iss.dueDate);
+    const diffTime = due.getTime() - today.getTime();
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+    return {
+      id: iss._id,
+      title: iss.copyId?.bookId?.title || 'Unknown Book',
+      user: iss.userId?.name || 'Unknown User',
+      due: due.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+      daysLeft: diffDays,
+      overdue: diffDays < 0 || iss.status === 'OVERDUE',
+    };
+  });
+
+  const ISSUED_BOOKS = mappedIssues.filter(b => !b.overdue);
+  const PENDING_RETURNS = mappedIssues.filter(b => b.overdue);
+
+  const STATS = [
+    { label: 'Total Issues', value: String(rawIssues.length), icon: '📚', tint: STAT_TINTS[0] },
+    { label: 'Active Issues', value: String(ISSUED_BOOKS.length), icon: '📤', tint: STAT_TINTS[1] },
+    { label: 'Overdue', value: String(PENDING_RETURNS.length), icon: '⚠️', tint: STAT_TINTS[2] },
+    { label: 'Returned', value: String(rawIssues.filter(i => i.status === 'RETURNED').length), icon: '✅', tint: STAT_TINTS[3] },
+  ];
 
   const setField = (key: string, val: string) => setForm(f => ({ ...f, [key]: val }));
 
@@ -181,7 +225,7 @@ export default function LibrarianDashboard() {
                       {book.overdue ? `⚠️ Overdue by ${Math.abs(book.daysLeft)} days` : `Due: ${book.due} · ${book.daysLeft}d left`}
                     </Text>
                   </View>
-                  <TouchableOpacity style={s.returnBtn}>
+                  <TouchableOpacity style={s.returnBtn} onPress={() => handleReturn(book.id)}>
                     <Text style={s.returnBtnText}>Return</Text>
                   </TouchableOpacity>
                 </View>
@@ -203,7 +247,7 @@ export default function LibrarianDashboard() {
                       ⚠️ Overdue by {Math.abs(book.daysLeft)} days · Fine: ₹{Math.abs(book.daysLeft) * 2}
                     </Text>
                   </View>
-                  <TouchableOpacity style={[s.returnBtn, { backgroundColor: Colors.error }]}>
+                  <TouchableOpacity style={[s.returnBtn, { backgroundColor: Colors.error }]} onPress={() => handleReturn(book.id)}>
                     <Text style={[s.returnBtnText, { color: '#fff' }]}>Collect</Text>
                   </TouchableOpacity>
                 </View>

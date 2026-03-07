@@ -1,48 +1,37 @@
-import { useState } from 'react';
-import { useRouter } from 'expo-router';
-import {
-  View, Text, TouchableOpacity, StyleSheet,
-  ScrollView, Dimensions, Modal, TextInput, ActivityIndicator, Alert,
-  KeyboardAvoidingView, Platform,
-} from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { API_BASE_URL } from '@/constants/config';
 import { Colors, Radius, Spacing, Typography } from '@/constants/theme';
 import useAppStore from '@/store/useAppStore';
-import { API_BASE_URL } from '@/constants/config';
+import { useRouter } from 'expo-router';
+import { useEffect, useState } from 'react';
+import {
+  ActivityIndicator, Alert,
+  Dimensions,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 const { width } = Dimensions.get('window');
 
-const BRANCHES = [
-  { id: 'b1', name: 'Koramangala',   books: 248, issued: 34, members: 120, revenue: 1840, active: true  },
-  { id: 'b2', name: 'Indiranagar',   books: 185, issued: 21, members: 87,  revenue: 1100, active: true  },
-  { id: 'b3', name: 'HSR Layout',    books: 302, issued: 48, members: 156, revenue: 2300, active: true  },
-  { id: 'b4', name: 'Whitefield',    books: 91,  issued: 8,  members: 45,  revenue: 380,  active: false },
-];
+const STAT_TINTS = [Colors.accentSageLight, Colors.browseSurface, Colors.buttonPrimary, '#E8F5E9'];
 
-const STAT_CARDS = [
-  { label: 'Total Branches',  value: '4',     icon: '🏛️', tint: Colors.accentSageLight },
-  { label: 'Active Members',  value: '408',   icon: '👥', tint: Colors.browseSurface },
-  { label: 'Books Issued',    value: '111',   icon: '📤', tint: Colors.buttonPrimary },
-  { label: "This Month's Rev",value: '₹5,620',icon: '💰', tint: '#E8F5E9' },
-];
+function BarChart({ data }: { data: { month: string; val: number }[] }) {
+  const maxBar = Math.max(...data.map(m => m.val), 1); // fallback to 1 to avoid div by 0
 
-// Simulated bar chart using View widths
-const MONTHLY = [
-  { month: 'Oct', val: 62 }, { month: 'Nov', val: 78 },
-  { month: 'Dec', val: 95 }, { month: 'Jan', val: 88 },
-  { month: 'Feb', val: 111 },{ month: 'Mar', val: 45 },
-];
-const MAX_BAR = Math.max(...MONTHLY.map(m => m.val));
-const BAR_AREA_W = width - Spacing.xl * 2 - Spacing.md * 2;
-
-function BarChart() {
   return (
     <View style={bc.wrap}>
-      {MONTHLY.map(({ month, val }) => (
+      {data.map(({ month, val }) => (
         <View key={month} style={bc.col}>
           <Text style={bc.valLabel}>{val}</Text>
           <View style={bc.barBg}>
-            <View style={[bc.bar, { height: `${(val / MAX_BAR) * 100}%` }]} />
+            <View style={[bc.bar, { height: `${(val / maxBar) * 100}%` }]} />
           </View>
           <Text style={bc.monthLabel}>{month}</Text>
         </View>
@@ -71,6 +60,149 @@ export default function AdminDashboard() {
   const [menuVisible, setMenuVisible] = useState(false);
   const [branchForm, setBranchForm] = useState({ name: '', address: '', lat: '', lng: '', radius: '' });
   const [saving, setSaving] = useState(false);
+  const [rawBranches, setRawBranches] = useState<any[]>([]);
+  const [rawIssues, setRawIssues] = useState<any[]>([]);
+  const [chartData, setChartData] = useState<{ month: string; val: number }[]>([]);
+  const [topBranch, setTopBranch] = useState<any>(null);
+  const [recentActivity, setRecentActivity] = useState<any[]>([]);
+
+  useEffect(() => {
+    fetchData();
+  }, [tab]);
+
+  const fetchData = async () => {
+    try {
+      const branchRes = await fetch(`${API_BASE_URL}/libraries`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      const branchJson = await branchRes.json();
+      setRawBranches(branchJson.data?.libraries || []);
+
+      const issueRes = await fetch(`${API_BASE_URL}/issues`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      const issueJson = await issueRes.json();
+      const issues = issueJson.data?.issues || [];
+      setRawIssues(issues);
+
+      processStats(issues, branchJson.data?.libraries || []);
+    } catch (err) {
+      console.warn('Failed to fetch admin data', err);
+    }
+  };
+
+  const processStats = (issues: any[], libraries: any[]) => {
+    const now = new Date();
+    const sixMonthsAgo = new Date();
+    sixMonthsAgo.setMonth(now.getMonth() - 5);
+    sixMonthsAgo.setDate(1);
+
+    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+    // 1. Chart Data (Last 6 Months)
+    const monthlyCounts: Record<string, number> = {};
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      monthlyCounts[`${monthNames[d.getMonth()]}`] = 0;
+    }
+
+    issues.forEach(issue => {
+      const d = new Date(issue.issueDate);
+      if (d >= sixMonthsAgo) {
+        const m = monthNames[d.getMonth()];
+        if (monthlyCounts[m] !== undefined) {
+          monthlyCounts[m]++;
+        }
+      }
+    });
+
+    setChartData(Object.keys(monthlyCounts).map(k => ({ month: k, val: monthlyCounts[k] })));
+
+    // 2. Top Branch This Month
+    const currentMonthIssues = issues.filter(i => {
+      const d = new Date(i.issueDate);
+      return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+    });
+
+    const branchStats: Record<string, { issued: number; revenue: number }> = {};
+    currentMonthIssues.forEach(i => {
+      const bId = i.copyId?.branchId?._id;
+      if (bId) {
+        if (!branchStats[bId]) branchStats[bId] = { issued: 0, revenue: 0 };
+        branchStats[bId].issued++;
+        if (i.type === 'PHYSICAL') branchStats[bId].revenue += 20;
+      }
+    });
+
+    let bestBranchId: string | null = null;
+    let maxIssues = -1;
+    let bestRev = 0;
+    Object.keys(branchStats).forEach(bId => {
+      if (branchStats[bId].issued > maxIssues) {
+        maxIssues = branchStats[bId].issued;
+        bestRev = branchStats[bId].revenue;
+        bestBranchId = bId;
+      }
+    });
+
+    const bestBranch = libraries.find((l: any) => l._id === bestBranchId);
+    if (bestBranch) {
+      setTopBranch({
+        name: bestBranch.name,
+        issued: maxIssues,
+        revenue: bestRev,
+        books: 0 // Mocked for now or can compute inventory later
+      });
+    }
+
+    // 3. Recent Activity (Latest 4 issues)
+    const recent = issues.slice(0, 4).map(i => {
+      const bName = i.copyId?.branchId?.name || 'Library';
+      let msg = '';
+      let icon = '';
+      if (i.status === 'ISSUED') { icon = '📤'; msg = `${bName}: Book issued`; }
+      else if (i.status === 'RETURNED') { icon = '📥'; msg = `${bName}: Book returned`; }
+      else if (i.status === 'OVERDUE') { icon = '⚠️'; msg = `${bName}: Overdue book`; }
+
+      return {
+        icon,
+        msg,
+        time: new Date(i.issueDate).toLocaleDateString()
+      };
+    });
+    setRecentActivity(recent);
+  };
+
+
+  const BRANCHES = rawBranches.map(b => {
+    const branchIssues = rawIssues.filter(i => i.copyId?.branchId?._id === b._id);
+    const rev = branchIssues.filter(i => i.type === 'PHYSICAL').length * 20;
+
+    return {
+      id: b._id,
+      name: b.name,
+      books: 0,
+      issued: branchIssues.length,
+      members: Array.from(new Set(branchIssues.map(i => i.userId?._id))).length,
+      revenue: rev,
+      active: b.status === 'ACTIVE'
+    };
+  });
+
+  const uniqueMembers = Array.from(new Set(rawIssues.map(i => i.userId?._id))).length;
+  const currentMonthIssues = rawIssues.filter(i => {
+    const d = new Date(i.issueDate);
+    const now = new Date();
+    return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+  });
+  const monthRev = currentMonthIssues.filter(i => i.type === 'PHYSICAL').length * 20;
+
+  const STAT_CARDS = [
+    { label: 'Total Branches', value: String(BRANCHES.length), icon: '🏛️', tint: STAT_TINTS[0] },
+    { label: 'Active Members', value: String(uniqueMembers), icon: '👥', tint: STAT_TINTS[1] },
+    { label: 'Books Issued', value: String(rawIssues.length), icon: '📤', tint: STAT_TINTS[2] },
+    { label: "This Month's Rev", value: `₹${monthRev}`, icon: '💰', tint: STAT_TINTS[3] },
+  ];
 
   const setBF = (key: string, val: string) => setBranchForm(f => ({ ...f, [key]: val }));
 
@@ -101,6 +233,7 @@ export default function AdminDashboard() {
       if (!res.ok) throw new Error(json.message ?? 'Failed to add branch');
       Alert.alert('✅ Branch registered!', `"${branchForm.name}" has been added.`);
       setBranchForm({ name: '', address: '', lat: '', lng: '', radius: '' });
+      fetchData();
     } catch (err: any) {
       Alert.alert('Error', err.message ?? 'Something went wrong');
     } finally {
@@ -115,9 +248,9 @@ export default function AdminDashboard() {
   };
 
   const tabs: { id: Tab; label: string; emoji: string }[] = [
-    { id: 'overview',  label: 'Overview',  emoji: '📊' },
-    { id: 'branches',  label: 'Branches',  emoji: '🏛️' },
-    { id: 'add',       label: 'Add Branch',emoji: '➕' },
+    { id: 'overview', label: 'Overview', emoji: '📊' },
+    { id: 'branches', label: 'Branches', emoji: '🏛️' },
+    { id: 'add', label: 'Add Branch', emoji: '➕' },
   ];
 
   return (
@@ -179,43 +312,46 @@ export default function AdminDashboard() {
             {/* Issues per month chart */}
             <Text style={s.sectionTitle}>📈 Books Issued — Last 6 Months</Text>
             <View style={s.chartCard}>
-              <BarChart />
+              <BarChart data={chartData} />
             </View>
 
             {/* Top performing branch */}
-            <Text style={[s.sectionTitle, { marginTop: Spacing.lg }]}>🏆 Top Branch This Month</Text>
-            <View style={s.topBranchCard}>
-              <Text style={s.topBranchName}>HSR Layout Branch</Text>
-              <View style={s.topBranchStats}>
-                <View style={s.topStat}>
-                  <Text style={s.topStatVal}>302</Text>
-                  <Text style={s.topStatLabel}>Books</Text>
+            {topBranch && (
+              <>
+                <Text style={[s.sectionTitle, { marginTop: Spacing.lg }]}>🏆 Top Branch This Month</Text>
+                <View style={s.topBranchCard}>
+                  <Text style={s.topBranchName}>{topBranch.name}</Text>
+                  <View style={s.topBranchStats}>
+                    <View style={s.topStat}>
+                      <Text style={s.topStatVal}>{topBranch.books}</Text>
+                      <Text style={s.topStatLabel}>Books</Text>
+                    </View>
+                    <View style={s.topStat}>
+                      <Text style={s.topStatVal}>{topBranch.issued}</Text>
+                      <Text style={s.topStatLabel}>Issued</Text>
+                    </View>
+                    <View style={s.topStat}>
+                      <Text style={s.topStatVal}>₹{topBranch.revenue}</Text>
+                      <Text style={s.topStatLabel}>Revenue</Text>
+                    </View>
+                  </View>
                 </View>
-                <View style={s.topStat}>
-                  <Text style={s.topStatVal}>48</Text>
-                  <Text style={s.topStatLabel}>Issued</Text>
-                </View>
-                <View style={s.topStat}>
-                  <Text style={s.topStatVal}>₹2,300</Text>
-                  <Text style={s.topStatLabel}>Revenue</Text>
-                </View>
-              </View>
-            </View>
+              </>
+            )}
 
             {/* Recent activity */}
-            <Text style={[s.sectionTitle, { marginTop: Spacing.lg }]}>🕐 Recent Activity</Text>
-            {[
-              { icon: '📚', msg: 'Koramangala: 5 new books added', time: '10 min ago' },
-              { icon: '⚠️', msg: 'Indiranagar: 2 overdue returns', time: '1 hr ago' },
-              { icon: '👤', msg: 'HSR Layout: 8 new members joined', time: '3 hrs ago' },
-              { icon: '💰', msg: 'Whitefield: ₹380 collected (Mar)', time: 'Yesterday' },
-            ].map((a, i) => (
-              <View key={i} style={s.activityRow}>
-                <Text style={s.activityIcon}>{a.icon}</Text>
-                <Text style={s.activityMsg}>{a.msg}</Text>
-                <Text style={s.activityTime}>{a.time}</Text>
-              </View>
-            ))}
+            {recentActivity.length > 0 && (
+              <>
+                <Text style={[s.sectionTitle, { marginTop: Spacing.lg }]}>🕐 Recent Activity</Text>
+                {recentActivity.map((a, i) => (
+                  <View key={i} style={s.activityRow}>
+                    <Text style={s.activityIcon}>{a.icon}</Text>
+                    <Text style={s.activityMsg}>{a.msg}</Text>
+                    <Text style={s.activityTime}>{a.time}</Text>
+                  </View>
+                ))}
+              </>
+            )}
           </View>
         )}
 
@@ -255,38 +391,38 @@ export default function AdminDashboard() {
 
         {tab === 'add' && (
           <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-          <View style={s.section}>
-            <Text style={s.sectionTitle}>Register a New Branch</Text>
-            <Text style={s.addDesc}>
-              Adding a new library branch registers it in the system.
-            </Text>
-            {([
-              { key: 'name',    label: 'Branch Name *',   ph: 'e.g. Jayanagar Branch', kbType: 'default'  },
-              { key: 'address', label: 'Address *',       ph: 'Full street address',   kbType: 'default'  },
-              { key: 'lat',     label: 'Latitude',        ph: '12.9716',               kbType: 'numeric'  },
-              { key: 'lng',     label: 'Longitude',       ph: '77.5946',               kbType: 'numeric'  },
-              { key: 'radius',  label: 'Service Radius (km)', ph: '8',                kbType: 'numeric'  },
-            ] as const).map(f => (
-              <View key={f.key} style={{ gap: 5, marginBottom: Spacing.md }}>
-                <Text style={s.fieldLabel}>{f.label}</Text>
-                <TextInput
-                  style={s.fieldInput}
-                  placeholder={f.ph}
-                  placeholderTextColor={Colors.textMuted}
-                  value={branchForm[f.key]}
-                  onChangeText={v => setBF(f.key, v)}
-                  keyboardType={f.kbType as any}
-                  returnKeyType="next"
-                />
-              </View>
-            ))}
-            <TouchableOpacity style={[s.btnPrimary, saving && { opacity: 0.6 }]} activeOpacity={0.82} onPress={handleAddBranch} disabled={saving}>
-              {saving
-                ? <ActivityIndicator color={Colors.buttonPrimaryText} />
-                : <Text style={s.btnPrimaryText}>🏛️ Register Branch</Text>
-              }
-            </TouchableOpacity>
-          </View>
+            <View style={s.section}>
+              <Text style={s.sectionTitle}>Register a New Branch</Text>
+              <Text style={s.addDesc}>
+                Adding a new library branch registers it in the system.
+              </Text>
+              {([
+                { key: 'name', label: 'Branch Name *', ph: 'e.g. Jayanagar Branch', kbType: 'default' },
+                { key: 'address', label: 'Address *', ph: 'Full street address', kbType: 'default' },
+                { key: 'lat', label: 'Latitude', ph: '12.9716', kbType: 'numeric' },
+                { key: 'lng', label: 'Longitude', ph: '77.5946', kbType: 'numeric' },
+                { key: 'radius', label: 'Service Radius (km)', ph: '8', kbType: 'numeric' },
+              ] as const).map(f => (
+                <View key={f.key} style={{ gap: 5, marginBottom: Spacing.md }}>
+                  <Text style={s.fieldLabel}>{f.label}</Text>
+                  <TextInput
+                    style={s.fieldInput}
+                    placeholder={f.ph}
+                    placeholderTextColor={Colors.textMuted}
+                    value={branchForm[f.key]}
+                    onChangeText={v => setBF(f.key, v)}
+                    keyboardType={f.kbType as any}
+                    returnKeyType="next"
+                  />
+                </View>
+              ))}
+              <TouchableOpacity style={[s.btnPrimary, saving && { opacity: 0.6 }]} activeOpacity={0.82} onPress={handleAddBranch} disabled={saving}>
+                {saving
+                  ? <ActivityIndicator color={Colors.buttonPrimaryText} />
+                  : <Text style={s.btnPrimaryText}>🏛️ Register Branch</Text>
+                }
+              </TouchableOpacity>
+            </View>
           </KeyboardAvoidingView>
         )}
 

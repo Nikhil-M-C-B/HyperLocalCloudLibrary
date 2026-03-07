@@ -1,11 +1,14 @@
-import { useState } from 'react';
+import bookService from '@/api/services/bookService';
+import { Colors, Radius, Spacing, Typography } from '@/constants/theme';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useEffect, useState } from 'react';
 import {
-  View, Text, TouchableOpacity, StyleSheet, ScrollView,
+  ScrollView,
+  StyleSheet,
+  Text, TouchableOpacity,
+  View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Colors, Radius, Spacing, Typography } from '@/constants/theme';
-import { MOCK_BOOKS } from '@/constants/mockData';
 
 // ─── Mock quiz questions (one set per all books for now) ──────────────────────
 const QUIZZES: Record<string, { q: string; options: string[]; answer: number }[]> = {
@@ -40,12 +43,30 @@ const QUIZZES: Record<string, { q: string; options: string[]; answer: number }[]
 
 // Answer button tints cycling per option index
 const OPTION_TINTS = [Colors.browseSurface, Colors.buttonPrimary, Colors.accentSageLight, '#FDE8E8'];
-const OPTION_TEXT  = [Colors.accentPeriwinkle, Colors.buttonPrimaryText, Colors.accentSage, Colors.error];
+const OPTION_TEXT = [Colors.accentPeriwinkle, Colors.buttonPrimaryText, Colors.accentSage, Colors.error];
 
 export default function QuizScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
-  const book = MOCK_BOOKS.find(b => b.id === id) ?? MOCK_BOOKS[0];
+
+  const [bookTitle, setBookTitle] = useState('Loading book...');
+  useEffect(() => {
+    let active = true;
+    const fetchBook = async () => {
+      try {
+        const response = await bookService.getBookById(id as string);
+        if (active && response.data?.book) {
+          setBookTitle(response.data.book.title);
+        } else if (active) {
+          setBookTitle('Unknown Book');
+        }
+      } catch (err) {
+        if (active) setBookTitle('Unknown Book');
+      }
+    };
+    fetchBook();
+    return () => { active = false; };
+  }, [id]);
 
   const questions = QUIZZES[id ?? ''] ?? QUIZZES.default;
 
@@ -82,10 +103,10 @@ export default function QuizScreen() {
   if (done) {
     const pct = Math.round((score / questions.length) * 100);
     const emoji = pct === 100 ? '🏆' : pct >= 75 ? '🌟' : pct >= 50 ? '👍' : '📖';
-    const msg   = pct === 100 ? 'Perfect score! Amazing!'
-                : pct >= 75   ? 'So close! Great job!'
-                : pct >= 50   ? 'Good effort! Keep reading!'
-                :                'Keep going — reading helps!';
+    const msg = pct === 100 ? 'Perfect score! Amazing!'
+      : pct >= 75 ? 'So close! Great job!'
+        : pct >= 50 ? 'Good effort! Keep reading!'
+          : 'Keep going — reading helps!';
     return (
       <SafeAreaView style={s.safe}>
         <ScrollView contentContainerStyle={s.resultScroll}>
@@ -148,7 +169,7 @@ export default function QuizScreen() {
         </View>
 
         {/* Book context */}
-        <Text style={s.bookContext}>Quiz: {book.title}</Text>
+        <Text style={s.bookContext}>Quiz: {bookTitle}</Text>
 
         {/* Question */}
         <View style={s.questionBox}>
@@ -160,8 +181,8 @@ export default function QuizScreen() {
         <View style={s.optionsGrid}>
           {q.options.map((opt, i) => {
             const isSelected = selected === i;
-            const isCorrect  = selected !== null && i === q.answer;
-            const isWrong    = isSelected && i !== q.answer;
+            const isCorrect = selected !== null && i === q.answer;
+            const isWrong = isSelected && i !== q.answer;
 
             return (
               <TouchableOpacity
@@ -170,7 +191,7 @@ export default function QuizScreen() {
                   s.optionBtn,
                   { backgroundColor: OPTION_TINTS[i % OPTION_TINTS.length] },
                   isCorrect && s.optionCorrect,
-                  isWrong   && s.optionWrong,
+                  isWrong && s.optionWrong,
                 ]}
                 onPress={() => handleSelect(i)}
                 activeOpacity={0.78}
@@ -180,7 +201,7 @@ export default function QuizScreen() {
                   s.optionText,
                   { color: OPTION_TEXT[i % OPTION_TEXT.length] },
                   isCorrect && { color: Colors.success },
-                  isWrong   && { color: Colors.error },
+                  isWrong && { color: Colors.error },
                 ]}>
                   {isCorrect ? '✓ ' : isWrong ? '✗ ' : ''}{opt}
                 </Text>
@@ -261,12 +282,12 @@ const s = StyleSheet.create({
     borderWidth: 2, borderColor: 'transparent',
   },
   optionCorrect: { borderColor: Colors.success, backgroundColor: '#E8F5E9' },
-  optionWrong:   { borderColor: Colors.error, backgroundColor: '#FFEBEE' },
+  optionWrong: { borderColor: Colors.error, backgroundColor: '#FFEBEE' },
   optionText: { fontSize: Typography.bodyChild - 2, fontWeight: '700', lineHeight: 24 },
 
   feedbackBox: { borderRadius: Radius.lg, padding: Spacing.md, marginBottom: Spacing.md },
   feedbackCorrect: { backgroundColor: '#E8F5E9' },
-  feedbackWrong:   { backgroundColor: '#FFEBEE' },
+  feedbackWrong: { backgroundColor: '#FFEBEE' },
   feedbackText: { fontSize: Typography.body, fontWeight: '700', color: Colors.textPrimary, textAlign: 'center' },
 
   btnPrimary: {

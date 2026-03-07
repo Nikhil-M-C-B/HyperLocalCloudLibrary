@@ -111,7 +111,7 @@ export default function OrderScreen() {
           <Text style={s.successTitle}>Order Placed!</Text>
           <Text style={s.successSub}>
             Your book will arrive in 1–2 working days.{'\n'}
-            You'll get a notification when it ships.
+            You&apos;ll get a notification when it ships.
           </Text>
           <TouchableOpacity
             style={s.btnPrimary}
@@ -242,7 +242,7 @@ export default function OrderScreen() {
             </View>
 
             <Text style={s.payNote}>
-              💳 Payment is online only — you'll be redirected to the payment gateway.
+              💳 Payment is online only — you&apos;ll be redirected to the payment gateway.
             </Text>
 
             <TouchableOpacity

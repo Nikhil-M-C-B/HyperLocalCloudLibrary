@@ -34,7 +34,22 @@ exports.getAllBooks = async (filters = {}) => {
 
   const books = await Book.find(query)
     .sort(filters.sort || '-createdAt')
-    .limit(parseInt(filters.limit) || 50);
+    .limit(parseInt(filters.limit) || 50)
+    .lean();
+
+  // Attach available copies count from BookCopy collection
+  const bookIds = books.map(b => b._id);
+  const copiesAgg = await BookCopy.aggregate([
+    { $match: { bookId: { $in: bookIds }, status: 'AVAILABLE' } },
+    { $group: { _id: '$bookId', count: { $sum: 1 } } }
+  ]);
+  const copiesMap = {};
+  copiesAgg.forEach(c => {
+    copiesMap[c._id.toString()] = c.count;
+  });
+  books.forEach(b => {
+    b.availableCopies = copiesMap[b._id.toString()] || 0;
+  });
 
   return books;
 };
@@ -43,11 +58,18 @@ exports.getAllBooks = async (filters = {}) => {
  * Get book by ID
  */
 exports.getBookById = async (bookId) => {
-  const book = await Book.findById(bookId);
+  const book = await Book.findById(bookId).lean();
 
   if (!book) {
     throw new AppError('Book not found', 404);
   }
+
+  // Load actual available copies count
+  const availableCopiesCount = await BookCopy.countDocuments({
+    bookId,
+    status: 'AVAILABLE'
+  });
+  book.availableCopies = availableCopiesCount;
 
   return book;
 };

@@ -36,10 +36,10 @@ const librarianService = {
     },
 
     /**
-     * Get all currently issued books for the librarian's branch.
+     * Get all currently issued books.
      */
     getIssuedBooks: async () => {
-        const response = await api.get('/librarian/issued');
+        const response = await api.get('/issues');
         return response.data;
     },
 

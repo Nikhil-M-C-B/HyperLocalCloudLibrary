@@ -1,4 +1,5 @@
 import bookService from '@/api/services/bookService';
+import issueService from '@/api/services/issueService';
 import { BookCover } from '@/components/BookCover';
 import { GENRES, type Book } from '@/constants/mockData';
 import { Colors, Radius, Spacing, Typography } from '@/constants/theme';
@@ -121,7 +122,7 @@ export default function UserHome() {
   const [query, setQuery] = useState('');
   const [activeGenre, setActiveGenre] = useState('All');
 
-  const { profiles, activeProfileId } = useAppStore();
+  const { userId, profiles, activeProfileId } = useAppStore();
   const activeProfile = profiles.find(p => p.profileId === activeProfileId);
   const preferredGenres = activeProfile?.preferredGenres?.length ? activeProfile.preferredGenres : ['Fantasy', 'Picture Book'];
 
@@ -129,6 +130,7 @@ export default function UserHome() {
   const [newArrivals, setNewArrivals] = useState<Book[]>([]);
   const [byGenre, setByGenre] = useState<Book[]>([]);
   const [searchResults, setSearchResults] = useState<Book[]>([]);
+  const [activeIssues, setActiveIssues] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   // Fetch initial sections
@@ -142,6 +144,13 @@ export default function UserHome() {
 
         const newRes = await bookService.getBooks({ daysAgo: 10, limit: 10 });
         if (active) setNewArrivals((newRes?.data?.books || []).map(mapBook));
+
+        if (activeProfile?.profileId && userId) {
+          const issuesRes = await issueService.getUserIssues(userId, activeProfile.profileId);
+          if (active && issuesRes.data?.issues) {
+            setActiveIssues(issuesRes.data.issues.filter((i: any) => i.status === 'ISSUED'));
+          }
+        }
       } catch (error) {
         console.warn('Failed to fetch sections:', error);
       } finally {
@@ -232,7 +241,7 @@ export default function UserHome() {
           <View style={s.section}>
             <SectionHeader title={`Results (${searchResults.length})`} />
             {searchResults.length === 0 ? (
-              <Text style={s.empty}>No books found for "{query}".</Text>
+              <Text style={s.empty}>No books found for &quot;{query}&quot;.</Text>
             ) : (
               searchResults.map(b => (
                 <SearchRow key={b.id} book={b} onPress={() => router.push(`/(user)/book/${b.id}`)} />
@@ -242,14 +251,16 @@ export default function UserHome() {
         ) : (
           <>
             {/* ── Active order pill ── */}
-            <TouchableOpacity style={s.orderBanner} onPress={() => router.push('/(user)/track/ord-001')}>
-              <Text style={s.orderBannerIcon}>📦</Text>
-              <View style={{ flex: 1 }}>
-                <Text style={s.orderBannerTitle}>Order in progress</Text>
-                <Text style={s.orderBannerSub}>Matilda · Out for delivery</Text>
-              </View>
-              <Text style={s.orderBannerArrow}>→</Text>
-            </TouchableOpacity>
+            {activeIssues.length > 0 && activeIssues[0].type === 'PHYSICAL' && (
+              <TouchableOpacity style={s.orderBanner} onPress={() => router.push(`/(user)/track/${activeIssues[0]._id}`)}>
+                <Text style={s.orderBannerIcon}>📦</Text>
+                <View style={{ flex: 1 }}>
+                  <Text style={s.orderBannerTitle}>Order in progress</Text>
+                  <Text style={s.orderBannerSub}>{activeIssues[0].copyId?.bookId?.title || activeIssues[0].bookId?.title || 'Book'} · Tracking</Text>
+                </View>
+                <Text style={s.orderBannerArrow}>→</Text>
+              </TouchableOpacity>
+            )}
 
             {/* ── Based on Your Preferences ── */}
             {recommended.length > 0 && (

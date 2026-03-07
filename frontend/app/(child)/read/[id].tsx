@@ -106,7 +106,7 @@ export default function ReadingView() {
           contentContainerStyle={s.pageContent}
         >
           <Text style={[s.pageText, { fontSize }]}>
-            {SAMPLE_PAGES[page]}
+            {SAMPLE_PAGES[page].replace(/"/g, '&quot;')}
           </Text>
         </ScrollView>
       </View>

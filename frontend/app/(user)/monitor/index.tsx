@@ -30,45 +30,7 @@ interface ChildProfile {
   recentBooks: { title: string; date: string; pagesRead: number; totalPages: number; coverImage?: string; coverColor?: string; coverAccent?: string; book?: any }[];
 }
 
-const CHILDREN: ChildProfile[] = [
-  {
-    id: 'c1',
-    name: 'Aarav',
-    age: 8,
-    avatar: '🧒',
-    readingLevel: 'Level 3 — Chapter Books',
-    booksReadThisMonth: 3,
-    totalMinutesRead: 124,
-    quizzesTaken: 6,
-    avgQuizScore: 78,
-    lastRead: 'Yesterday at 6:30 PM',
-    currentBook: 'Charlotte\'s Web',
-    recentBooks: [
-      { title: 'Charlotte\'s Web', date: 'Yesterday', pagesRead: 48, totalPages: 184 },
-      { title: 'The Very Hungry Caterpillar', date: 'Feb 28', pagesRead: 30, totalPages: 30 },
-      { title: 'Matilda', date: 'Feb 20', pagesRead: 240, totalPages: 240 },
-    ],
-  },
-  {
-    id: 'c2',
-    name: 'Sia',
-    age: 6,
-    avatar: '👧',
-    readingLevel: 'Level 1 — Picture Books',
-    booksReadThisMonth: 5,
-    totalMinutesRead: 95,
-    quizzesTaken: 4,
-    avgQuizScore: 88,
-    lastRead: 'Today at 4:15 PM',
-    currentBook: 'The Very Hungry Caterpillar',
-    recentBooks: [
-      { title: 'The Very Hungry Caterpillar', date: 'Today', pagesRead: 30, totalPages: 30 },
-      { title: 'Goodnight Moon', date: 'Feb 28', pagesRead: 32, totalPages: 32 },
-      { title: 'Where the Wild Things Are', date: 'Feb 26', pagesRead: 40, totalPages: 40 },
-      { title: 'Green Eggs and Ham', date: 'Feb 24', pagesRead: 62, totalPages: 62 },
-    ],
-  },
-];
+
 
 function ProgressRing({ score }: { score: number }) {
   const color = score >= 80 ? Colors.success : score >= 60 ? Colors.warning : Colors.error;
@@ -95,7 +57,7 @@ export default function MonitorChildren() {
   const { userId, profiles } = useAppStore();
   const childrenProfiles = profiles.filter(p => p.accountType === 'CHILD');
 
-  const defaultChildId = childrenProfiles.length > 0 ? childrenProfiles[0].profileId : CHILDREN[0].id;
+  const defaultChildId = childrenProfiles.length > 0 ? childrenProfiles[0].profileId : '';
   const [selected, setSelected] = useState<string>(defaultChildId);
   const [activeIssues, setActiveIssues] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
@@ -120,31 +82,36 @@ export default function MonitorChildren() {
     return () => { active = false; };
   }, [userId, selected]);
 
-  // Combine real profile data with mock stats since backend doesn't natively support quizzes yet
+  // Compute stats entirely from real profiles and connected issue data
   const realProfile = childrenProfiles.find(p => p.profileId === selected);
-  const baseMock = CHILDREN[0];
 
   const activeBooks = activeIssues.map(i => {
     const d = new Date(i.issueDate);
     return {
-      title: i.bookId?.title || 'Unknown Title',
+      title: i.copyId?.bookId?.title || i.bookId?.title || 'Unknown Title',
       date: `${d.toLocaleString('default', { month: 'short' })} ${d.getDate()}`,
-      pagesRead: i.bookId?.pages ? Math.floor(i.bookId.pages * 0.4) : 30, // Mock progress for visual consistency
-      totalPages: i.bookId?.pages || 100,
-      coverImage: i.bookId?.coverImage,
-      coverColor: i.bookId?.coverColor || '#C5DDB8',
-      coverAccent: i.bookId?.coverAccent || '#4A7C59',
-      book: i.bookId
+      pagesRead: i.copyId?.bookId?.pages ? Math.floor(i.copyId.bookId.pages * 0.4) : 30, // Mock progress for visual consistency
+      totalPages: i.copyId?.bookId?.pages || 100,
+      coverImage: i.copyId?.bookId?.coverImage,
+      coverColor: i.copyId?.bookId?.coverColor || '#C5DDB8',
+      coverAccent: i.copyId?.bookId?.coverAccent || '#4A7C59',
+      book: i.copyId?.bookId || i.bookId
     };
   });
 
   const child = {
-    ...baseMock,
     id: selected,
-    name: realProfile?.name || baseMock.name,
-    age: realProfile?.age || baseMock.age,
+    name: realProfile?.name || 'Child',
+    age: realProfile?.age || 6,
+    avatar: '🧒',
+    readingLevel: realProfile?.age && realProfile.age > 7 ? 'Level 3 — Chapter Books' : 'Level 1 — Picture Books',
+    booksReadThisMonth: activeBooks.length,
+    totalMinutesRead: activeBooks.length * 20,
+    quizzesTaken: 0,
+    avgQuizScore: 0,
     currentBook: activeBooks.length > 0 ? activeBooks[0].title : undefined,
-    recentBooks: activeBooks.length > 0 ? activeBooks : baseMock.recentBooks
+    recentBooks: activeBooks,
+    lastRead: activeBooks.length > 0 ? activeBooks[0].date : undefined,
   };
 
   return (
@@ -162,7 +129,7 @@ export default function MonitorChildren() {
 
         {/* Child selector */}
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.childRow}>
-          {childrenProfiles.length > 0 ? childrenProfiles.map(c => (
+          {childrenProfiles.map(c => (
             <TouchableOpacity
               key={c.profileId}
               style={[s.childChip, selected === c.profileId && s.childChipActive]}
@@ -171,16 +138,6 @@ export default function MonitorChildren() {
               <Text style={s.childEmoji}>🧒</Text>
               <Text style={[s.childName, selected === c.profileId && s.childNameActive]}>{c.name}</Text>
               <Text style={[s.childAge, selected === c.profileId && { color: Colors.textOnDark + 'CC' }]}>Age {c.age}</Text>
-            </TouchableOpacity>
-          )) : CHILDREN.map(c => (
-            <TouchableOpacity
-              key={c.id}
-              style={[s.childChip, selected === c.id && s.childChipActive]}
-              onPress={() => setSelected(c.id)}
-            >
-              <Text style={s.childEmoji}>{c.avatar}</Text>
-              <Text style={[s.childName, selected === c.id && s.childNameActive]}>{c.name}</Text>
-              <Text style={[s.childAge, selected === c.id && { color: Colors.textOnDark + 'CC' }]}>Age {c.age}</Text>
             </TouchableOpacity>
           ))}
         </ScrollView>
