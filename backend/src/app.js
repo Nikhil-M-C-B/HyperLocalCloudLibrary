@@ -23,6 +23,7 @@ const notificationRoutes = require('./routes/notificationRoutes');
 const paymentRoutes  = require('./routes/paymentRoutes');
 const penaltyRoutes  = require('./routes/penaltyRoutes');
 const deliveryRoutes = require('./routes/deliveryRoutes');
+const shipmentRoutes = require('./routes/shipmentRoutes');
 const app = express();
 
 // ── Security Middleware (Platform Services — Aryan 2) ──
@@ -58,6 +59,8 @@ app.use('/api/v1/payments',  paymentRoutes);
 app.use('/api/v1/penalties', penaltyRoutes);
 // Delivery routes (stub mode - gig API calls are logged, not sent)
 app.use('/api/v1/delivery',  deliveryRoutes);
+// Shiprocket shipment routes (Platform Services — Aryan)
+app.use('/api/v1/shipments', shipmentRoutes);
 
 // Handle undefined routes
 app.all('*', (req, res, next) => {

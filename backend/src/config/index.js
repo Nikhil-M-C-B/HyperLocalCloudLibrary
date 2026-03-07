@@ -93,4 +93,10 @@ module.exports = {
     provider: process.env.HOSTING_PROVIDER || 'render', // render | railway | aws
     region: process.env.HOSTING_REGION || 'ap-south-1',
   },
+
+  // Shiprocket (Shipping & Logistics)
+  shiprocket: {
+    email: process.env.SHIPROCKET_EMAIL || '',
+    password: process.env.SHIPROCKET_PASSWORD || '',
+  },
 };

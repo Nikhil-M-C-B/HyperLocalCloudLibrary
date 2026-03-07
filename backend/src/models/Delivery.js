@@ -35,10 +35,10 @@ const deliverySchema = new mongoose.Schema({
     enum: ['SCHEDULED', 'DISPATCHED', 'OUT_FOR_DELIVERY', 'DELIVERED', 'FAILED', 'CANCELLED'],
     default: 'SCHEDULED'
   },
-  // Gig provider fields (Porter / Borzo)
+  // Gig provider fields (Porter / Borzo / Shiprocket)
   providerName: {
     type: String,
-    enum: ['PORTER', 'BORZO', 'MOCK', null],
+    enum: ['PORTER', 'BORZO', 'SHIPROCKET', 'MOCK', null],
     default: null
   },
   gigOrderId: {
@@ -48,6 +48,19 @@ const deliverySchema = new mongoose.Schema({
     type: String
   },
   trackingUrl: {
+    type: String
+  },
+  // ── Shiprocket-specific fields ──────────────────────
+  shiprocketOrderId: {
+    type: Number
+  },
+  shiprocketShipmentId: {
+    type: Number
+  },
+  awbCode: {
+    type: String
+  },
+  courierName: {
     type: String
   }
 }, {
@@ -59,5 +72,7 @@ deliverySchema.index({ issueId: 1 });
 deliverySchema.index({ userId: 1, status: 1 });
 deliverySchema.index({ status: 1 });
 deliverySchema.index({ gigOrderId: 1 }, { sparse: true });
+deliverySchema.index({ shiprocketShipmentId: 1 }, { sparse: true });
+deliverySchema.index({ awbCode: 1 }, { sparse: true });
 
 module.exports = mongoose.model('Delivery', deliverySchema);
