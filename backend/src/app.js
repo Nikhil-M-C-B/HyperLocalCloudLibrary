@@ -3,6 +3,14 @@ const cors = require('cors');
 const errorHandler = require('./middleware/errorHandler');
 const AppError = require('./utils/AppError');
 
+// ── Platform Services Layer — Aryan 2 (Security) ──────
+const {
+  helmetMiddleware,
+  apiLimiter,
+  authLimiter,
+  enforceHTTPS
+} = require('./middleware/security');
+
 // Import routes
 const authRoutes = require('./routes/authRoutes');
 const userRoutes = require('./routes/userRoutes');
@@ -10,24 +18,23 @@ const bookRoutes = require('./routes/bookRoutes');
 const libraryRoutes = require('./routes/libraryRoutes');
 const inventoryRoutes = require('./routes/inventoryRoutes');
 const circulationRoutes = require('./routes/circulationRoutes');
+const notificationRoutes = require('./routes/notificationRoutes');
 // Stub routes enabled for prototype - controllers use stub services (no MySQL)
 const paymentRoutes = require('./routes/paymentRoutes');
 const penaltyRoutes = require('./routes/penaltyRoutes');
 
 const app = express();
 
+// ── Security Middleware (Platform Services — Aryan 2) ──
+app.use(helmetMiddleware);       // Helmet: HSTS, CSP, X-Frame, etc.
+app.use(enforceHTTPS);           // HTTPS redirect in production
+app.use('/api/', apiLimiter);    // 100 req / 15 min (general)
+app.use('/api/v1/auth', authLimiter); // 10 req / 15 min (auth)
+
 // Middleware
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-
-// Security headers
-app.use((req, res, next) => {
-  res.setHeader('X-Content-Type-Options', 'nosniff');
-  res.setHeader('X-Frame-Options', 'DENY');
-  res.setHeader('X-XSS-Protection', '1; mode=block');
-  next();
-});
 
 // Health check endpoint
 app.get('/health', (req, res) => {
@@ -45,6 +52,7 @@ app.use('/api/v1/books', bookRoutes);
 app.use('/api/v1/libraries', libraryRoutes);
 app.use('/api/v1/inventory', inventoryRoutes);
 app.use('/api/v1/issues', circulationRoutes);
+app.use('/api/v1/notifications', notificationRoutes); // Platform Services — Aryan
 // Stub routes - validate & log data without MySQL
 app.use('/api/v1/payments', paymentRoutes);
 app.use('/api/v1/penalties', penaltyRoutes);

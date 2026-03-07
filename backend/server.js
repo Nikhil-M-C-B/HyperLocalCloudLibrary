@@ -5,6 +5,11 @@ const connectMongoDB = require('./src/config/mongodb');
 // const { connectMySQL } = require('./src/config/mysql');
 // const { startPenaltyCronJob } = require('./src/utils/cronJobs');
 
+// ── Platform Services Layer — Aryan ────────────────────
+const { startBackgroundJobs } = require('./src/jobs/backgroundJobs');
+const { validateEnvSecrets } = require('./src/middleware/security');
+const { closeAllQueues } = require('./src/services/queueService');
+
 // Handle uncaught exceptions
 process.on('uncaughtException', (err) => {
   console.error('💥 UNCAUGHT EXCEPTION! Shutting down...');
@@ -15,6 +20,9 @@ process.on('uncaughtException', (err) => {
 // Connect to databases
 const startServer = async () => {
   try {
+    // ── Platform Services: Validate env secrets ───────
+    validateEnvSecrets();
+
     // Connect to MongoDB
     await connectMongoDB();
     
@@ -32,9 +40,9 @@ const startServer = async () => {
       console.log(`⏰ Server started at: ${new Date().toISOString()}\n`);
     });
     
-    // Start cron jobs - TEMPORARILY DISABLED FOR PROTOTYPE
-    // Uncomment when MySQL is set up
-    // startPenaltyCronJob();
+    // ── Platform Services: Background Jobs ─────────────
+    await startBackgroundJobs();
+    console.log('🔔 Push notifications service ready');
     
     // Handle unhandled promise rejections
     process.on('unhandledRejection', (err) => {
@@ -46,8 +54,9 @@ const startServer = async () => {
     });
     
     // Handle SIGTERM
-    process.on('SIGTERM', () => {
+    process.on('SIGTERM', async () => {
       console.log('👋 SIGTERM RECEIVED. Shutting down gracefully');
+      await closeAllQueues();
       server.close(() => {
         console.log('✅ Process terminated!');
       });

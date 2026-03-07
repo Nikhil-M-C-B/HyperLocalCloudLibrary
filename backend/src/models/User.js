@@ -86,7 +86,14 @@ const userSchema = new mongoose.Schema({
     type: String,
     enum: ['USER', 'LIBRARIAN', 'ADMIN'],
     default: 'USER'
-  }
+  },
+  // ── Platform Services Layer — Aryan ──────────────────
+  // FCM device tokens for push notifications
+  fcmTokens: [{
+    token: { type: String, required: true },
+    platform: { type: String, enum: ['android', 'ios', 'web'], default: 'android' },
+    updatedAt: { type: Date, default: Date.now }
+  }]
 }, {
   timestamps: true
 });

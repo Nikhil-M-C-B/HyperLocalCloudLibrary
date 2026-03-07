@@ -65,4 +65,25 @@ module.exports = {
     pass: process.env.SMTP_PASS || "",
     from: process.env.SMTP_FROM || '"Cloud Library" <noreply@cloudlibrary.dev>',
   },
+
+  // ── Platform Services Layer — Aryan ──────────────────
+
+  // Firebase Cloud Messaging (Push Notifications)
+  firebase: {
+    projectId: process.env.FIREBASE_PROJECT_ID || '',
+    serviceAccountPath: process.env.FIREBASE_SERVICE_ACCOUNT_PATH || '',
+  },
+
+  // Redis (Bull Queue backend)
+  redis: {
+    host: process.env.REDIS_HOST || '127.0.0.1',
+    port: parseInt(process.env.REDIS_PORT) || 6379,
+    password: process.env.REDIS_PASSWORD || '',
+  },
+
+  // Hosting / Cloud
+  hosting: {
+    provider: process.env.HOSTING_PROVIDER || 'render', // render | railway | aws
+    region: process.env.HOSTING_REGION || 'ap-south-1',
+  },
 };
