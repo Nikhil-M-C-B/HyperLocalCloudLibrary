@@ -10,26 +10,30 @@ const router = express.Router();
 const createBookSchema = Joi.object({
   title: Joi.string().required(),
   author: Joi.string().required(),
-  isbn: Joi.string(),
-  genre: Joi.array().items(Joi.string()),
+  isbn: Joi.number().required(),
+  genre: Joi.array().items(Joi.string()).min(1).required(),
   language: Joi.string(),
-  ageRating: Joi.string().valid('0-3', '4-6', '6-8', '8-10', '10-12', '12-15', '15+').required(),
+  ageRating: Joi.string().pattern(/^\d+-\d+$/).required().messages({
+    'string.pattern.base': 'ageRating must be in "min-max" format (e.g. "4-6").'
+  }),
   collectionName: Joi.string(),
   bookURL: Joi.string().uri().optional(),
-  summary: Joi.string().max(1000),
+  summary: Joi.string().max(1000).required(),
   coverImage: Joi.string()
 });
 
 const updateBookSchema = Joi.object({
   title: Joi.string(),
   author: Joi.string(),
-  isbn: Joi.string(),
-  genre: Joi.array().items(Joi.string()),
+  isbn: Joi.number().required(),
+  genre: Joi.array().items(Joi.string()).min(1).required(),
   language: Joi.string(),
-  ageRating: Joi.string().valid('0-3', '4-6', '6-8', '8-10', '10-12', '12-15', '15+'),
+  ageRating: Joi.string().pattern(/^\d+-\d+$/).messages({
+    'string.pattern.base': 'ageRating must be in "min-max" format (e.g. "4-6").'
+  }),
   collectionName: Joi.string(),
   bookURL: Joi.string().uri().optional(),
-  summary: Joi.string().max(1000),
+  summary: Joi.string().max(1000).required(),
   coverImage: Joi.string()
 });
 

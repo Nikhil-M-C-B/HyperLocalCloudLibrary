@@ -103,13 +103,17 @@ function PageDots({ total, current }: { total: number; current: number }) {
 // ─── Main ─────────────────────────────────────────────────────────────────────
 export default function ChildHome() {
   const router = useRouter();
-  const { profiles, activeProfileId } = useAppStore();
+  const { profiles, activeProfileId, prefetchTopBooks } = useAppStore();
   const [genre, setGenre] = useState('All');
   const [page, setPage] = useState(0);
   const [books, setBooks] = useState<Book[]>([]);
 
   useEffect(() => {
     let active = true;
+
+    // Silently prefetch top books
+    prefetchTopBooks();
+
     const fetchBooks = async () => {
       try {
         const response = await bookService.getBooks({ limit: 50 });
@@ -122,17 +126,21 @@ export default function ChildHome() {
     };
     fetchBooks();
     return () => { active = false; };
-  }, []);
+  }, [prefetchTopBooks]);
 
   const activeProfile = profiles.find(p => p.profileId === activeProfileId);
   const preferredGenres = activeProfile?.preferredGenres || [];
   const firstName = activeProfile?.name?.split(' ')[0] || 'Friend';
+  const childAge = activeProfile?.age ?? 6; // default child age fallback
+
+  // Filter books appropriate for child's age
+  const ageAppropriateBooks = books.filter(b => childAge >= b.ageMin && childAge <= b.ageMax);
 
   const filtered = genre === 'All'
-    ? books
-    : books.filter(b => b.genres.includes(genre));
+    ? ageAppropriateBooks
+    : ageAppropriateBooks.filter(b => b.genres.includes(genre));
 
-  const recommendedBooks = books.filter(b =>
+  const recommendedBooks = ageAppropriateBooks.filter(b =>
     b.genres.some(g => preferredGenres.includes(g))
   );
 

@@ -1,30 +1,36 @@
-import { useState } from 'react';
-import { useRouter } from 'expo-router';
-import {
-  View, Text, TouchableOpacity, StyleSheet, ScrollView,
-  TextInput, Modal, ActivityIndicator, Alert, KeyboardAvoidingView, Platform,
-} from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import GenreSelector from '@/components/GenreSelector';
+import { API_BASE_URL } from '@/constants/config';
 import { Colors, Radius, Spacing, Typography } from '@/constants/theme';
 import useAppStore from '@/store/useAppStore';
-import { API_BASE_URL } from '@/constants/config';
-
-const AGE_RATINGS = ['0-3', '4-6', '6-8', '8-10', '10-12', '12-15', '15+'];
+import { useRouter } from 'expo-router';
+import { useState } from 'react';
+import {
+  ActivityIndicator, Alert, KeyboardAvoidingView,
+  Modal,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 const ISSUED_BOOKS = [
-  { id: 'i1', title: 'Matilda',                 user: 'Priya Sharma',   due: 'Mar 17',  daysLeft: 14, overdue: false },
-  { id: 'i2', title: 'Where the Wild Things Are',user: 'Aarav (Child)',  due: 'Mar 5',   daysLeft: 2,  overdue: false },
-  { id: 'i3', title: "Charlotte's Web",          user: 'Ravi Kumar',     due: 'Feb 28',  daysLeft: -3, overdue: true  },
-  { id: 'i4', title: 'Harry Potter',             user: 'Neha Singh',     due: 'Mar 10',  daysLeft: 7,  overdue: false },
+  { id: 'i1', title: 'Matilda', user: 'Priya Sharma', due: 'Mar 17', daysLeft: 14, overdue: false },
+  { id: 'i2', title: 'Where the Wild Things Are', user: 'Aarav (Child)', due: 'Mar 5', daysLeft: 2, overdue: false },
+  { id: 'i3', title: "Charlotte's Web", user: 'Ravi Kumar', due: 'Feb 28', daysLeft: -3, overdue: true },
+  { id: 'i4', title: 'Harry Potter', user: 'Neha Singh', due: 'Mar 10', daysLeft: 7, overdue: false },
 ];
 
 const PENDING_RETURNS = ISSUED_BOOKS.filter(b => b.overdue);
 
 const STATS = [
-  { label: 'Total Books', value: '248',  icon: '📚', tint: Colors.accentSageLight },
-  { label: 'Issued Today', value: '12',  icon: '📤', tint: Colors.browseSurface },
-  { label: 'Overdue',      value: '3',   icon: '⚠️', tint: '#FDE8E8' },
-  { label: 'Returned',     value: '7',   icon: '✅', tint: '#E8F5E9' },
+  { label: 'Total Books', value: '248', icon: '📚', tint: Colors.accentSageLight },
+  { label: 'Issued Today', value: '12', icon: '📤', tint: Colors.browseSurface },
+  { label: 'Overdue', value: '3', icon: '⚠️', tint: '#FDE8E8' },
+  { label: 'Returned', value: '7', icon: '✅', tint: '#E8F5E9' },
 ];
 
 type Tab = 'issued' | 'returns' | 'add';
@@ -44,7 +50,7 @@ const sc = StyleSheet.create({
     alignItems: 'center', gap: 4,
     borderWidth: 1, borderColor: Colors.cardBorder,
   },
-  icon:  { fontSize: 24 },
+  icon: { fontSize: 24 },
   value: { fontSize: Typography.title + 2, fontWeight: '900', color: Colors.textPrimary },
   label: { fontSize: Typography.label - 1, color: Colors.textSecondary, fontWeight: '600', textAlign: 'center' },
 });
@@ -55,7 +61,8 @@ export default function LibrarianDashboard() {
   const [tab, setTab] = useState<Tab>('issued');
   const [menuVisible, setMenuVisible] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [form, setForm] = useState({ title: '', author: '', isbn: '', genre: '', ageRating: '4-6', summary: '' });
+  const [form, setForm] = useState({ title: '', author: '', isbn: '', minAge: '', maxAge: '', summary: '' });
+  const [selectedGenres, setSelectedGenres] = useState<string[]>([]);
 
   const setField = (key: string, val: string) => setForm(f => ({ ...f, [key]: val }));
 
@@ -66,20 +73,28 @@ export default function LibrarianDashboard() {
   };
 
   const handleAddBook = async () => {
-    if (!form.title.trim() || !form.author.trim()) {
-      Alert.alert('Missing fields', 'Title and Author are required.');
+    if (!form.title.trim() || !form.author.trim() || !form.isbn.trim() || !form.summary.trim() || selectedGenres.length === 0) {
+      Alert.alert('Missing fields', 'Title, Author, ISBN, Genres, and Summary are required.');
       return;
     }
+
+    const min = parseInt(form.minAge, 10);
+    const max = parseInt(form.maxAge, 10);
+    if (isNaN(min) || isNaN(max) || min >= max) {
+      Alert.alert('Invalid Age Rating', 'Please enter valid minimum and maximum ages where Minimum < Maximum.');
+      return;
+    }
+
     setSaving(true);
     try {
       const body: Record<string, unknown> = {
         title: form.title.trim(),
         author: form.author.trim(),
-        ageRating: form.ageRating,
+        isbn: Number(form.isbn),
+        genre: selectedGenres,
+        summary: form.summary.trim(),
+        ageRating: `${min}-${max}`,
       };
-      if (form.isbn.trim())    body.isbn = form.isbn.trim();
-      if (form.summary.trim()) body.summary = form.summary.trim();
-      if (form.genre.trim())   body.genre = form.genre.split(',').map((g: string) => g.trim()).filter(Boolean);
 
       const res = await fetch(`${API_BASE_URL}/books`, {
         method: 'POST',
@@ -89,7 +104,8 @@ export default function LibrarianDashboard() {
       const json = await res.json();
       if (!res.ok) throw new Error(json.message ?? 'Failed to add book');
       Alert.alert('✅ Book added!', `"${form.title}" has been added to the library.`);
-      setForm({ title: '', author: '', isbn: '', genre: '', ageRating: '4-6', summary: '' });
+      setForm({ title: '', author: '', isbn: '', minAge: '', maxAge: '', summary: '' });
+      setSelectedGenres([]);
     } catch (err: any) {
       Alert.alert('Error', err.message ?? 'Something went wrong');
     } finally {
@@ -98,9 +114,9 @@ export default function LibrarianDashboard() {
   };
 
   const tabList: { id: Tab; label: string; emoji: string }[] = [
-    { id: 'issued',  label: 'Issued',   emoji: '📤' },
-    { id: 'returns', label: 'Overdue',  emoji: '⚠️' },
-    { id: 'add',     label: 'Add Book', emoji: '➕' },
+    { id: 'issued', label: 'Issued', emoji: '📤' },
+    { id: 'returns', label: 'Overdue', emoji: '⚠️' },
+    { id: 'add', label: 'Add Book', emoji: '➕' },
   ];
 
   return (
@@ -121,134 +137,162 @@ export default function LibrarianDashboard() {
       </Modal>
 
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={s.scroll} keyboardShouldPersistTaps="handled">
+        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={s.scroll} keyboardShouldPersistTaps="handled">
 
-        {/* Header */}
-        <View style={s.header}>
-          <View>
-            <Text style={s.title}>Librarian Panel</Text>
-            <Text style={s.subtitle}>Koramangala Branch · Today, Mar 3</Text>
-          </View>
-          <TouchableOpacity style={s.profileBtn} onPress={() => setMenuVisible(true)}>
-            <Text style={s.profileEmoji}>📚</Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* Stats row */}
-        <View style={s.statsRow}>
-          {STATS.map(stat => <StatCard key={stat.label} {...stat} />)}
-        </View>
-
-        {/* Tabs */}
-        <View style={s.tabRow}>
-          {tabList.map(t => (
-            <TouchableOpacity
-              key={t.id}
-              style={[s.tabBtn, tab === t.id && s.tabBtnActive]}
-              onPress={() => setTab(t.id)}
-            >
-              <Text style={[s.tabText, tab === t.id && s.tabTextActive]}>{t.emoji} {t.label}</Text>
+          {/* Header */}
+          <View style={s.header}>
+            <View>
+              <Text style={s.title}>Librarian Panel</Text>
+              <Text style={s.subtitle}>Koramangala Branch · Today, Mar 3</Text>
+            </View>
+            <TouchableOpacity style={s.profileBtn} onPress={() => setMenuVisible(true)}>
+              <Text style={s.profileEmoji}>📚</Text>
             </TouchableOpacity>
-          ))}
-        </View>
+          </View>
 
-        {/* Tab content */}
-        {tab === 'issued' && (
-          <View style={s.section}>
-            <Text style={s.sectionTitle}>Currently Issued ({ISSUED_BOOKS.length})</Text>
-            {ISSUED_BOOKS.map(book => (
-              <View key={book.id} style={[s.issueCard, book.overdue && s.issueCardOverdue]}>
-                <View style={{ flex: 1, gap: 3 }}>
-                  <Text style={s.issueName}>{book.title}</Text>
-                  <Text style={s.issueUser}>👤 {book.user}</Text>
-                  <Text style={[s.issueDue, book.overdue && { color: Colors.error }]}>
-                    {book.overdue ? `⚠️ Overdue by ${Math.abs(book.daysLeft)} days` : `Due: ${book.due} · ${book.daysLeft}d left`}
-                  </Text>
-                </View>
-                <TouchableOpacity style={s.returnBtn}>
-                  <Text style={s.returnBtnText}>Return</Text>
-                </TouchableOpacity>
-              </View>
+          {/* Stats row */}
+          <View style={s.statsRow}>
+            {STATS.map(stat => <StatCard key={stat.label} {...stat} />)}
+          </View>
+
+          {/* Tabs */}
+          <View style={s.tabRow}>
+            {tabList.map(t => (
+              <TouchableOpacity
+                key={t.id}
+                style={[s.tabBtn, tab === t.id && s.tabBtnActive]}
+                onPress={() => setTab(t.id)}
+              >
+                <Text style={[s.tabText, tab === t.id && s.tabTextActive]}>{t.emoji} {t.label}</Text>
+              </TouchableOpacity>
             ))}
           </View>
-        )}
 
-        {tab === 'returns' && (
-          <View style={s.section}>
-            <Text style={s.sectionTitle}>Overdue Returns ({PENDING_RETURNS.length})</Text>
-            {PENDING_RETURNS.length === 0 ? (
-              <Text style={s.empty}>🎉 No overdue returns!</Text>
-            ) : PENDING_RETURNS.map(book => (
-              <View key={book.id} style={[s.issueCard, s.issueCardOverdue]}>
-                <View style={{ flex: 1, gap: 3 }}>
-                  <Text style={s.issueName}>{book.title}</Text>
-                  <Text style={s.issueUser}>👤 {book.user}</Text>
-                  <Text style={[s.issueDue, { color: Colors.error }]}>
-                    ⚠️ Overdue by {Math.abs(book.daysLeft)} days · Fine: ₹{Math.abs(book.daysLeft) * 2}
-                  </Text>
+          {/* Tab content */}
+          {tab === 'issued' && (
+            <View style={s.section}>
+              <Text style={s.sectionTitle}>Currently Issued ({ISSUED_BOOKS.length})</Text>
+              {ISSUED_BOOKS.map(book => (
+                <View key={book.id} style={[s.issueCard, book.overdue && s.issueCardOverdue]}>
+                  <View style={{ flex: 1, gap: 3 }}>
+                    <Text style={s.issueName}>{book.title}</Text>
+                    <Text style={s.issueUser}>👤 {book.user}</Text>
+                    <Text style={[s.issueDue, book.overdue && { color: Colors.error }]}>
+                      {book.overdue ? `⚠️ Overdue by ${Math.abs(book.daysLeft)} days` : `Due: ${book.due} · ${book.daysLeft}d left`}
+                    </Text>
+                  </View>
+                  <TouchableOpacity style={s.returnBtn}>
+                    <Text style={s.returnBtnText}>Return</Text>
+                  </TouchableOpacity>
                 </View>
-                <TouchableOpacity style={[s.returnBtn, { backgroundColor: Colors.error }]}>
-                  <Text style={[s.returnBtnText, { color: '#fff' }]}>Collect</Text>
-                </TouchableOpacity>
-              </View>
-            ))}
-          </View>
-        )}
-
-        {tab === 'add' && (
-          <View style={s.section}>
-            <Text style={s.sectionTitle}>Add a new book</Text>
-
-            {([
-              { key: 'title',   label: 'Book Title *',  ph: 'e.g. The Alchemist',  multi: false },
-              { key: 'author',  label: 'Author *',      ph: 'e.g. Paulo Coelho',   multi: false },
-              { key: 'isbn',    label: 'ISBN',          ph: '978-...',             multi: false },
-              { key: 'genre',   label: 'Genres',        ph: 'Fiction, Adventure',  multi: false },
-              { key: 'summary', label: 'Summary',       ph: 'Brief description…',  multi: true  },
-            ] as const).map(f => (
-              <View key={f.key} style={{ gap: 5, marginBottom: Spacing.md }}>
-                <Text style={s.label}>{f.label}</Text>
-                <TextInput
-                  style={[s.input, f.multi && { height: 90, textAlignVertical: 'top' }]}
-                  placeholder={f.ph}
-                  placeholderTextColor={Colors.textMuted}
-                  value={form[f.key]}
-                  onChangeText={v => setField(f.key, v)}
-                  multiline={f.multi}
-                  returnKeyType={f.multi ? 'default' : 'next'}
-                />
-              </View>
-            ))}
-
-            <Text style={s.label}>Age Rating *</Text>
-            <View style={s.ageRow}>
-              {AGE_RATINGS.map(r => (
-                <TouchableOpacity
-                  key={r}
-                  style={[s.ageChip, form.ageRating === r && s.ageChipActive]}
-                  onPress={() => setField('ageRating', r)}
-                >
-                  <Text style={[s.ageChipText, form.ageRating === r && s.ageChipTextActive]}>{r}</Text>
-                </TouchableOpacity>
               ))}
             </View>
+          )}
 
-            <TouchableOpacity style={[s.btnPrimary, saving && { opacity: 0.6 }]} activeOpacity={0.82} onPress={handleAddBook} disabled={saving}>
-              {saving
-                ? <ActivityIndicator color={Colors.buttonPrimaryText} />
-                : <Text style={s.btnPrimaryText}>📚 Add Book to Library</Text>
-              }
-            </TouchableOpacity>
-          </View>
-        )}
+          {tab === 'returns' && (
+            <View style={s.section}>
+              <Text style={s.sectionTitle}>Overdue Returns ({PENDING_RETURNS.length})</Text>
+              {PENDING_RETURNS.length === 0 ? (
+                <Text style={s.empty}>🎉 No overdue returns!</Text>
+              ) : PENDING_RETURNS.map(book => (
+                <View key={book.id} style={[s.issueCard, s.issueCardOverdue]}>
+                  <View style={{ flex: 1, gap: 3 }}>
+                    <Text style={s.issueName}>{book.title}</Text>
+                    <Text style={s.issueUser}>👤 {book.user}</Text>
+                    <Text style={[s.issueDue, { color: Colors.error }]}>
+                      ⚠️ Overdue by {Math.abs(book.daysLeft)} days · Fine: ₹{Math.abs(book.daysLeft) * 2}
+                    </Text>
+                  </View>
+                  <TouchableOpacity style={[s.returnBtn, { backgroundColor: Colors.error }]}>
+                    <Text style={[s.returnBtnText, { color: '#fff' }]}>Collect</Text>
+                  </TouchableOpacity>
+                </View>
+              ))}
+            </View>
+          )}
 
-        {/* Issue history link */}
-        <TouchableOpacity style={s.historyLink} onPress={() => router.push('/(librarian)/history')}>
-          <Text style={s.historyLinkText}>📜 Full issue history →</Text>
-        </TouchableOpacity>
+          {tab === 'add' && (
+            <View style={s.section}>
+              <Text style={s.sectionTitle}>Add a new book</Text>
 
-        <View style={{ height: Spacing.xxl }} />
-      </ScrollView>
+              {([
+                { key: 'title', label: 'Book Title *', ph: 'e.g. The Alchemist', multi: false },
+                { key: 'author', label: 'Author *', ph: 'e.g. Paulo Coelho', multi: false },
+                { key: 'isbn', label: 'ISBN *', ph: '978-...', multi: false },
+                { key: 'summary', label: 'Summary *', ph: 'Brief description…', multi: true },
+              ] as const).map(f => (
+                <View key={f.key} style={{ gap: 5, marginBottom: Spacing.md }}>
+                  <Text style={s.label}>{f.label}</Text>
+                  <TextInput
+                    style={[s.input, f.multi && { height: 90, textAlignVertical: 'top' }]}
+                    placeholder={f.ph}
+                    placeholderTextColor={Colors.textMuted}
+                    value={(form as any)[f.key]}
+                    onChangeText={v => setField(f.key, f.key === 'isbn' ? v.replace(/[^0-9]/g, '') : v)}
+                    keyboardType={f.key === 'isbn' ? 'numeric' : 'default'}
+                    multiline={f.multi}
+                    returnKeyType={f.multi ? 'default' : 'next'}
+                  />
+                </View>
+              ))}
+
+              <View style={{ marginBottom: Spacing.md, marginTop: 4 }}>
+                <GenreSelector
+                  selectedGenres={selectedGenres}
+                  onGenresChange={setSelectedGenres}
+                  isChild={false}
+                  title="📚 Related Genres *"
+                />
+              </View>
+
+              <Text style={s.label}>Age Rating *</Text>
+              <View style={{ gap: Spacing.sm, marginBottom: Spacing.md, marginTop: 8 }}>
+                <View>
+                  <Text style={[s.label, { fontSize: Typography.label - 1, color: Colors.textMuted, marginBottom: 4 }]}>Min Age:</Text>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: Spacing.xs, paddingBottom: 4 }}>
+                    {Array.from({ length: 19 }).map((_, i) => (
+                      <TouchableOpacity
+                        key={`min-${i}`}
+                        style={[s.ageChip, form.minAge === String(i) && s.ageChipActive]}
+                        onPress={() => setField('minAge', String(i))}
+                      >
+                        <Text style={[s.ageChipText, form.minAge === String(i) && s.ageChipTextActive]}>{i}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </ScrollView>
+                </View>
+                <View>
+                  <Text style={[s.label, { fontSize: Typography.label - 1, color: Colors.textMuted, marginBottom: 4 }]}>Max Age:</Text>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: Spacing.xs, paddingBottom: 4 }}>
+                    {Array.from({ length: 19 }).map((_, i) => (
+                      <TouchableOpacity
+                        key={`max-${i}`}
+                        style={[s.ageChip, form.maxAge === String(i) && s.ageChipActive]}
+                        onPress={() => setField('maxAge', String(i))}
+                      >
+                        <Text style={[s.ageChipText, form.maxAge === String(i) && s.ageChipTextActive]}>{i}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </ScrollView>
+                </View>
+              </View>
+
+              <TouchableOpacity style={[s.btnPrimary, saving && { opacity: 0.6 }]} activeOpacity={0.82} onPress={handleAddBook} disabled={saving}>
+                {saving
+                  ? <ActivityIndicator color={Colors.buttonPrimaryText} />
+                  : <Text style={s.btnPrimaryText}>📚 Add Book to Library</Text>
+                }
+              </TouchableOpacity>
+            </View>
+          )}
+
+          {/* Issue history link */}
+          <TouchableOpacity style={s.historyLink} onPress={() => router.push('/(librarian)/history')}>
+            <Text style={s.historyLinkText}>📜 Full issue history →</Text>
+          </TouchableOpacity>
+
+          <View style={{ height: Spacing.xxl }} />
+        </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );

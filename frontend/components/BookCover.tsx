@@ -4,23 +4,30 @@
  */
 import type { Book } from '@/constants/mockData';
 import { Radius } from '@/constants/theme';
+import { Image } from 'expo-image';
 import React from 'react';
-import { Image, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 
 interface Props {
-  book: Book;
+  book: Book & { isbn?: string };
   width: number;
   height: number;
   fontSize?: number;
 }
 
 export function BookCover({ book, width, height, fontSize = 13 }: Props) {
-  if (book.coverImage) {
+  let coverUrl = book.coverImage;
+  if (!coverUrl && book.isbn) {
+    coverUrl = `https://covers.openlibrary.org/b/isbn/${book.isbn}-M.jpg`;
+  }
+
+  if (coverUrl) {
     return (
       <Image
-        source={{ uri: book.coverImage }}
+        source={{ uri: coverUrl }}
         style={[styles.cover, { width, height, borderRadius: Radius.md, backgroundColor: '#f0f0f0' }]}
-        resizeMode="cover"
+        contentFit="cover"
+        transition={200}
       />
     );
   }

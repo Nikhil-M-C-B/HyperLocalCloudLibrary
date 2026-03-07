@@ -112,12 +112,14 @@ interface GenreSelectorProps {
     selectedGenres: string[];
     onGenresChange: (genres: string[]) => void;
     isChild?: boolean;
+    title?: string;
 }
 
 export default function GenreSelector({
     selectedGenres,
     onGenresChange,
     isChild = false,
+    title,
 }: GenreSelectorProps) {
     const genres = isChild ? CHILD_GENRES : ADULT_GENRES;
     const atMax = selectedGenres.length >= MAX_GENRES;
@@ -134,7 +136,7 @@ export default function GenreSelector({
         <View style={st.container}>
             <View style={st.headerRow}>
                 <Text style={st.title}>
-                    {isChild ? '📚 Pick favourite genres' : '📚 Choose your genres'}
+                    {title || (isChild ? '📚 Pick favourite genres' : '📚 Choose your genres')}
                 </Text>
                 <Text style={st.counter}>
                     {selectedGenres.length} / {MAX_GENRES}

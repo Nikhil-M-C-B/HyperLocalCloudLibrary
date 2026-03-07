@@ -12,22 +12,31 @@ const bookSchema = new mongoose.Schema({
     trim: true
   },
   isbn: {
-    type: String,
+    type: Number,
     unique: true,
+    required: true,
     sparse: true
   },
-  genre: [{
-    type: String,
-    trim: true
-  }],
+  genre: {
+    type: [{
+      type: String,
+      trim: true
+    }],
+    validate: [v => Array.isArray(v) && v.length > 0, 'At least one genre is required']
+  },
   language: {
     type: String,
     default: 'English'
   },
   ageRating: {
     type: String,
-    enum: ['0-3', '4-6', '6-8', '8-10', '10-12', '12-15', '15+'],
-    required: true
+    required: true,
+    validate: {
+      validator: function (v) {
+        return /^\d+-\d+$/.test(v); // Ensures format like "2-10"
+      },
+      message: props => `${props.value} is not a valid age rating format. Use "min-max" (e.g., "4-6").`
+    }
   },
   collectionName: {
     type: String,
@@ -39,6 +48,7 @@ const bookSchema = new mongoose.Schema({
   },
   summary: {
     type: String,
+    required: true,
     maxlength: 1000
   },
   coverImage: {

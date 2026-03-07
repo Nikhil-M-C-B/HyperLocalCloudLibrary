@@ -4,7 +4,9 @@
  * Persists to AsyncStorage so the session survives refreshes.
  * Works on web (uses AsyncStorage, not SecureStore for storage key).
  */
+import bookService from '@/api/services/bookService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Image } from 'expo-image';
 import { create } from 'zustand';
 
 export type AppRole = 'USER' | 'LIBRARIAN' | 'ADMIN';
@@ -37,12 +39,14 @@ interface AppStore {
   profiles: AppProfile[];
   isAuthenticated: boolean;
   isLoading: boolean;
+  topBooksPrefetched: boolean;
 
   hydrate: () => Promise<void>;
   setAuth: (data: SetAuthPayload) => Promise<void>;
   addProfile: (profile: Omit<AppProfile, 'age'> & { age?: number }) => Promise<void>;
   setActiveProfile: (profileId: string) => Promise<void>;
   clearAuth: () => Promise<void>;
+  prefetchTopBooks: () => Promise<void>;
 }
 
 const STORAGE_KEY = '@app_auth_v1';
@@ -74,6 +78,7 @@ const useAppStore = create<AppStore>((set, get) => ({
   profiles: [],
   isAuthenticated: false,
   isLoading: true,
+  topBooksPrefetched: false,
 
   // ── Hydrate from AsyncStorage (call on app launch) ──────────────────────────
   hydrate: async () => {
@@ -148,8 +153,29 @@ const useAppStore = create<AppStore>((set, get) => ({
     await AsyncStorage.removeItem(STORAGE_KEY);
     set({
       userId: null, email: null, token: null, activeProfileId: null, role: 'USER',
-      profiles: [], isAuthenticated: false,
+      profiles: [], isAuthenticated: false, topBooksPrefetched: false,
     });
+  },
+
+  // ── Prefetch Top Books for Child Dashboard ──────────────────────────────────
+  prefetchTopBooks: async () => {
+    if (get().topBooksPrefetched) return;
+    try {
+      const response = await bookService.getBooks({ limit: 10 });
+      if (response.data?.books) {
+        const urls = response.data.books.map((b: any) => {
+          if (b.coverImage) return b.coverImage;
+          if (b.isbn) return `https://covers.openlibrary.org/b/isbn/${b.isbn}-M.jpg`;
+          return null;
+        }).filter(Boolean);
+        if (urls.length > 0) {
+          Image.prefetch(urls);
+        }
+        set({ topBooksPrefetched: true });
+      }
+    } catch {
+      // It's background prefetch, fail silently
+    }
   },
 }));
 
