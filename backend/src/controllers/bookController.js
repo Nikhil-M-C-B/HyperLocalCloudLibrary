@@ -39,6 +39,19 @@ exports.getBook = catchAsync(async (req, res) => {
 });
 
 /**
+ * Look up book metadata by ISBN (does not create a book).
+ * GET /books/lookup?isbn=9780439708180
+ */
+exports.lookupByISBN = catchAsync(async (req, res) => {
+  const result = await bookService.lookupByISBN(req.query.isbn);
+
+  res.status(200).json({
+    status: 'success',
+    data:   result
+  });
+});
+
+/**
  * Create new book
  * POST /books
  */

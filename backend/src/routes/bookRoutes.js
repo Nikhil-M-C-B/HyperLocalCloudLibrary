@@ -39,6 +39,7 @@ const updateBookSchema = Joi.object({
 
 // Public routes (anyone can browse books)
 router.get('/', bookController.getAllBooks);
+router.get('/lookup', protect, restrictTo('LIBRARIAN', 'ADMIN'), bookController.lookupByISBN);
 router.get('/:bookId', bookController.getBook);
 router.get('/:bookId/availability', protect, bookController.checkAvailability);
 

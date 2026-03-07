@@ -44,16 +44,23 @@ module.exports = {
     apiKey: process.env.AI_API_KEY || "",
   },
 
+  // Google Books API (for ISBN metadata lookup)
+  googleBooks: {
+    apiKey: process.env.GOOGLE_BOOKS_API_KEY || '',
+  },
+
   // Payment Gateway
   razorpay: {
     keyId: process.env.RAZORPAY_KEY_ID || "",
     keySecret: process.env.RAZORPAY_KEY_SECRET || "",
   },
 
-  // Delivery Service
+  // Delivery Service (Porter — hyperlocal gig, Hyderabad)
   delivery: {
-    apiUrl: process.env.DELIVERY_API_URL || "",
-    apiKey: process.env.DELIVERY_API_KEY || "",
+    provider:    process.env.DELIVERY_PROVIDER    || 'PORTER',
+    apiUrl:      process.env.DELIVERY_API_URL     || 'https://api.porter.in/v1',
+    apiKey:      process.env.DELIVERY_API_KEY     || '',
+    hmacSecret:  process.env.DELIVERY_HMAC_SECRET || '',
   },
 
   // SMTP (email)

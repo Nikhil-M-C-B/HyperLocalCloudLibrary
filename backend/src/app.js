@@ -20,9 +20,9 @@ const inventoryRoutes = require('./routes/inventoryRoutes');
 const circulationRoutes = require('./routes/circulationRoutes');
 const notificationRoutes = require('./routes/notificationRoutes');
 // Stub routes enabled for prototype - controllers use stub services (no MySQL)
-const paymentRoutes = require('./routes/paymentRoutes');
-const penaltyRoutes = require('./routes/penaltyRoutes');
-
+const paymentRoutes  = require('./routes/paymentRoutes');
+const penaltyRoutes  = require('./routes/penaltyRoutes');
+const deliveryRoutes = require('./routes/deliveryRoutes');
 const app = express();
 
 // ── Security Middleware (Platform Services — Aryan 2) ──
@@ -54,8 +54,10 @@ app.use('/api/v1/inventory', inventoryRoutes);
 app.use('/api/v1/issues', circulationRoutes);
 app.use('/api/v1/notifications', notificationRoutes); // Platform Services — Aryan
 // Stub routes - validate & log data without MySQL
-app.use('/api/v1/payments', paymentRoutes);
+app.use('/api/v1/payments',  paymentRoutes);
 app.use('/api/v1/penalties', penaltyRoutes);
+// Delivery routes (stub mode - gig API calls are logged, not sent)
+app.use('/api/v1/delivery',  deliveryRoutes);
 
 // Handle undefined routes
 app.all('*', (req, res, next) => {

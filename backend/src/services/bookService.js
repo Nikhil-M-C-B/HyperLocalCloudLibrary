@@ -1,6 +1,7 @@
 const Book = require('../models/Book');
 const BookCopy = require('../models/BookCopy');
 const AppError = require('../utils/AppError');
+const bookMetadataService = require('./bookMetadataService');
 
 /**
  * Get all books with filters
@@ -75,10 +76,53 @@ exports.getBookById = async (bookId) => {
 };
 
 /**
- * Create new book (Librarian/Admin only)
+ * Create new book (Librarian/Admin only).
+ * If an ISBN is provided and fields like title/summary/coverImage are missing,
+ * they are auto-filled from Google Books / Open Library.
+ * Librarian-supplied values always take priority over fetched data.
  */
 exports.createBook = async (bookData) => {
-  const book = await Book.create(bookData);
+  let data = { ...bookData };
+
+  if (data.isbn) {
+    // Check for duplicate ISBN first
+    const existing = await Book.findOne({ isbn: data.isbn });
+    if (existing) {
+      throw new AppError(`A book with ISBN ${data.isbn} already exists`, 409);
+    }
+
+    // Auto-enrich missing fields from external APIs
+    try {
+      const metadata = await bookMetadataService.fetchByISBN(data.isbn);
+      if (metadata) {
+        // Only fill fields the librarian left blank
+        data.title       = data.title       || metadata.title;
+        data.author      = data.author      || metadata.author;
+        data.genre       = data.genre?.length ? data.genre : metadata.genre;
+        data.language    = data.language    || metadata.language;
+        data.summary     = data.summary     || metadata.summary;
+        data.coverImage  = data.coverImage  || metadata.coverImage;
+        data.ageRating   = data.ageRating   || metadata.ageRating;
+        // Store extra metadata not in the form
+        data._metadataSource = metadata.source;
+      }
+    } catch (err) {
+      // Metadata fetch failure must never block book creation
+      console.warn(`[bookService] Metadata enrichment failed: ${err.message}`);
+    }
+  }
+
+  if (!data.title || !data.author) {
+    throw new AppError('title and author are required (could not be fetched from ISBN lookup)', 400);
+  }
+  if (!data.ageRating) {
+    throw new AppError('ageRating is required and could not be determined automatically — please provide it', 400);
+  }
+
+  // Remove internal tracking field before saving
+  delete data._metadataSource;
+
+  const book = await Book.create(data);
   return book;
 };
 
@@ -112,6 +156,27 @@ exports.deleteBook = async (bookId) => {
   await BookCopy.deleteMany({ bookId });
 
   return { message: 'Book deleted successfully' };
+};
+
+/**
+ * Look up book metadata by ISBN without creating a book record.
+ * Used by the frontend to preview data before the librarian confirms.
+ */
+exports.lookupByISBN = async (isbn) => {
+  if (!isbn) throw new AppError('ISBN is required', 400);
+
+  const existing = await Book.findOne({ isbn: isbn.replace(/[-\s]/g, '') });
+
+  const metadata = await bookMetadataService.fetchByISBN(isbn);
+  if (!metadata) {
+    throw new AppError(`No metadata found for ISBN: ${isbn}`, 404);
+  }
+
+  return {
+    metadata,
+    alreadyInCatalog: !!existing,
+    existingBookId:   existing?._id || null,
+  };
 };
 
 /**
