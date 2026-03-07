@@ -111,15 +111,29 @@ async function _fetchFromOpenLibrary(isbn) {
   const entry = bibResponse.data?.[`ISBN:${isbn}`];
   if (!entry) return null;
 
-  // Step 2: If there's a works link, fetch description (often missing on ISBN endpoint)
+  // Step 2: Fetch description from the works record.
+  // The 'data' endpoint may omit the 'works' array — fall back to fetching the
+  // edition's own JSON (/books/OL...M.json) which always includes a works array.
   let summary = null;
-  const worksUrl = entry.url?.replace('https://openlibrary.org', '') 
-    || entry.works?.[0]?.key;
+  try {
+    let worksKey = entry.works?.[0]?.key;
 
-  if (worksUrl && worksUrl.startsWith('/works/')) {
-    try {
+    if (!worksKey) {
+      // Extract just the edition key (e.g. /books/OL26939404M) from the url field
+      const editionPath = entry.url?.replace('https://openlibrary.org', '');
+      const editionKey = editionPath?.match(/\/books\/OL\w+/)?.[0];
+      if (editionKey) {
+        const editionResp = await axios.get(
+          `https://openlibrary.org${editionKey}.json`,
+          { timeout: 6000 }
+        );
+        worksKey = editionResp.data?.works?.[0]?.key;
+      }
+    }
+
+    if (worksKey && worksKey.startsWith('/works/')) {
       const worksResponse = await axios.get(
-        `https://openlibrary.org${worksUrl}.json`,
+        `https://openlibrary.org${worksKey}.json`,
         { timeout: 6000 }
       );
       const desc = worksResponse.data?.description;
@@ -127,9 +141,9 @@ async function _fetchFromOpenLibrary(isbn) {
               : typeof desc === 'object' ? desc.value
               : null;
       summary = _truncate(summary, 1000);
-    } catch {
-      // description is optional — continue without it
     }
+  } catch {
+    // description is optional — continue without it
   }
 
   const authors = entry.authors?.map(a => a.name).join(', ') || null;
@@ -158,31 +172,52 @@ async function _fetchFromOpenLibrary(isbn) {
 
 /**
  * Fetch book metadata by ISBN.
- * Tries Google Books first; falls back to Open Library.
+ * Always tries both sources and merges results:
+ *   - Google Books is primary (better title casing, cover URLs)
+ *   - Open Library fills any null/empty fields Google Books couldn't provide
+ *     (subjects/genre and descriptions are often richer there)
  * Returns null if neither source has the book.
  */
 exports.fetchByISBN = async (isbn) => {
   // Normalise ISBN — strip hyphens and spaces
   const cleanISBN = isbn.replace(/[-\s]/g, '');
 
-  let metadata = null;
+  let google = null;
+  let openLib = null;
 
-  // 1. Google Books
+  // 1. Try Google Books
   try {
-    metadata = await _fetchFromGoogleBooks(cleanISBN);
+    google = await _fetchFromGoogleBooks(cleanISBN);
   } catch (err) {
-    // Log but don't throw — fall through to Open Library
     console.warn(`[BookMetadata] Google Books failed for ISBN ${cleanISBN}: ${err.message}`);
   }
 
-  // 2. Open Library fallback
-  if (!metadata) {
+  // 2. Try Open Library — always fetch when Google Books returned sparse data
+  //    (no summary, no genre, or no cover) or returned nothing at all
+  const googleIsSparse = !google || !google.summary || !google.genre?.length || !google.coverImage;
+  if (googleIsSparse) {
     try {
-      metadata = await _fetchFromOpenLibrary(cleanISBN);
+      openLib = await _fetchFromOpenLibrary(cleanISBN);
     } catch (err) {
       console.warn(`[BookMetadata] Open Library failed for ISBN ${cleanISBN}: ${err.message}`);
     }
   }
 
-  return metadata;
+  // 3. Nothing found at all
+  if (!google && !openLib) return null;
+
+  // 4. Merge: Google Books primary, Open Library fills gaps
+  if (!google) return openLib;
+  if (!openLib) return google;
+
+  return {
+    ...google,
+    summary:    google.summary    || openLib.summary,
+    genre:      google.genre?.length ? google.genre : openLib.genre,
+    coverImage: google.coverImage || openLib.coverImage,
+    publisher:  google.publisher  || openLib.publisher,
+    pageCount:  google.pageCount  || openLib.pageCount,
+    ageRating:  google.ageRating  || openLib.ageRating,
+    source:     'google_books+open_library',
+  };
 };
