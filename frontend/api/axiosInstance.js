@@ -1,14 +1,12 @@
 import axios from 'axios';
-import useAuthStore from '../store/authStore';
 import useNetworkStore from '../store/networkStore';
-import { secureStorage } from '../utils/storage';
 
 /**
  * Axios Instance
  *
  * Central HTTP client with:
  *  - 5-second timeout (catches slow networks before UI freezes)
- *  - Request interceptor: auto-attaches JWT from SecureStore
+ *  - Request interceptor: auto-attaches JWT from useAppStore
  *  - Response error interceptor: offline detection → Zustand update
  *
  * All API service modules import this instance instead of raw axios.
@@ -28,13 +26,15 @@ const axiosInstance = axios.create({
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 // REQUEST INTERCEPTOR
-// Reads the JWT from SecureStore and attaches it to every
+// Reads the JWT from useAppStore and attaches it to every
 // outgoing request. No need to pass tokens manually.
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 axiosInstance.interceptors.request.use(
-    async (config) => {
+    (config) => {
         try {
-            const token = await secureStorage.getToken();
+            // Lazy import to avoid require cycles
+            const { default: useAppStore } = require('../store/useAppStore');
+            const token = useAppStore.getState().token;
             if (token) {
                 config.headers.Authorization = `Bearer ${token}`;
             }
@@ -71,7 +71,13 @@ axiosInstance.interceptors.response.use(
         // Token expired / unauthorized
         if (error.response && error.response.status === 401) {
             console.warn('401 Unauthorized — logging out');
-            useAuthStore.getState().logout();
+
+            // Lazy requires to avoid circular dependencies
+            const { default: useAppStore } = require('../store/useAppStore');
+            const { router } = require('expo-router');
+
+            useAppStore.getState().clearAuth();
+            router.replace('/(auth)/welcome');
         }
 
         return Promise.reject(error);
