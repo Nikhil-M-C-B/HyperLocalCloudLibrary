@@ -6,7 +6,12 @@ const AppError = require('../utils/AppError');
  * Get all libraries
  */
 exports.getAllLibraries = async (filters = {}) => {
-  const query = { status: 'ACTIVE' };
+  const query = {};
+
+  // By default only return active libraries; admins can request all
+  if (!filters.includeInactive) {
+    query.status = 'ACTIVE';
+  }
   
   if (filters.organizationId) {
     query.organizationId = filters.organizationId;

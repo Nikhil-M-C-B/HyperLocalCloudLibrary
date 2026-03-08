@@ -70,7 +70,11 @@ export default function MonitorChildren() {
       try {
         const response = await issueService.getUserIssues(userId, selected);
         if (active && response.data?.issues) {
-          setActiveIssues(response.data.issues);
+          // Only show digital books — monitoring doesn't apply to physical books
+          const digitalOnly = response.data.issues.filter(
+            (issue: any) => issue.type !== 'PHYSICAL'
+          );
+          setActiveIssues(digitalOnly);
         }
       } catch (err) {
         console.warn('Failed to fetch child issues', err);

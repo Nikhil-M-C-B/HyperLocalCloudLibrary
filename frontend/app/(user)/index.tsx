@@ -13,6 +13,7 @@ import {
     Dimensions,
     FlatList,
     Modal,
+    Platform,
     ScrollView,
     StyleSheet,
     Text,
@@ -189,7 +190,7 @@ export default function UserHome() {
   const [menuVisible, setMenuVisible] = useState(false);
   const [deleteModalVisible, setDeleteModalVisible] = useState(false);
 
-  const { userId, profiles, activeProfileId, clearAuth, token } = useAppStore();
+  const { userId, profiles, activeProfileId, clearAuth, token, removeProfile } = useAppStore();
   const activeProfile = profiles.find((p) => p.profileId === activeProfileId);
   const preferredGenres = activeProfile?.preferredGenres?.length
     ? activeProfile.preferredGenres
@@ -293,43 +294,72 @@ export default function UserHome() {
   const handleDeleteProfile = () => {
     setMenuVisible(false);
     if (childProfiles.length === 0) {
-      Alert.alert(
-        "No Child Profiles",
-        "You have no child profiles to delete. The parent account cannot be deleted from here.",
-      );
+      if (Platform.OS === "web") {
+        window.alert(
+          "No Child Profiles\n\nYou have no child profiles to delete. The parent account cannot be deleted from here.",
+        );
+      } else {
+        Alert.alert(
+          "No Child Profiles",
+          "You have no child profiles to delete. The parent account cannot be deleted from here.",
+        );
+      }
       return;
     }
     setDeleteModalVisible(true);
   };
 
-  const confirmDeleteProfile = (p: any) => {
-    Alert.alert(
-      "Confirm Delete",
-      `Are you sure you want to delete the profile "${p.name}"? This cannot be undone.`,
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Delete",
-          style: "destructive",
-          onPress: async () => {
-            try {
-              await fetch(
-                `${API_BASE_URL}/users/${userId}/profiles/${p.profileId}`,
-                {
-                  method: "DELETE",
-                  headers: { Authorization: `Bearer ${token}` },
-                },
-              );
-              setDeleteModalVisible(false);
-              Alert.alert("Deleted", `Profile "${p.name}" has been removed.`);
-              router.replace("/(select-profile)");
-            } catch {
-              Alert.alert("Error", "Failed to delete profile.");
-            }
+  const confirmDeleteProfile = async (p: any) => {
+    if (Platform.OS === "web") {
+      const confirmed = window.confirm(
+        `Are you sure you want to delete the profile "${p.name}"? This cannot be undone.`,
+      );
+      if (!confirmed) return;
+      try {
+        await fetch(
+          `${API_BASE_URL}/users/${userId}/profiles/${p.profileId}`,
+          {
+            method: "DELETE",
+            headers: { Authorization: `Bearer ${token}` },
           },
-        },
-      ],
-    );
+        );
+        await removeProfile(p.profileId);
+        setDeleteModalVisible(false);
+        window.alert(`Profile "${p.name}" has been removed.`);
+        router.replace("/(select-profile)");
+      } catch {
+        window.alert("Failed to delete profile.");
+      }
+    } else {
+      Alert.alert(
+        "Confirm Delete",
+        `Are you sure you want to delete the profile "${p.name}"? This cannot be undone.`,
+        [
+          { text: "Cancel", style: "cancel" },
+          {
+            text: "Delete",
+            style: "destructive",
+            onPress: async () => {
+              try {
+                await fetch(
+                  `${API_BASE_URL}/users/${userId}/profiles/${p.profileId}`,
+                  {
+                    method: "DELETE",
+                    headers: { Authorization: `Bearer ${token}` },
+                  },
+                );
+                await removeProfile(p.profileId);
+                setDeleteModalVisible(false);
+                Alert.alert("Deleted", `Profile "${p.name}" has been removed.`);
+                router.replace("/(select-profile)");
+              } catch {
+                Alert.alert("Error", "Failed to delete profile.");
+              }
+            },
+          },
+        ],
+      );
+    }
   };
 
   return (

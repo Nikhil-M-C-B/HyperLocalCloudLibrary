@@ -126,7 +126,7 @@ export default function ManageLibraryScreen() {
     setLoading(true);
     try {
       // Fetch branches
-      const brRes = await fetch(`${API_BASE_URL}/libraries`, {
+      const brRes = await fetch(`${API_BASE_URL}/libraries?includeInactive=true`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       const brJson = await brRes.json();
