@@ -1,29 +1,35 @@
-import { API_BASE_URL } from '@/constants/config';
-import { Colors, Radius, Spacing, Typography } from '@/constants/theme';
-import useAppStore from '@/store/useAppStore';
-import { useRouter } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { API_BASE_URL } from "@/constants/config";
+import { Colors, Radius, Spacing, Typography } from "@/constants/theme";
+import useAppStore from "@/store/useAppStore";
+import { useRouter } from "expo-router";
+import { useEffect, useState } from "react";
 import {
-  ActivityIndicator, Alert,
-  Dimensions,
-  KeyboardAvoidingView,
-  Modal,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
-} from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+    ActivityIndicator,
+    Alert,
+    Dimensions,
+    KeyboardAvoidingView,
+    Modal,
+    Platform,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
+} from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 
-const { width } = Dimensions.get('window');
+const { width } = Dimensions.get("window");
 
-const STAT_TINTS = [Colors.accentSageLight, Colors.browseSurface, Colors.buttonPrimary, '#E8F5E9'];
+const STAT_TINTS = [
+  Colors.accentSageLight,
+  Colors.browseSurface,
+  Colors.buttonPrimary,
+  "#E8F5E9",
+];
 
 function BarChart({ data }: { data: { month: string; val: number }[] }) {
-  const maxBar = Math.max(...data.map(m => m.val), 1); // fallback to 1 to avoid div by 0
+  const maxBar = Math.max(...data.map((m) => m.val), 1); // fallback to 1 to avoid div by 0
 
   return (
     <View style={bc.wrap}>
@@ -40,29 +46,41 @@ function BarChart({ data }: { data: { month: string; val: number }[] }) {
   );
 }
 const bc = StyleSheet.create({
-  wrap: { flexDirection: 'row', alignItems: 'flex-end', gap: 8, height: 120 },
-  col: { flex: 1, alignItems: 'center', gap: 4 },
-  valLabel: { fontSize: 10, fontWeight: '700', color: Colors.textMuted },
+  wrap: { flexDirection: "row", alignItems: "flex-end", gap: 8, height: 120 },
+  col: { flex: 1, alignItems: "center", gap: 4 },
+  valLabel: { fontSize: 10, fontWeight: "700", color: Colors.textMuted },
   barBg: {
-    width: '100%', flex: 1, backgroundColor: Colors.cardBorder,
-    borderRadius: 4, justifyContent: 'flex-end', overflow: 'hidden',
+    width: "100%",
+    flex: 1,
+    backgroundColor: Colors.cardBorder,
+    borderRadius: 4,
+    justifyContent: "flex-end",
+    overflow: "hidden",
   },
   bar: { backgroundColor: Colors.accentSage, borderRadius: 4 },
-  monthLabel: { fontSize: 10, color: Colors.textSecondary, fontWeight: '600' },
+  monthLabel: { fontSize: 10, color: Colors.textSecondary, fontWeight: "600" },
 });
 
-type Tab = 'overview' | 'branches' | 'add';
+type Tab = "overview" | "branches" | "add";
 
 export default function AdminDashboard() {
   const router = useRouter();
   const { clearAuth, token } = useAppStore();
-  const [tab, setTab] = useState<Tab>('overview');
+  const [tab, setTab] = useState<Tab>("overview");
   const [menuVisible, setMenuVisible] = useState(false);
-  const [branchForm, setBranchForm] = useState({ name: '', address: '', lat: '', lng: '', radius: '' });
+  const [branchForm, setBranchForm] = useState({
+    name: "",
+    address: "",
+    lat: "",
+    lng: "",
+    radius: "",
+  });
   const [saving, setSaving] = useState(false);
   const [rawBranches, setRawBranches] = useState<any[]>([]);
   const [rawIssues, setRawIssues] = useState<any[]>([]);
-  const [chartData, setChartData] = useState<{ month: string; val: number }[]>([]);
+  const [chartData, setChartData] = useState<{ month: string; val: number }[]>(
+    [],
+  );
   const [topBranch, setTopBranch] = useState<any>(null);
   const [recentActivity, setRecentActivity] = useState<any[]>([]);
 
@@ -73,13 +91,13 @@ export default function AdminDashboard() {
   const fetchData = async () => {
     try {
       const branchRes = await fetch(`${API_BASE_URL}/libraries`, {
-        headers: { Authorization: `Bearer ${token}` }
+        headers: { Authorization: `Bearer ${token}` },
       });
       const branchJson = await branchRes.json();
       setRawBranches(branchJson.data?.libraries || []);
 
       const issueRes = await fetch(`${API_BASE_URL}/issues`, {
-        headers: { Authorization: `Bearer ${token}` }
+        headers: { Authorization: `Bearer ${token}` },
       });
       const issueJson = await issueRes.json();
       const issues = issueJson.data?.issues || [];
@@ -87,7 +105,7 @@ export default function AdminDashboard() {
 
       processStats(issues, branchJson.data?.libraries || []);
     } catch (err) {
-      console.warn('Failed to fetch admin data', err);
+      console.warn("Failed to fetch admin data", err);
     }
   };
 
@@ -97,7 +115,20 @@ export default function AdminDashboard() {
     sixMonthsAgo.setMonth(now.getMonth() - 5);
     sixMonthsAgo.setDate(1);
 
-    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const monthNames = [
+      "Jan",
+      "Feb",
+      "Mar",
+      "Apr",
+      "May",
+      "Jun",
+      "Jul",
+      "Aug",
+      "Sep",
+      "Oct",
+      "Nov",
+      "Dec",
+    ];
 
     // 1. Chart Data (Last 6 Months)
     const monthlyCounts: Record<string, number> = {};
@@ -106,7 +137,7 @@ export default function AdminDashboard() {
       monthlyCounts[`${monthNames[d.getMonth()]}`] = 0;
     }
 
-    issues.forEach(issue => {
+    issues.forEach((issue) => {
       const d = new Date(issue.issueDate);
       if (d >= sixMonthsAgo) {
         const m = monthNames[d.getMonth()];
@@ -116,28 +147,35 @@ export default function AdminDashboard() {
       }
     });
 
-    setChartData(Object.keys(monthlyCounts).map(k => ({ month: k, val: monthlyCounts[k] })));
+    setChartData(
+      Object.keys(monthlyCounts).map((k) => ({
+        month: k,
+        val: monthlyCounts[k],
+      })),
+    );
 
     // 2. Top Branch This Month
-    const currentMonthIssues = issues.filter(i => {
+    const currentMonthIssues = issues.filter((i) => {
       const d = new Date(i.issueDate);
-      return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+      return (
+        d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear()
+      );
     });
 
     const branchStats: Record<string, { issued: number; revenue: number }> = {};
-    currentMonthIssues.forEach(i => {
+    currentMonthIssues.forEach((i) => {
       const bId = i.copyId?.branchId?._id;
       if (bId) {
         if (!branchStats[bId]) branchStats[bId] = { issued: 0, revenue: 0 };
         branchStats[bId].issued++;
-        if (i.type === 'PHYSICAL') branchStats[bId].revenue += 20;
+        if (i.type === "PHYSICAL") branchStats[bId].revenue += 20;
       }
     });
 
     let bestBranchId: string | null = null;
     let maxIssues = -1;
     let bestRev = 0;
-    Object.keys(branchStats).forEach(bId => {
+    Object.keys(branchStats).forEach((bId) => {
       if (branchStats[bId].issued > maxIssues) {
         maxIssues = branchStats[bId].issued;
         bestRev = branchStats[bId].revenue;
@@ -151,64 +189,99 @@ export default function AdminDashboard() {
         name: bestBranch.name,
         issued: maxIssues,
         revenue: bestRev,
-        books: 0 // Mocked for now or can compute inventory later
+        books: 0, // Mocked for now or can compute inventory later
       });
     }
 
     // 3. Recent Activity (Latest 4 issues)
-    const recent = issues.slice(0, 4).map(i => {
-      const bName = i.copyId?.branchId?.name || 'Library';
-      let msg = '';
-      let icon = '';
-      if (i.status === 'ISSUED') { icon = '📤'; msg = `${bName}: Book issued`; }
-      else if (i.status === 'RETURNED') { icon = '📥'; msg = `${bName}: Book returned`; }
-      else if (i.status === 'OVERDUE') { icon = '⚠️'; msg = `${bName}: Overdue book`; }
+    const recent = issues.slice(0, 4).map((i) => {
+      const bName = i.copyId?.branchId?.name || "Library";
+      let msg = "";
+      let icon = "";
+      if (i.status === "ISSUED") {
+        icon = "📤";
+        msg = `${bName}: Book issued`;
+      } else if (i.status === "RETURNED") {
+        icon = "📥";
+        msg = `${bName}: Book returned`;
+      } else if (i.status === "OVERDUE") {
+        icon = "⚠️";
+        msg = `${bName}: Overdue book`;
+      }
 
       return {
         icon,
         msg,
-        time: new Date(i.issueDate).toLocaleDateString()
+        time: new Date(i.issueDate).toLocaleDateString(),
       };
     });
     setRecentActivity(recent);
   };
 
-
-  const BRANCHES = rawBranches.map(b => {
-    const branchIssues = rawIssues.filter(i => i.copyId?.branchId?._id === b._id);
-    const rev = branchIssues.filter(i => i.type === 'PHYSICAL').length * 20;
+  const BRANCHES = rawBranches.map((b) => {
+    const branchIssues = rawIssues.filter(
+      (i) => i.copyId?.branchId?._id === b._id,
+    );
+    const rev = branchIssues.filter((i) => i.type === "PHYSICAL").length * 20;
 
     return {
       id: b._id,
       name: b.name,
       books: 0,
       issued: branchIssues.length,
-      members: Array.from(new Set(branchIssues.map(i => i.userId?._id))).length,
+      members: Array.from(new Set(branchIssues.map((i) => i.userId?._id)))
+        .length,
       revenue: rev,
-      active: b.status === 'ACTIVE'
+      active: b.status === "ACTIVE",
     };
   });
 
-  const uniqueMembers = Array.from(new Set(rawIssues.map(i => i.userId?._id))).length;
-  const currentMonthIssues = rawIssues.filter(i => {
+  const uniqueMembers = Array.from(
+    new Set(rawIssues.map((i) => i.userId?._id)),
+  ).length;
+  const currentMonthIssues = rawIssues.filter((i) => {
     const d = new Date(i.issueDate);
     const now = new Date();
-    return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+    return (
+      d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear()
+    );
   });
-  const monthRev = currentMonthIssues.filter(i => i.type === 'PHYSICAL').length * 20;
+  const monthRev =
+    currentMonthIssues.filter((i) => i.type === "PHYSICAL").length * 20;
 
   const STAT_CARDS = [
-    { label: 'Total Branches', value: String(BRANCHES.length), icon: '🏛️', tint: STAT_TINTS[0] },
-    { label: 'Active Members', value: String(uniqueMembers), icon: '👥', tint: STAT_TINTS[1] },
-    { label: 'Books Issued', value: String(rawIssues.length), icon: '📤', tint: STAT_TINTS[2] },
-    { label: "This Month's Rev", value: `₹${monthRev}`, icon: '💰', tint: STAT_TINTS[3] },
+    {
+      label: "Total Branches",
+      value: String(BRANCHES.length),
+      icon: "🏛️",
+      tint: STAT_TINTS[0],
+    },
+    {
+      label: "Active Members",
+      value: String(uniqueMembers),
+      icon: "👥",
+      tint: STAT_TINTS[1],
+    },
+    {
+      label: "Books Issued",
+      value: String(rawIssues.length),
+      icon: "📤",
+      tint: STAT_TINTS[2],
+    },
+    {
+      label: "This Month's Rev",
+      value: `₹${monthRev}`,
+      icon: "💰",
+      tint: STAT_TINTS[3],
+    },
   ];
 
-  const setBF = (key: string, val: string) => setBranchForm(f => ({ ...f, [key]: val }));
+  const setBF = (key: string, val: string) =>
+    setBranchForm((f) => ({ ...f, [key]: val }));
 
   const handleAddBranch = async () => {
     if (!branchForm.name.trim() || !branchForm.address.trim()) {
-      Alert.alert('Missing fields', 'Branch Name and Address are required.');
+      Alert.alert("Missing fields", "Branch Name and Address are required.");
       return;
     }
     setSaving(true);
@@ -220,22 +293,28 @@ export default function AdminDashboard() {
       };
       if (branchForm.lat && branchForm.lng) {
         body.location = {
-          type: 'Point',
+          type: "Point",
           coordinates: [parseFloat(branchForm.lng), parseFloat(branchForm.lat)],
         };
       }
       const res = await fetch(`${API_BASE_URL}/libraries`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
         body: JSON.stringify(body),
       });
       const json = await res.json();
-      if (!res.ok) throw new Error(json.message ?? 'Failed to add branch');
-      Alert.alert('✅ Branch registered!', `"${branchForm.name}" has been added.`);
-      setBranchForm({ name: '', address: '', lat: '', lng: '', radius: '' });
+      if (!res.ok) throw new Error(json.message ?? "Failed to add branch");
+      Alert.alert(
+        "✅ Branch registered!",
+        `"${branchForm.name}" has been added.`,
+      );
+      setBranchForm({ name: "", address: "", lat: "", lng: "", radius: "" });
       fetchData();
     } catch (err: any) {
-      Alert.alert('Error', err.message ?? 'Something went wrong');
+      Alert.alert("Error", err.message ?? "Something went wrong");
     } finally {
       setSaving(false);
     }
@@ -244,49 +323,80 @@ export default function AdminDashboard() {
   const handleSignOut = async () => {
     setMenuVisible(false);
     await clearAuth();
-    router.replace('/(auth)/welcome');
+    router.replace("/(auth)/welcome");
   };
 
   const tabs: { id: Tab; label: string; emoji: string }[] = [
-    { id: 'overview', label: 'Overview', emoji: '📊' },
-    { id: 'branches', label: 'Branches', emoji: '🏛️' },
-    { id: 'add', label: 'Add Branch', emoji: '➕' },
+    { id: "overview", label: "Overview", emoji: "📊" },
+    { id: "branches", label: "Branches", emoji: "🏛️" },
+    { id: "add", label: "Add Branch", emoji: "➕" },
   ];
 
   return (
     <SafeAreaView style={s.safe}>
       {/* Sign-out menu modal */}
-      <Modal transparent visible={menuVisible} animationType="fade" onRequestClose={() => setMenuVisible(false)}>
-        <TouchableOpacity style={s.modalOverlay} activeOpacity={1} onPress={() => setMenuVisible(false)}>
+      <Modal
+        transparent
+        visible={menuVisible}
+        animationType="fade"
+        onRequestClose={() => setMenuVisible(false)}
+      >
+        <TouchableOpacity
+          style={s.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setMenuVisible(false)}
+        >
           <View style={s.menuCard}>
-            <Text style={s.menuTitle}>Admin Dashboard</Text>
-            <TouchableOpacity style={s.menuItem} onPress={handleSignOut}>
-              <Text style={s.menuItemText}>🚪 Sign Out</Text>
+            <Text style={s.menuTitle}>Menu</Text>
+            <TouchableOpacity
+              style={s.menuItem}
+              onPress={() => {
+                setMenuVisible(false);
+                router.push("/(admin)/manage-library");
+              }}
+            >
+              <Text style={s.menuItemText}>Manage Library</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={s.menuCancel} onPress={() => setMenuVisible(false)}>
+            <TouchableOpacity style={s.menuItem} onPress={handleSignOut}>
+              <Text style={[s.menuItemText, { color: Colors.error }]}>
+                Sign Out
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={s.menuCancel}
+              onPress={() => setMenuVisible(false)}
+            >
               <Text style={s.menuCancelText}>Cancel</Text>
             </TouchableOpacity>
           </View>
         </TouchableOpacity>
       </Modal>
 
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={s.scroll}>
-
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={s.scroll}
+      >
         {/* Header */}
         <View style={s.header}>
           <View>
             <Text style={s.title}>Admin Dashboard</Text>
             <Text style={s.subtitle}>City Libraries · March 2026</Text>
           </View>
-          <TouchableOpacity style={s.profileBtn} onPress={() => setMenuVisible(true)}>
+          <TouchableOpacity
+            style={s.profileBtn}
+            onPress={() => setMenuVisible(true)}
+          >
             <Text>🏛️</Text>
           </TouchableOpacity>
         </View>
 
         {/* Stat cards */}
         <View style={s.statsGrid}>
-          {STAT_CARDS.map(stat => (
-            <View key={stat.label} style={[s.statCard, { backgroundColor: stat.tint }]}>
+          {STAT_CARDS.map((stat) => (
+            <View
+              key={stat.label}
+              style={[s.statCard, { backgroundColor: stat.tint }]}
+            >
               <Text style={s.statIcon}>{stat.icon}</Text>
               <Text style={s.statValue}>{stat.value}</Text>
               <Text style={s.statLabel}>{stat.label}</Text>
@@ -296,18 +406,20 @@ export default function AdminDashboard() {
 
         {/* Tabs */}
         <View style={s.tabRow}>
-          {tabs.map(t => (
+          {tabs.map((t) => (
             <TouchableOpacity
               key={t.id}
               style={[s.tabBtn, tab === t.id && s.tabBtnActive]}
               onPress={() => setTab(t.id)}
             >
-              <Text style={[s.tabText, tab === t.id && s.tabTextActive]}>{t.emoji} {t.label}</Text>
+              <Text style={[s.tabText, tab === t.id && s.tabTextActive]}>
+                {t.emoji} {t.label}
+              </Text>
             </TouchableOpacity>
           ))}
         </View>
 
-        {tab === 'overview' && (
+        {tab === "overview" && (
           <View style={s.section}>
             {/* Issues per month chart */}
             <Text style={s.sectionTitle}>📈 Books Issued — Last 6 Months</Text>
@@ -318,7 +430,9 @@ export default function AdminDashboard() {
             {/* Top performing branch */}
             {topBranch && (
               <>
-                <Text style={[s.sectionTitle, { marginTop: Spacing.lg }]}>🏆 Top Branch This Month</Text>
+                <Text style={[s.sectionTitle, { marginTop: Spacing.lg }]}>
+                  🏆 Top Branch This Month
+                </Text>
                 <View style={s.topBranchCard}>
                   <Text style={s.topBranchName}>{topBranch.name}</Text>
                   <View style={s.topBranchStats}>
@@ -342,7 +456,9 @@ export default function AdminDashboard() {
             {/* Recent activity */}
             {recentActivity.length > 0 && (
               <>
-                <Text style={[s.sectionTitle, { marginTop: Spacing.lg }]}>🕐 Recent Activity</Text>
+                <Text style={[s.sectionTitle, { marginTop: Spacing.lg }]}>
+                  🕐 Recent Activity
+                </Text>
                 {recentActivity.map((a, i) => (
                   <View key={i} style={s.activityRow}>
                     <Text style={s.activityIcon}>{a.icon}</Text>
@@ -355,25 +471,38 @@ export default function AdminDashboard() {
           </View>
         )}
 
-        {tab === 'branches' && (
+        {tab === "branches" && (
           <View style={s.section}>
             <Text style={s.sectionTitle}>All Branches ({BRANCHES.length})</Text>
-            {BRANCHES.map(b => (
-              <View key={b.id} style={[s.branchCard, !b.active && s.branchCardInactive]}>
+            {BRANCHES.map((b) => (
+              <View
+                key={b.id}
+                style={[s.branchCard, !b.active && s.branchCardInactive]}
+              >
                 <View style={s.branchHeader}>
                   <Text style={s.branchName}>{b.name}</Text>
-                  <View style={[s.activePill, { backgroundColor: b.active ? '#E8F5E9' : '#FDE8E8' }]}>
-                    <Text style={[s.activePillText, { color: b.active ? Colors.success : Colors.error }]}>
-                      {b.active ? '● Active' : '● Inactive'}
+                  <View
+                    style={[
+                      s.activePill,
+                      { backgroundColor: b.active ? "#E8F5E9" : "#FDE8E8" },
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        s.activePillText,
+                        { color: b.active ? Colors.success : Colors.error },
+                      ]}
+                    >
+                      {b.active ? "● Active" : "● Inactive"}
                     </Text>
                   </View>
                 </View>
                 <View style={s.branchStats}>
                   {[
-                    ['📚', `${b.books} books`],
-                    ['📤', `${b.issued} issued`],
-                    ['👥', `${b.members} members`],
-                    ['💰', `₹${b.revenue}`],
+                    ["📚", `${b.books} books`],
+                    ["📤", `${b.issued} issued`],
+                    ["👥", `${b.members} members`],
+                    ["💰", `₹${b.revenue}`],
                   ].map(([icon, val]) => (
                     <View key={val} style={s.branchStat}>
                       <Text style={s.branchStatIcon}>{icon}</Text>
@@ -389,20 +518,49 @@ export default function AdminDashboard() {
           </View>
         )}
 
-        {tab === 'add' && (
-          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        {tab === "add" && (
+          <KeyboardAvoidingView
+            behavior={Platform.OS === "ios" ? "padding" : undefined}
+          >
             <View style={s.section}>
               <Text style={s.sectionTitle}>Register a New Branch</Text>
               <Text style={s.addDesc}>
                 Adding a new library branch registers it in the system.
               </Text>
-              {([
-                { key: 'name', label: 'Branch Name *', ph: 'e.g. Jayanagar Branch', kbType: 'default' },
-                { key: 'address', label: 'Address *', ph: 'Full street address', kbType: 'default' },
-                { key: 'lat', label: 'Latitude', ph: '12.9716', kbType: 'numeric' },
-                { key: 'lng', label: 'Longitude', ph: '77.5946', kbType: 'numeric' },
-                { key: 'radius', label: 'Service Radius (km)', ph: '8', kbType: 'numeric' },
-              ] as const).map(f => (
+              {(
+                [
+                  {
+                    key: "name",
+                    label: "Branch Name *",
+                    ph: "e.g. Jayanagar Branch",
+                    kbType: "default",
+                  },
+                  {
+                    key: "address",
+                    label: "Address *",
+                    ph: "Full street address",
+                    kbType: "default",
+                  },
+                  {
+                    key: "lat",
+                    label: "Latitude",
+                    ph: "12.9716",
+                    kbType: "numeric",
+                  },
+                  {
+                    key: "lng",
+                    label: "Longitude",
+                    ph: "77.5946",
+                    kbType: "numeric",
+                  },
+                  {
+                    key: "radius",
+                    label: "Service Radius (km)",
+                    ph: "8",
+                    kbType: "numeric",
+                  },
+                ] as const
+              ).map((f) => (
                 <View key={f.key} style={{ gap: 5, marginBottom: Spacing.md }}>
                   <Text style={s.fieldLabel}>{f.label}</Text>
                   <TextInput
@@ -410,17 +568,23 @@ export default function AdminDashboard() {
                     placeholder={f.ph}
                     placeholderTextColor={Colors.textMuted}
                     value={branchForm[f.key]}
-                    onChangeText={v => setBF(f.key, v)}
+                    onChangeText={(v) => setBF(f.key, v)}
                     keyboardType={f.kbType as any}
                     returnKeyType="next"
                   />
                 </View>
               ))}
-              <TouchableOpacity style={[s.btnPrimary, saving && { opacity: 0.6 }]} activeOpacity={0.82} onPress={handleAddBranch} disabled={saving}>
-                {saving
-                  ? <ActivityIndicator color={Colors.buttonPrimaryText} />
-                  : <Text style={s.btnPrimaryText}>🏛️ Register Branch</Text>
-                }
+              <TouchableOpacity
+                style={[s.btnPrimary, saving && { opacity: 0.6 }]}
+                activeOpacity={0.82}
+                onPress={handleAddBranch}
+                disabled={saving}
+              >
+                {saving ? (
+                  <ActivityIndicator color={Colors.buttonPrimaryText} />
+                ) : (
+                  <Text style={s.btnPrimaryText}>🏛️ Register Branch</Text>
+                )}
               </TouchableOpacity>
             </View>
           </KeyboardAvoidingView>
@@ -437,107 +601,282 @@ const s = StyleSheet.create({
   scroll: { paddingBottom: Spacing.xl },
 
   header: {
-    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    paddingHorizontal: Spacing.xl, paddingTop: Spacing.xl, paddingBottom: Spacing.md,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingHorizontal: Spacing.xl,
+    paddingTop: Spacing.xl,
+    paddingBottom: Spacing.md,
   },
-  title: { fontSize: Typography.display, fontWeight: '800', color: Colors.accentSage },
-  subtitle: { fontSize: Typography.label, color: Colors.textSecondary, marginTop: 2 },
+  title: {
+    fontSize: Typography.display,
+    fontWeight: "800",
+    color: Colors.accentSage,
+  },
+  subtitle: {
+    fontSize: Typography.label,
+    color: Colors.textSecondary,
+    marginTop: 2,
+  },
   profileBtn: {
-    width: 48, height: 48, borderRadius: Radius.full,
-    backgroundColor: Colors.card, alignItems: 'center', justifyContent: 'center',
-    borderWidth: 1.5, borderColor: Colors.cardBorder, fontSize: 22,
+    width: 48,
+    height: 48,
+    borderRadius: Radius.full,
+    backgroundColor: Colors.card,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1.5,
+    borderColor: Colors.cardBorder,
+    fontSize: 22,
   },
 
   statsGrid: {
-    flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.sm,
-    paddingHorizontal: Spacing.xl, marginBottom: Spacing.lg,
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: Spacing.sm,
+    paddingHorizontal: Spacing.xl,
+    marginBottom: Spacing.lg,
   },
   statCard: {
     width: (width - Spacing.xl * 2 - Spacing.sm) / 2,
-    borderRadius: Radius.lg, padding: Spacing.md, alignItems: 'center', gap: 4,
-    borderWidth: 1, borderColor: Colors.cardBorder,
+    borderRadius: Radius.lg,
+    padding: Spacing.md,
+    alignItems: "center",
+    gap: 4,
+    borderWidth: 1,
+    borderColor: Colors.cardBorder,
   },
   statIcon: { fontSize: 28 },
-  statValue: { fontSize: Typography.title + 4, fontWeight: '900', color: Colors.textPrimary },
-  statLabel: { fontSize: Typography.label - 1, color: Colors.textSecondary, fontWeight: '600', textAlign: 'center' },
-
-  tabRow: { flexDirection: 'row', gap: Spacing.xs, paddingHorizontal: Spacing.xl, marginBottom: Spacing.lg },
-  tabBtn: {
-    flex: 1, paddingVertical: 10, borderRadius: Radius.full,
-    backgroundColor: Colors.card, borderWidth: 1.5, borderColor: Colors.cardBorder, alignItems: 'center',
+  statValue: {
+    fontSize: Typography.title + 4,
+    fontWeight: "900",
+    color: Colors.textPrimary,
   },
-  tabBtnActive: { backgroundColor: Colors.accentSage, borderColor: Colors.accentSage },
-  tabText: { fontSize: 11, fontWeight: '700', color: Colors.textSecondary },
+  statLabel: {
+    fontSize: Typography.label - 1,
+    color: Colors.textSecondary,
+    fontWeight: "600",
+    textAlign: "center",
+  },
+
+  tabRow: {
+    flexDirection: "row",
+    gap: Spacing.xs,
+    paddingHorizontal: Spacing.xl,
+    marginBottom: Spacing.lg,
+  },
+  tabBtn: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: Radius.full,
+    backgroundColor: Colors.card,
+    borderWidth: 1.5,
+    borderColor: Colors.cardBorder,
+    alignItems: "center",
+  },
+  tabBtnActive: {
+    backgroundColor: Colors.accentSage,
+    borderColor: Colors.accentSage,
+  },
+  tabText: { fontSize: 11, fontWeight: "700", color: Colors.textSecondary },
   tabTextActive: { color: Colors.textOnDark },
 
   section: { paddingHorizontal: Spacing.xl },
-  sectionTitle: { fontSize: Typography.body + 1, fontWeight: '800', color: Colors.textPrimary, marginBottom: Spacing.md },
+  sectionTitle: {
+    fontSize: Typography.body + 1,
+    fontWeight: "800",
+    color: Colors.textPrimary,
+    marginBottom: Spacing.md,
+  },
 
   chartCard: {
-    backgroundColor: Colors.card, borderRadius: Radius.xl, padding: Spacing.lg,
-    borderWidth: 1, borderColor: Colors.cardBorder, marginBottom: Spacing.sm,
+    backgroundColor: Colors.card,
+    borderRadius: Radius.xl,
+    padding: Spacing.lg,
+    borderWidth: 1,
+    borderColor: Colors.cardBorder,
+    marginBottom: Spacing.sm,
   },
 
   topBranchCard: {
-    backgroundColor: Colors.accentSage, borderRadius: Radius.xl, padding: Spacing.lg, gap: Spacing.md,
+    backgroundColor: Colors.accentSage,
+    borderRadius: Radius.xl,
+    padding: Spacing.lg,
+    gap: Spacing.md,
   },
-  topBranchName: { fontSize: Typography.title, fontWeight: '800', color: Colors.textOnDark },
-  topBranchStats: { flexDirection: 'row', gap: Spacing.lg },
-  topStat: { alignItems: 'center', gap: 2 },
-  topStatVal: { fontSize: Typography.title, fontWeight: '900', color: Colors.textOnDark },
-  topStatLabel: { fontSize: Typography.label - 1, color: '#C5DDB8', fontWeight: '600' },
+  topBranchName: {
+    fontSize: Typography.title,
+    fontWeight: "800",
+    color: Colors.textOnDark,
+  },
+  topBranchStats: { flexDirection: "row", gap: Spacing.lg },
+  topStat: { alignItems: "center", gap: 2 },
+  topStatVal: {
+    fontSize: Typography.title,
+    fontWeight: "900",
+    color: Colors.textOnDark,
+  },
+  topStatLabel: {
+    fontSize: Typography.label - 1,
+    color: "#C5DDB8",
+    fontWeight: "600",
+  },
 
   activityRow: {
-    flexDirection: 'row', alignItems: 'center', gap: Spacing.sm,
-    paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: Colors.cardBorder,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.sm,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.cardBorder,
   },
   activityIcon: { fontSize: 18 },
-  activityMsg: { flex: 1, fontSize: Typography.label, color: Colors.textPrimary, fontWeight: '600', lineHeight: 18 },
+  activityMsg: {
+    flex: 1,
+    fontSize: Typography.label,
+    color: Colors.textPrimary,
+    fontWeight: "600",
+    lineHeight: 18,
+  },
   activityTime: { fontSize: Typography.label - 1, color: Colors.textMuted },
 
   branchCard: {
-    backgroundColor: Colors.card, borderRadius: Radius.xl, padding: Spacing.md,
-    marginBottom: Spacing.md, borderWidth: 1, borderColor: Colors.cardBorder, gap: Spacing.sm,
+    backgroundColor: Colors.card,
+    borderRadius: Radius.xl,
+    padding: Spacing.md,
+    marginBottom: Spacing.md,
+    borderWidth: 1,
+    borderColor: Colors.cardBorder,
+    gap: Spacing.sm,
   },
   branchCardInactive: { opacity: 0.6 },
-  branchHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  branchName: { fontSize: Typography.body + 1, fontWeight: '800', color: Colors.textPrimary },
-  activePill: { borderRadius: Radius.full, paddingHorizontal: 10, paddingVertical: 4 },
-  activePillText: { fontSize: Typography.label - 1, fontWeight: '800' },
-  branchStats: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.sm },
+  branchHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  branchName: {
+    fontSize: Typography.body + 1,
+    fontWeight: "800",
+    color: Colors.textPrimary,
+  },
+  activePill: {
+    borderRadius: Radius.full,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  activePillText: { fontSize: Typography.label - 1, fontWeight: "800" },
+  branchStats: { flexDirection: "row", flexWrap: "wrap", gap: Spacing.sm },
   branchStat: {
-    flexDirection: 'row', alignItems: 'center', gap: 4,
-    backgroundColor: Colors.background, borderRadius: Radius.md,
-    paddingHorizontal: 8, paddingVertical: 5,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: Colors.background,
+    borderRadius: Radius.md,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
   },
   branchStatIcon: { fontSize: 14 },
-  branchStatVal: { fontSize: Typography.label, color: Colors.textPrimary, fontWeight: '700' },
-  manageBranchBtn: {
-    alignSelf: 'flex-end', backgroundColor: Colors.accentSageLight,
-    borderRadius: Radius.full, paddingHorizontal: Spacing.md, paddingVertical: 8,
+  branchStatVal: {
+    fontSize: Typography.label,
+    color: Colors.textPrimary,
+    fontWeight: "700",
   },
-  manageBranchText: { fontSize: Typography.label, fontWeight: '800', color: Colors.accentSage },
+  manageBranchBtn: {
+    alignSelf: "flex-end",
+    backgroundColor: Colors.accentSageLight,
+    borderRadius: Radius.full,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: 8,
+  },
+  manageBranchText: {
+    fontSize: Typography.label,
+    fontWeight: "800",
+    color: Colors.accentSage,
+  },
 
-  addDesc: { fontSize: Typography.body, color: Colors.textSecondary, lineHeight: 22, marginBottom: Spacing.lg },
-  fieldLabel: { fontSize: Typography.label, fontWeight: '600', color: Colors.textSecondary, textTransform: 'uppercase', letterSpacing: 0.8 },
+  addDesc: {
+    fontSize: Typography.body,
+    color: Colors.textSecondary,
+    lineHeight: 22,
+    marginBottom: Spacing.lg,
+  },
+  fieldLabel: {
+    fontSize: Typography.label,
+    fontWeight: "600",
+    color: Colors.textSecondary,
+    textTransform: "uppercase",
+    letterSpacing: 0.8,
+  },
   fieldInput: {
-    backgroundColor: Colors.card, borderRadius: Radius.lg,
-    paddingHorizontal: Spacing.md, paddingVertical: 14,
-    borderWidth: 1.5, borderColor: Colors.cardBorder,
-    fontSize: Typography.body, color: Colors.textPrimary,
+    backgroundColor: Colors.card,
+    borderRadius: Radius.lg,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: 14,
+    borderWidth: 1.5,
+    borderColor: Colors.cardBorder,
+    fontSize: Typography.body,
+    color: Colors.textPrimary,
   },
   btnPrimary: {
-    backgroundColor: Colors.buttonPrimary, borderRadius: Radius.full,
-    paddingVertical: 16, alignItems: 'center', marginTop: Spacing.sm,
+    backgroundColor: Colors.buttonPrimary,
+    borderRadius: Radius.full,
+    paddingVertical: 16,
+    alignItems: "center",
+    marginTop: Spacing.sm,
   },
-  btnPrimaryText: { fontSize: Typography.body, fontWeight: '800', color: Colors.buttonPrimaryText },
+  btnPrimaryText: {
+    fontSize: Typography.body,
+    fontWeight: "800",
+    color: Colors.buttonPrimaryText,
+  },
 
   // Sign-out modal
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.35)', justifyContent: 'flex-start', alignItems: 'flex-end', paddingTop: 80, paddingRight: Spacing.xl },
-  menuCard: { backgroundColor: Colors.card, borderRadius: Radius.xl, padding: Spacing.md, minWidth: 200, borderWidth: 1.5, borderColor: Colors.cardBorder, gap: Spacing.xs },
-  menuTitle: { fontSize: Typography.label, fontWeight: '700', color: Colors.textMuted, paddingHorizontal: Spacing.sm, paddingBottom: 4 },
-  menuItem: { paddingVertical: 12, paddingHorizontal: Spacing.sm, borderRadius: Radius.lg },
-  menuItemText: { fontSize: Typography.body, fontWeight: '700', color: Colors.error },
-  menuCancel: { paddingVertical: 12, paddingHorizontal: Spacing.sm, borderRadius: Radius.lg, borderTopWidth: 1, borderTopColor: Colors.cardBorder },
-  menuCancelText: { fontSize: Typography.body, fontWeight: '600', color: Colors.textSecondary, textAlign: 'center' },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.35)",
+    justifyContent: "flex-start",
+    alignItems: "flex-end",
+    paddingTop: 80,
+    paddingRight: Spacing.xl,
+  },
+  menuCard: {
+    backgroundColor: Colors.card,
+    borderRadius: Radius.xl,
+    padding: Spacing.md,
+    minWidth: 200,
+    borderWidth: 1.5,
+    borderColor: Colors.cardBorder,
+    gap: Spacing.xs,
+  },
+  menuTitle: {
+    fontSize: Typography.label,
+    fontWeight: "700",
+    color: Colors.textMuted,
+    paddingHorizontal: Spacing.sm,
+    paddingBottom: 4,
+  },
+  menuItem: {
+    paddingVertical: 12,
+    paddingHorizontal: Spacing.sm,
+    borderRadius: Radius.lg,
+  },
+  menuItemText: {
+    fontSize: Typography.body,
+    fontWeight: "700",
+    color: Colors.error,
+  },
+  menuCancel: {
+    paddingVertical: 12,
+    paddingHorizontal: Spacing.sm,
+    borderRadius: Radius.lg,
+    borderTopWidth: 1,
+    borderTopColor: Colors.cardBorder,
+  },
+  menuCancelText: {
+    fontSize: Typography.body,
+    fontWeight: "600",
+    color: Colors.textSecondary,
+    textAlign: "center",
+  },
 });

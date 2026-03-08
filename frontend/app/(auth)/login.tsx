@@ -55,16 +55,8 @@ export default function LoginScreen() {
         profiles: user.profiles ?? [],
       });
 
-      // Check if delivery address with coordinates exists
-      const hasLocation = !!(
-        user.deliveryAddress?.location?.coordinates?.length === 2
-      );
-      setHasDeliveryAddress(hasLocation);
-
       if (role === "LIBRARIAN") router.replace("/(librarian)");
       else if (role === "ADMIN") router.replace("/(admin)");
-      else if (!hasLocation)
-        router.replace("/(user)/delivery-map?next=select-profile");
       else router.replace("/(select-profile)");
     } catch (e: any) {
       setError(e.message || "Could not sign in. Please try again.");
