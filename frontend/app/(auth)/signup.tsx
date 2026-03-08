@@ -85,8 +85,9 @@ function StepDetails({
     {
       key: "phone",
       label: "Phone number",
-      placeholder: "+91 99999 99999",
+      placeholder: "9999999999",
       keyboard: "phone-pad",
+      maxLength: 10,
     },
     {
       key: "password",
@@ -120,6 +121,7 @@ function StepDetails({
             keyboardType={f.keyboard as any}
             autoCapitalize={f.key === "name" ? "words" : "none"}
             autoCorrect={false}
+            maxLength={f.maxLength}
             value={(form as any)[f.key]}
             onChangeText={(v) => onChange(f.key, v)}
           />
@@ -230,10 +232,11 @@ function StepAddProfile({
 
   return (
     <View style={{ gap: Spacing.md }}>
-      <Text style={st.stepTitle}>Add a profile?</Text>
+      <Text style={st.stepTitle}>Add a profile</Text>
       <Text style={st.stepSubtitle}>
-        One account, multiple profiles — for you, a child, or anyone else in the
-        family.
+        Want to set up a profile for your child or another family member? You can
+        add multiple profiles under one account.
+        This helps us recommend books tailored to each person&apos;s taste and reading.
       </Text>
       {profiles.map((p, i) => (
         <View key={i} style={st.profileChip}>
@@ -442,6 +445,10 @@ export default function SignupScreen() {
       setDetailsError("All fields are required.");
       return;
     }
+    if (!/^\d{10}$/.test(phone)) {
+      setDetailsError("Phone number must be exactly 10 digits.");
+      return;
+    }
     if (password.length < 6) {
       setDetailsError("Password must be at least 6 characters.");
       return;
@@ -464,7 +471,15 @@ export default function SignupScreen() {
       });
       const checkJson = await checkRes.json();
 
-      if (!checkJson.data?.available) {
+      if (!checkRes.ok) {
+        setDetailsError(
+          checkJson.message || "Could not verify email. Please try again.",
+        );
+        setSendingLink(false);
+        return;
+      }
+
+      if (checkJson.data?.available === false) {
         setDetailsError(
           checkJson.data?.message || "Email is already registered.",
         );

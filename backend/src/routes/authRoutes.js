@@ -10,7 +10,9 @@ const router = express.Router();
 const registerSchema = Joi.object({
   email: Joi.string().email().required(),
   password: Joi.string().min(6).required(),
-  phone: Joi.string().required(),
+  phone: Joi.string().pattern(/^\d{10}$/).required().messages({
+    'string.pattern.base': 'Phone number must be exactly 10 digits',
+  }),
   name: Joi.string().required(),
   role: Joi.string().valid("USER", "LIBRARIAN", "ADMIN").default("USER"),
   preferredGenres: Joi.array().items(Joi.string()),
