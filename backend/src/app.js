@@ -26,6 +26,21 @@ const deliveryRoutes = require('./routes/deliveryRoutes');
 const shipmentRoutes = require('./routes/shipmentRoutes');
 const app = express();
 
+// ── CORS must come first — before Helmet and rate limiters ──
+// In development, allow the Expo web dev server (8081) and any localhost port.
+// In production, lock this down to your actual domain.
+const allowedOrigins = process.env.NODE_ENV === 'production'
+  ? (process.env.ALLOWED_ORIGINS || '').split(',').map(o => o.trim()).filter(Boolean)
+  : true; // allow all origins in development
+
+app.use(cors({
+  origin: allowedOrigins,
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+}));
+app.options('*', cors()); // handle preflight for all routes
+
 // ── Security Middleware (Platform Services — Aryan 2) ──
 app.use(helmetMiddleware);       // Helmet: HSTS, CSP, X-Frame, etc.
 app.use(enforceHTTPS);           // HTTPS redirect in production
@@ -33,7 +48,6 @@ app.use('/api/', apiLimiter);         // 100 req / 15 min (passthrough in test)
 app.use('/api/v1/auth', authLimiter); // 10 req / 15 min (passthrough in test)
 
 // Middleware
-app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 

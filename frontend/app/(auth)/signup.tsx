@@ -161,12 +161,14 @@ function StepAddProfile({
   onNext,
   onBack,
   isChildStep,
+  loading,
 }: {
   profiles: ProfileForm[];
   onAddProfile: (p: ProfileForm) => void;
   onNext: () => void;
   onBack: () => void;
   isChildStep?: boolean;
+  loading?: boolean;
 }) {
   const [adding, setAdding] = useState(false);
   const [name, setName] = useState("");
@@ -323,13 +325,18 @@ function StepAddProfile({
       )}
       {!adding && (
         <TouchableOpacity
-          style={st.btnPrimary}
+          style={[st.btnPrimary, loading && { opacity: 0.7 }]}
           activeOpacity={0.82}
           onPress={onNext}
+          disabled={loading}
         >
-          <Text style={st.btnPrimaryText}>
-            {profiles.length > 0 ? "Continue →" : "Skip for now →"}
-          </Text>
+          {loading ? (
+            <ActivityIndicator color={Colors.buttonPrimaryText} />
+          ) : (
+            <Text style={st.btnPrimaryText}>
+              {profiles.length > 0 ? "Continue →" : "Skip for now →"}
+            </Text>
+          )}
         </TouchableOpacity>
       )}
     </View>
@@ -419,11 +426,11 @@ function StepParentPreferences({
 export default function SignupScreen() {
   const router = useRouter();
   const { setAuth, addProfile } = useAppStore();
-  // Four-step flow:
+  // Four-step flow (Netflix style — own profile first, then others):
   //   0 = Account Details
   //   1 = Email Verification
-  //   2 = Add Profiles (children)
-  //   3 = Parent Preferences
+  //   2 = Your Preferences (languages + genres)
+  //   3 = Add Other Profiles (children / family members)
   const [step, setStep] = useState(0);
   const [details, setDetails] = useState({
     name: "",
@@ -433,6 +440,8 @@ export default function SignupScreen() {
     confirm: "",
   });
   const [profiles, setProfiles] = useState<ProfileForm[]>([]);
+  const [parentGenres, setParentGenres] = useState<string[]>([]);
+  const [parentLanguages, setParentLanguages] = useState<string[]>([]);
   const [detailsError, setDetailsError] = useState("");
   const [loading, setLoading] = useState(false);
   const [globalError, setGlobalError] = useState("");
@@ -498,6 +507,12 @@ export default function SignupScreen() {
 
   const handleEmailVerified = () => {
     setStep(2);
+  };
+
+  const handlePreferencesDone = (genres: string[], languages: string[]) => {
+    setParentGenres(genres);
+    setParentLanguages(languages);
+    setStep(3);
   };
 
   const handleFinish = async (
@@ -633,18 +648,19 @@ export default function SignupScreen() {
           )}
 
           {step === 2 && (
-            <StepAddProfile
-              profiles={profiles}
-              onAddProfile={(p) => setProfiles((prev) => [...prev, p])}
-              onNext={() => setStep(3)}
+            <StepParentPreferences
+              parentName={details.name.trim().split(" ")[0]}
+              onFinish={handlePreferencesDone}
               onBack={() => setStep(1)}
+              loading={false}
             />
           )}
 
           {step === 3 && (
-            <StepParentPreferences
-              parentName={details.name.trim().split(" ")[0]}
-              onFinish={handleFinish}
+            <StepAddProfile
+              profiles={profiles}
+              onAddProfile={(p) => setProfiles((prev) => [...prev, p])}
+              onNext={() => handleFinish(parentGenres, parentLanguages)}
               onBack={() => setStep(2)}
               loading={loading}
             />

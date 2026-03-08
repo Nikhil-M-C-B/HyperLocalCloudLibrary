@@ -1,5 +1,5 @@
 import { Colors, Radius, Spacing, Typography } from "@/constants/theme";
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import React from "react";
 import {
     StyleSheet,
@@ -10,11 +10,23 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 /**
- * Web Fallback for DeliveryMapScreen
- * react-native-maps is not supported on web.
+ * Web Fallback for DeliveryMapScreen.
+ * react-native-maps is not supported on web, so we skip the map step.
+ * If this is part of onboarding (next=select-profile), we let the user
+ * continue forward instead of trapping them with only a "Go Back" button.
  */
 export default function DeliveryMapScreen() {
     const router = useRouter();
+    const params = useLocalSearchParams<{ next?: string }>();
+    const isOnboarding = params.next === "select-profile";
+
+    const handleContinue = () => {
+        if (isOnboarding) {
+            router.replace("/(select-profile)");
+        } else {
+            router.back();
+        }
+    };
 
     return (
         <SafeAreaView style={styles.container}>
@@ -22,15 +34,18 @@ export default function DeliveryMapScreen() {
                 <Text style={styles.emoji}>📍</Text>
                 <Text style={styles.title}>Map Not Available on Web</Text>
                 <Text style={styles.description}>
-                    The interactive map for setting your delivery location is only available
-                    on Android and iOS devices.
+                    The interactive map for setting your delivery location is only
+                    available on the Android and iOS apps. You can set your delivery
+                    address later from your profile.
                 </Text>
 
                 <TouchableOpacity
                     style={styles.backBtn}
-                    onPress={() => router.back()}
+                    onPress={handleContinue}
                 >
-                    <Text style={styles.backText}>Go Back</Text>
+                    <Text style={styles.backText}>
+                        {isOnboarding ? "Continue →" : "Go Back"}
+                    </Text>
                 </TouchableOpacity>
             </View>
         </SafeAreaView>
