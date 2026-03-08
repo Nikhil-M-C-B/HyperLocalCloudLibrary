@@ -42,11 +42,15 @@ exports.issueBook = async (issueData) => {
 
     // 3. Delivery Eligibility Check (Haversine Logic)
     if (type === "PHYSICAL") {
+      // Resolve delivery location: prefer new multi-address format, fall back to legacy field
+      const activeAddress =
+        user.deliveryAddresses?.find((a) => a.isDefault) ||
+        user.deliveryAddresses?.[0] ||
+        user.deliveryAddress;
+
       if (
-        !user.deliveryAddress ||
-        !user.deliveryAddress.location ||
-        !user.deliveryAddress.location.coordinates ||
-        user.deliveryAddress.location.coordinates.length < 2
+        !activeAddress?.location?.coordinates ||
+        activeAddress.location.coordinates.length < 2
       ) {
         throw new AppError("Please set your delivery address first", 400);
       }
@@ -63,8 +67,8 @@ exports.issueBook = async (issueData) => {
       }
 
       const userLocation = {
-        latitude: user.deliveryAddress.location.coordinates[1],
-        longitude: user.deliveryAddress.location.coordinates[0],
+        latitude: activeAddress.location.coordinates[1],
+        longitude: activeAddress.location.coordinates[0],
       };
 
       const branchLocation = {

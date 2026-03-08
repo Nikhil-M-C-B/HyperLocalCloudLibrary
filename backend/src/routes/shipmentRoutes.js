@@ -32,6 +32,9 @@ router.post(
   shipmentController.checkServiceability
 );
 
+// ── Track shipment (any authenticated user can track their own) ──
+router.get('/track/:id', shipmentController.trackShipment);
+
 // ── Admin / Librarian only routes ──────────────────────
 router.use(restrictTo('ADMIN', 'LIBRARIAN'));
 
@@ -71,9 +74,6 @@ router.post(
   validate(assignCourierSchema),
   shipmentController.assignCourier
 );
-
-// Track shipment
-router.get('/track/:id', shipmentController.trackShipment);
 
 // Cancel shipment
 router.post('/cancel/:id', shipmentController.cancelShipment);

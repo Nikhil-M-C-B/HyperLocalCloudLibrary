@@ -1,6 +1,7 @@
 const express = require("express");
 const authController = require("../controllers/authController");
 const { protect } = require("../middleware/auth");
+const { strictLimiter } = require("../middleware/security");
 const validate = require("../middleware/validate");
 const Joi = require("joi");
 
@@ -73,11 +74,13 @@ router.put(
 );
 router.post(
   "/forgot-password",
+  strictLimiter,
   validate(forgotPasswordSchema),
   authController.forgotPassword,
 );
 router.post(
   "/reset-password",
+  strictLimiter,
   validate(resetPasswordSchema),
   authController.resetPassword,
 );

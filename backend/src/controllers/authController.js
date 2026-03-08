@@ -57,7 +57,7 @@ exports.verifyOTP = catchAsync(async (req, res) => {
       .json({ status: "error", message: "Email and OTP are required" });
   }
 
-  emailVerificationService.verifyOTP(email, otp);
+  await emailVerificationService.verifyOTP(email, otp);
 
   res.status(200).json({
     status: "success",

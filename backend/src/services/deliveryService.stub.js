@@ -78,7 +78,7 @@ exports.dispatchDelivery = async (deliveryId) => {
       lat:     dropLat,
       lng:     dropLng,
     },
-    vehicle_type:  'BIKE',
+    vehicle_type:  { id: 3 },
     weight_kg:     0.5,
     instructions:  'Handle with care — books',
   };

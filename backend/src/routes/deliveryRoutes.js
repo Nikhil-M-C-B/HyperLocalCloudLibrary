@@ -2,6 +2,8 @@ const express = require('express');
 const deliveryController = require('../controllers/deliveryController');
 const { protect, restrictTo } = require('../middleware/auth');
 
+const config = require('../config');
+
 const router = express.Router();
 
 // ─── Webhook — no auth, raw body captured for HMAC verification
@@ -20,17 +22,19 @@ router.post(
 // ─── All routes below require a valid JWT
 router.use(protect);
 
-// ─── Mock control endpoints (dev/test only — blocked in production by controller)
-router.patch(
-  '/mock/:gigOrderId/advance',
-  restrictTo('LIBRARIAN', 'ADMIN'),
-  deliveryController.advanceMockStatus
-);
-router.get(
-  '/mock/orders',
-  restrictTo('LIBRARIAN', 'ADMIN'),
-  deliveryController.getMockOrders
-);
+// ─── Mock control endpoints (non-production only)
+if (config.nodeEnv !== 'production') {
+  router.patch(
+    '/mock/:gigOrderId/advance',
+    restrictTo('LIBRARIAN', 'ADMIN'),
+    deliveryController.advanceMockStatus
+  );
+  router.get(
+    '/mock/orders',
+    restrictTo('LIBRARIAN', 'ADMIN'),
+    deliveryController.getMockOrders
+  );
+}
 
 // ─── User: view own deliveries
 router.get('/my',               deliveryController.getMyDeliveries);
@@ -58,7 +62,5 @@ router.get(
   restrictTo('LIBRARIAN', 'ADMIN'),
   deliveryController.syncDeliveryStatus
 );
-
-module.exports = router;
 
 module.exports = router;

@@ -1,8 +1,10 @@
 const catchAsync = require('../utils/catchAsync');
 const AppError   = require('../utils/AppError');
 const config     = require('../config');
-// Switch to '../services/deliveryService' once Porter API credentials are obtained
-const deliveryService = require('../services/deliveryService.mock');
+// Auto-select delivery implementation based on Porter API key presence
+const deliveryService = config.delivery.apiKey
+  ? require('../services/deliveryService')
+  : require('../services/deliveryService.mock');
 
 /**
  * GET /api/v1/delivery/my
@@ -12,7 +14,7 @@ exports.getMyDeliveries = catchAsync(async (req, res) => {
   const filters = {};
   if (req.query.status) filters.status = req.query.status;
 
-  const deliveries = await deliveryService.getUserDeliveries(req.user.id, filters);
+  const deliveries = await deliveryService.getUserDeliveries(req.user._id, filters);
 
   res.status(200).json({
     status:  'success',
@@ -30,7 +32,7 @@ exports.getDelivery = catchAsync(async (req, res) => {
 
   if (
     req.user.role === 'USER' &&
-    delivery.userId._id?.toString() !== req.user.id
+    delivery.userId._id?.toString() !== req.user._id.toString()
   ) {
     throw new AppError('Not authorized to view this delivery', 403);
   }
@@ -47,7 +49,7 @@ exports.getDeliveryByIssue = catchAsync(async (req, res) => {
 
   if (
     req.user.role === 'USER' &&
-    delivery.userId._id?.toString() !== req.user.id
+    delivery.userId._id?.toString() !== req.user._id.toString()
   ) {
     throw new AppError('Not authorized to view this delivery', 403);
   }

@@ -1,4 +1,7 @@
-const penaltyService = require('../services/penaltyService.stub'); // TODO: swap to penaltyService.js when MySQL is ready
+// Use real MySQL-backed service when MYSQL_READY=true, otherwise use in-memory stub
+const penaltyService = process.env.MYSQL_READY === 'true'
+  ? require('../services/penaltyService')
+  : require('../services/penaltyService.stub');
 const Issue = require('../models/Issue');
 const catchAsync = require('../utils/catchAsync');
 

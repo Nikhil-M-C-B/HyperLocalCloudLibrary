@@ -1,4 +1,7 @@
-const paymentService = require('../services/paymentService.stub'); // TODO: swap to paymentService.js when MySQL is ready
+// Use real MySQL-backed service when MYSQL_READY=true, otherwise use in-memory stub
+const paymentService = process.env.MYSQL_READY === 'true'
+  ? require('../services/paymentService')
+  : require('../services/paymentService.stub');
 const Issue = require('../models/Issue');
 const catchAsync = require('../utils/catchAsync');
 
