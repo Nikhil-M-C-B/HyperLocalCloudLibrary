@@ -1,8 +1,8 @@
 import locationService from "@/api/services/locationService";
 import { Colors, Radius, Spacing, Typography } from "@/constants/theme";
 import useAppStore from "@/store/useAppStore";
-import { useRouter } from "expo-router";
-import { useEffect, useState } from "react";
+import { useFocusEffect, useRouter } from "expo-router";
+import { useCallback, useState } from "react";
 import {
     ActivityIndicator,
     ScrollView,
@@ -40,9 +40,12 @@ export default function SelectAddressScreen() {
     }
   };
 
-  useEffect(() => {
-    fetchAddresses();
-  }, []);
+  // Re-fetch every time the screen gains focus (e.g. coming back from delivery-map)
+  useFocusEffect(
+    useCallback(() => {
+      fetchAddresses();
+    }, []),
+  );
 
   const handleConfirm = async () => {
     if (!selectedId || !userId) return;

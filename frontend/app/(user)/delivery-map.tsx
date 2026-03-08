@@ -51,12 +51,20 @@ export default function DeliveryMapScreen() {
 
   // If ?next=select-profile, this is the post-signup / post-login flow
   const isOnboarding = params.next === "select-profile";
+  const fromAddressSelect = params.next === "select-address";
 
   const [region, setRegion] = useState(DEFAULT_REGION);
   const [address, setAddress] = useState("Fetching address…");
   const [saving, setSaving] = useState(false);
   const [locationReady, setLocationReady] = useState(false);
-
+  // Structured geocode fields — stored separately so we don't
+  // have to re-split the display string (which causes comma bugs).
+  const [geoFields, setGeoFields] = useState({
+    street: "",
+    city: "",
+    state: "",
+    pincode: "",
+  });
   // Library branches for markers + circles
   const [libraries, setLibraries] = useState<LibraryBranch[]>([]);
 
@@ -125,6 +133,11 @@ export default function DeliveryMapScreen() {
   // ───────────────────────────────────────────────────────
   //  3. Reverse geocode coordinates → readable address
   // ───────────────────────────────────────────────────────
+
+  /** Strip trailing/leading commas and whitespace from a geocoded field. */
+  const clean = (s?: string | null): string =>
+    (s || "").replace(/^[,\s]+|[,\s]+$/g, "").trim();
+
   const getAddressFromCoordinates = async (
     latitude: number,
     longitude: number,
@@ -136,9 +149,16 @@ export default function DeliveryMapScreen() {
       });
       if (geocodeArray.length > 0) {
         const p = geocodeArray[0];
-        const parts = [p.street, p.city, p.region, p.postalCode].filter(
-          Boolean,
-        );
+
+        // Clean every field individually
+        const street = clean(p.street) || clean(p.name);
+        const city = clean(p.city) || clean(p.subregion);
+        const state = clean(p.region);
+        const pincode = clean(p.postalCode);
+
+        setGeoFields({ street, city, state, pincode });
+
+        const parts = [street, city, state, pincode].filter(Boolean);
         setAddress(parts.join(", ") || "Unknown location");
       }
     } catch {
@@ -206,17 +226,16 @@ export default function DeliveryMapScreen() {
 
     setSaving(true);
     try {
-      // Split the reverse-geocoded address into parts for the backend
-      const parts = address.split(",").map((s) => s.trim());
-
+      // Use the structured geocode fields directly — never re-split
+      // the display string, which breaks when fields contain commas.
       await locationService.updateDeliveryLocation(userId, {
         latitude: region.latitude,
         longitude: region.longitude,
-        street: parts[0] || "",
-        city: parts[1] || "",
-        state: parts[2] || "",
-        pincode: parts[3] || "",
-        label: parts[1] || parts[0] || "Home",
+        street: geoFields.street,
+        city: geoFields.city,
+        state: geoFields.state,
+        pincode: geoFields.pincode,
+        label: geoFields.city || geoFields.street || "Home",
       });
 
       // Mark that the user now has a delivery address
@@ -228,6 +247,9 @@ export default function DeliveryMapScreen() {
           onPress: () => {
             if (isOnboarding) {
               router.replace("/(select-profile)");
+            } else if (fromAddressSelect) {
+              // Came from the address-selection screen after login — go home
+              router.replace("/(user)");
             } else {
               router.back();
             }
@@ -303,6 +325,8 @@ export default function DeliveryMapScreen() {
         onPress={() => {
           if (isOnboarding) {
             router.replace("/(select-profile)");
+          } else if (fromAddressSelect) {
+            router.back();
           } else {
             router.back();
           }
