@@ -1,5 +1,5 @@
-const userService = require('../services/userService');
-const catchAsync = require('../utils/catchAsync');
+const userService = require("../services/userService");
+const catchAsync = require("../utils/catchAsync");
 
 /**
  * Get user by ID
@@ -7,10 +7,10 @@ const catchAsync = require('../utils/catchAsync');
  */
 exports.getUser = catchAsync(async (req, res) => {
   const user = await userService.getUserById(req.params.id);
-  
+
   res.status(200).json({
-    status: 'success',
-    data: { user }
+    status: "success",
+    data: { user },
   });
 });
 
@@ -20,10 +20,10 @@ exports.getUser = catchAsync(async (req, res) => {
  */
 exports.updateUser = catchAsync(async (req, res) => {
   const user = await userService.updateUser(req.params.id, req.body);
-  
+
   res.status(200).json({
-    status: 'success',
-    data: { user }
+    status: "success",
+    data: { user },
   });
 });
 
@@ -32,11 +32,14 @@ exports.updateUser = catchAsync(async (req, res) => {
  * POST /users/:parentId/children
  */
 exports.createChildProfile = catchAsync(async (req, res) => {
-  const profile = await userService.createChildProfile(req.params.parentId, req.body);
-  
+  const profile = await userService.createChildProfile(
+    req.params.parentId,
+    req.body,
+  );
+
   res.status(201).json({
-    status: 'success',
-    data: { profile }
+    status: "success",
+    data: { profile },
   });
 });
 
@@ -46,10 +49,10 @@ exports.createChildProfile = catchAsync(async (req, res) => {
  */
 exports.getChildProfiles = catchAsync(async (req, res) => {
   const profiles = await userService.getChildProfiles(req.params.parentId);
-  
+
   res.status(200).json({
-    status: 'success',
-    data: { profiles }
+    status: "success",
+    data: { profiles },
   });
 });
 
@@ -61,12 +64,12 @@ exports.updateProfile = catchAsync(async (req, res) => {
   const profile = await userService.updateProfile(
     req.params.userId,
     req.params.profileId,
-    req.body
+    req.body,
   );
-  
+
   res.status(200).json({
-    status: 'success',
-    data: { profile }
+    status: "success",
+    data: { profile },
   });
 });
 
@@ -75,11 +78,14 @@ exports.updateProfile = catchAsync(async (req, res) => {
  * DELETE /users/:userId/profiles/:profileId
  */
 exports.deleteProfile = catchAsync(async (req, res) => {
-  const result = await userService.deleteProfile(req.params.userId, req.params.profileId);
-  
+  const result = await userService.deleteProfile(
+    req.params.userId,
+    req.params.profileId,
+  );
+
   res.status(200).json({
-    status: 'success',
-    data: result
+    status: "success",
+    data: result,
   });
 });
 
@@ -90,11 +96,112 @@ exports.deleteProfile = catchAsync(async (req, res) => {
 exports.getReadingHistory = catchAsync(async (req, res) => {
   const history = await userService.getReadingHistory(
     req.params.userId,
-    req.params.profileId
+    req.params.profileId,
   );
-  
+
   res.status(200).json({
-    status: 'success',
-    data: { history }
+    status: "success",
+    data: { history },
   });
 });
+
+/**
+ * Handle delivery location updates (add new address)
+ */
+exports.updateDeliveryLocation = async (req, res, next) => {
+  try {
+    const user = await userService.updateDeliveryLocation(
+      req.params.id,
+      req.body,
+    );
+    res.status(200).json({
+      status: "success",
+      data: {
+        user: {
+          id: user._id,
+          deliveryAddress: user.deliveryAddress,
+          deliveryAddresses: user.deliveryAddresses,
+        },
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Get all saved delivery addresses
+ */
+exports.getDeliveryAddresses = async (req, res, next) => {
+  try {
+    const addresses = await userService.getDeliveryAddresses(req.params.id);
+    res.status(200).json({
+      status: "success",
+      data: { addresses },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Delete a saved delivery address
+ */
+exports.deleteDeliveryAddress = async (req, res, next) => {
+  try {
+    const addresses = await userService.deleteDeliveryAddress(
+      req.params.id,
+      req.params.addressId,
+    );
+    res.status(200).json({
+      status: "success",
+      data: { addresses },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Set a delivery address as the default
+ */
+exports.setDefaultDeliveryAddress = async (req, res, next) => {
+  try {
+    const addresses = await userService.setDefaultDeliveryAddress(
+      req.params.id,
+      req.params.addressId,
+    );
+    res.status(200).json({
+      status: "success",
+      data: { addresses },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Check if the user is eligible for delivery (within radius)
+ */
+exports.checkDeliveryEligibility = async (req, res, next) => {
+  try {
+    const { branchId } = req.query;
+    if (!branchId) {
+      return res
+        .status(400)
+        .json({ status: "fail", message: "branchId query param is required" });
+    }
+    const eligible = await userService.isUserWithinDeliveryZone(
+      req.params.id,
+      branchId,
+    );
+    res.status(200).json({
+      status: "success",
+      data: {
+        eligible,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};

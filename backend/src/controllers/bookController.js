@@ -1,5 +1,5 @@
-const bookService = require('../services/bookService');
-const catchAsync = require('../utils/catchAsync');
+const bookService = require("../services/bookService");
+const catchAsync = require("../utils/catchAsync");
 
 /**
  * Get all books
@@ -13,15 +13,15 @@ exports.getAllBooks = catchAsync(async (req, res) => {
     search: req.query.search,
     sort: req.query.sort,
     limit: req.query.limit,
-    daysAgo: req.query.daysAgo
+    daysAgo: req.query.daysAgo,
   };
 
   const books = await bookService.getAllBooks(filters);
 
   res.status(200).json({
-    status: 'success',
+    status: "success",
     results: books.length,
-    data: { books }
+    data: { books },
   });
 });
 
@@ -33,8 +33,8 @@ exports.getBook = catchAsync(async (req, res) => {
   const book = await bookService.getBookById(req.params.bookId);
 
   res.status(200).json({
-    status: 'success',
-    data: { book }
+    status: "success",
+    data: { book },
   });
 });
 
@@ -46,8 +46,8 @@ exports.lookupByISBN = catchAsync(async (req, res) => {
   const result = await bookService.lookupByISBN(req.query.isbn);
 
   res.status(200).json({
-    status: 'success',
-    data:   result
+    status: "success",
+    data: result,
   });
 });
 
@@ -59,8 +59,8 @@ exports.createBook = catchAsync(async (req, res) => {
   const book = await bookService.createBook(req.body);
 
   res.status(201).json({
-    status: 'success',
-    data: { book }
+    status: "success",
+    data: { book },
   });
 });
 
@@ -72,8 +72,8 @@ exports.updateBook = catchAsync(async (req, res) => {
   const book = await bookService.updateBook(req.params.bookId, req.body);
 
   res.status(200).json({
-    status: 'success',
-    data: { book }
+    status: "success",
+    data: { book },
   });
 });
 
@@ -85,8 +85,8 @@ exports.deleteBook = catchAsync(async (req, res) => {
   await bookService.deleteBook(req.params.bookId);
 
   res.status(204).json({
-    status: 'success',
-    data: null
+    status: "success",
+    data: null,
   });
 });
 
@@ -98,22 +98,42 @@ exports.checkAvailability = catchAsync(async (req, res) => {
   // User location should be from user's delivery address or profile
   const userLocation = {
     latitude: parseFloat(req.query.lat),
-    longitude: parseFloat(req.query.lng)
+    longitude: parseFloat(req.query.lng),
   };
 
   if (!userLocation.latitude || !userLocation.longitude) {
-    // Get from user's delivery address
+    // Get from user's delivery address (check array first, then legacy field)
     const user = req.user;
-    if (user.deliveryAddress && user.deliveryAddress.location) {
+
+    // Check deliveryAddresses array (new model) — prefer default address
+    if (user.deliveryAddresses && user.deliveryAddresses.length > 0) {
+      const addr =
+        user.deliveryAddresses.find((a) => a.isDefault) ||
+        user.deliveryAddresses[0];
+      if (addr.location && addr.location.coordinates) {
+        userLocation.latitude = addr.location.coordinates[1];
+        userLocation.longitude = addr.location.coordinates[0];
+      }
+    }
+
+    // Fallback to legacy singular deliveryAddress
+    if (
+      (!userLocation.latitude || !userLocation.longitude) &&
+      user.deliveryAddress &&
+      user.deliveryAddress.location
+    ) {
       userLocation.latitude = user.deliveryAddress.location.coordinates[1];
       userLocation.longitude = user.deliveryAddress.location.coordinates[0];
     }
   }
 
-  const availability = await bookService.checkAvailability(req.params.bookId, userLocation);
+  const availability = await bookService.checkAvailability(
+    req.params.bookId,
+    userLocation,
+  );
 
   res.status(200).json({
-    status: 'success',
-    data: availability
+    status: "success",
+    data: availability,
   });
 });

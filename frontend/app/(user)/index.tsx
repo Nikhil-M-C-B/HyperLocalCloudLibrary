@@ -32,7 +32,7 @@ function mapBook(b: any): Book {
     coverAccent: '#4A7C59',
     isDigital: true,
     isPhysical: true,
-    availableCopies: parseInt(b.availableCopies || 1),
+    availableCopies: parseInt(b.availableCopies ?? 0),
     nearestLibrary: 'Local Library',
     ageMin: parseInt(b.ageRating?.split('-')[0]) || 0,
     ageMax: parseInt(b.ageRating?.split('-')[1]) || 99,

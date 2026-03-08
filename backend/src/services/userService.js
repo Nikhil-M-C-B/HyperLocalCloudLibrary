@@ -200,3 +200,174 @@ exports.addToReadingHistory = async (userId, profileId, bookId) => {
   await user.save();
   return profile.readingHistory;
 };
+
+/**
+ * Update user delivery location (GeoJSON Point)
+ * Adds a new address to the deliveryAddresses array.
+ * Also sets the legacy deliveryAddress field for backward compatibility.
+ * Expects: { latitude, longitude, street, city, state, pincode, label }
+ * Stores coordinates as [longitude, latitude] per MongoDB GeoJSON spec.
+ */
+exports.updateDeliveryLocation = async (userId, locationData) => {
+  const { latitude, longitude, street, city, state, pincode, label } =
+    locationData;
+
+  if (latitude == null || longitude == null) {
+    throw new AppError("Latitude and longitude are required", 400);
+  }
+
+  const addressObj = {
+    label: label || "Home",
+    street: street || "",
+    city: city || "",
+    state: state || "",
+    pincode: pincode || "",
+    location: {
+      type: "Point",
+      coordinates: [longitude, latitude], // MongoDB GeoJSON: [lng, lat]
+    },
+    isDefault: false,
+  };
+
+  const user = await User.findById(userId);
+  if (!user) {
+    throw new AppError("User not found", 404);
+  }
+
+  // If this is the first address, make it default
+  if (!user.deliveryAddresses || user.deliveryAddresses.length === 0) {
+    addressObj.isDefault = true;
+  }
+
+  user.deliveryAddresses.push(addressObj);
+
+  // Also update legacy single deliveryAddress field (always latest)
+  user.deliveryAddress = {
+    street: addressObj.street,
+    city: addressObj.city,
+    state: addressObj.state,
+    pincode: addressObj.pincode,
+    location: addressObj.location,
+  };
+
+  await user.save();
+  return user;
+};
+
+/**
+ * Get all delivery addresses for a user
+ */
+exports.getDeliveryAddresses = async (userId) => {
+  const user = await User.findById(userId);
+  if (!user) {
+    throw new AppError("User not found", 404);
+  }
+  return user.deliveryAddresses || [];
+};
+
+/**
+ * Delete a delivery address by its subdoc _id
+ */
+exports.deleteDeliveryAddress = async (userId, addressId) => {
+  const user = await User.findById(userId);
+  if (!user) {
+    throw new AppError("User not found", 404);
+  }
+
+  const idx = user.deliveryAddresses.findIndex(
+    (a) => a._id.toString() === addressId,
+  );
+  if (idx === -1) {
+    throw new AppError("Address not found", 404);
+  }
+
+  const wasDefault = user.deliveryAddresses[idx].isDefault;
+  user.deliveryAddresses.splice(idx, 1);
+
+  // If we deleted the default, make the first remaining address the default
+  if (wasDefault && user.deliveryAddresses.length > 0) {
+    user.deliveryAddresses[0].isDefault = true;
+  }
+
+  // Update legacy field
+  const def = user.deliveryAddresses.find((a) => a.isDefault);
+  if (def) {
+    user.deliveryAddress = {
+      street: def.street,
+      city: def.city,
+      state: def.state,
+      pincode: def.pincode,
+      location: def.location,
+    };
+  } else {
+    user.deliveryAddress = undefined;
+  }
+
+  await user.save();
+  return user.deliveryAddresses;
+};
+
+/**
+ * Set a delivery address as default
+ */
+exports.setDefaultDeliveryAddress = async (userId, addressId) => {
+  const user = await User.findById(userId);
+  if (!user) {
+    throw new AppError("User not found", 404);
+  }
+
+  let found = false;
+  user.deliveryAddresses.forEach((a) => {
+    if (a._id.toString() === addressId) {
+      a.isDefault = true;
+      found = true;
+      // Update the legacy field
+      user.deliveryAddress = {
+        street: a.street,
+        city: a.city,
+        state: a.state,
+        pincode: a.pincode,
+        location: a.location,
+      };
+    } else {
+      a.isDefault = false;
+    }
+  });
+
+  if (!found) {
+    throw new AppError("Address not found", 404);
+  }
+
+  await user.save();
+  return user.deliveryAddresses;
+};
+
+/**
+ * Check if a user is within delivery radius of a library branch
+ * Uses MongoDB $near geospatial query.
+ */
+exports.isUserWithinDeliveryZone = async (
+  userId,
+  branchId,
+  radiusMeters = 8000,
+) => {
+  const branch = await require("../models/LibraryBranch").findById(branchId);
+  if (!branch || !branch.location || !branch.location.coordinates) {
+    throw new AppError("Library branch location not configured", 400);
+  }
+
+  const eligible = await User.findOne({
+    _id: userId,
+    "deliveryAddress.location": {
+      $near: {
+        $geometry: {
+          type: "Point",
+          coordinates: branch.location.coordinates,
+        },
+        $maxDistance: radiusMeters,
+      },
+    },
+  });
+
+  return !!eligible;
+};

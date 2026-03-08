@@ -1,7 +1,7 @@
-const Book = require('../models/Book');
-const BookCopy = require('../models/BookCopy');
-const AppError = require('../utils/AppError');
-const bookMetadataService = require('./bookMetadataService');
+const Book = require("../models/Book");
+const BookCopy = require("../models/BookCopy");
+const AppError = require("../utils/AppError");
+const bookMetadataService = require("./bookMetadataService");
 
 /**
  * Get all books with filters
@@ -15,7 +15,9 @@ exports.getAllBooks = async (filters = {}) => {
   }
 
   if (filters.genre) {
-    query.genre = { $in: Array.isArray(filters.genre) ? filters.genre : [filters.genre] };
+    query.genre = {
+      $in: Array.isArray(filters.genre) ? filters.genre : [filters.genre],
+    };
   }
 
   if (filters.language) {
@@ -34,21 +36,21 @@ exports.getAllBooks = async (filters = {}) => {
   }
 
   const books = await Book.find(query)
-    .sort(filters.sort || '-createdAt')
+    .sort(filters.sort || "-createdAt")
     .limit(parseInt(filters.limit) || 50)
     .lean();
 
   // Attach available copies count from BookCopy collection
-  const bookIds = books.map(b => b._id);
+  const bookIds = books.map((b) => b._id);
   const copiesAgg = await BookCopy.aggregate([
-    { $match: { bookId: { $in: bookIds }, status: 'AVAILABLE' } },
-    { $group: { _id: '$bookId', count: { $sum: 1 } } }
+    { $match: { bookId: { $in: bookIds }, status: "AVAILABLE" } },
+    { $group: { _id: "$bookId", count: { $sum: 1 } } },
   ]);
   const copiesMap = {};
-  copiesAgg.forEach(c => {
+  copiesAgg.forEach((c) => {
     copiesMap[c._id.toString()] = c.count;
   });
-  books.forEach(b => {
+  books.forEach((b) => {
     b.availableCopies = copiesMap[b._id.toString()] || 0;
   });
 
@@ -62,13 +64,13 @@ exports.getBookById = async (bookId) => {
   const book = await Book.findById(bookId).lean();
 
   if (!book) {
-    throw new AppError('Book not found', 404);
+    throw new AppError("Book not found", 404);
   }
 
   // Load actual available copies count
   const availableCopiesCount = await BookCopy.countDocuments({
     bookId,
-    status: 'AVAILABLE'
+    status: "AVAILABLE",
   });
   book.availableCopies = availableCopiesCount;
 
@@ -96,13 +98,13 @@ exports.createBook = async (bookData) => {
       const metadata = await bookMetadataService.fetchByISBN(data.isbn);
       if (metadata) {
         // Only fill fields the librarian left blank
-        data.title       = data.title       || metadata.title;
-        data.author      = data.author      || metadata.author;
-        data.genre       = data.genre?.length ? data.genre : metadata.genre;
-        data.language    = data.language    || metadata.language;
-        data.summary     = data.summary     || metadata.summary;
-        data.coverImage  = data.coverImage  || metadata.coverImage;
-        data.ageRating   = data.ageRating   || metadata.ageRating;
+        data.title = data.title || metadata.title;
+        data.author = data.author || metadata.author;
+        data.genre = data.genre?.length ? data.genre : metadata.genre;
+        data.language = data.language || metadata.language;
+        data.summary = data.summary || metadata.summary;
+        data.coverImage = data.coverImage || metadata.coverImage;
+        data.ageRating = data.ageRating || metadata.ageRating;
         // Store extra metadata not in the form
         data._metadataSource = metadata.source;
       }
@@ -113,10 +115,16 @@ exports.createBook = async (bookData) => {
   }
 
   if (!data.title || !data.author) {
-    throw new AppError('title and author are required (could not be fetched from ISBN lookup)', 400);
+    throw new AppError(
+      "title and author are required (could not be fetched from ISBN lookup)",
+      400,
+    );
   }
   if (!data.ageRating) {
-    throw new AppError('ageRating is required and could not be determined automatically — please provide it', 400);
+    throw new AppError(
+      "ageRating is required and could not be determined automatically — please provide it",
+      400,
+    );
   }
 
   // Remove internal tracking field before saving
@@ -132,11 +140,11 @@ exports.createBook = async (bookData) => {
 exports.updateBook = async (bookId, updateData) => {
   const book = await Book.findByIdAndUpdate(bookId, updateData, {
     new: true,
-    runValidators: true
+    runValidators: true,
   });
 
   if (!book) {
-    throw new AppError('Book not found', 404);
+    throw new AppError("Book not found", 404);
   }
 
   return book;
@@ -149,13 +157,13 @@ exports.deleteBook = async (bookId) => {
   const book = await Book.findByIdAndDelete(bookId);
 
   if (!book) {
-    throw new AppError('Book not found', 404);
+    throw new AppError("Book not found", 404);
   }
 
   // Also delete all copies
   await BookCopy.deleteMany({ bookId });
 
-  return { message: 'Book deleted successfully' };
+  return { message: "Book deleted successfully" };
 };
 
 /**
@@ -163,9 +171,9 @@ exports.deleteBook = async (bookId) => {
  * Used by the frontend to preview data before the librarian confirms.
  */
 exports.lookupByISBN = async (isbn) => {
-  if (!isbn) throw new AppError('ISBN is required', 400);
+  if (!isbn) throw new AppError("ISBN is required", 400);
 
-  const existing = await Book.findOne({ isbn: isbn.replace(/[-\s]/g, '') });
+  const existing = await Book.findOne({ isbn: isbn.replace(/[-\s]/g, "") });
 
   const metadata = await bookMetadataService.fetchByISBN(isbn);
   if (!metadata) {
@@ -175,7 +183,7 @@ exports.lookupByISBN = async (isbn) => {
   return {
     metadata,
     alreadyInCatalog: !!existing,
-    existingBookId:   existing?._id || null,
+    existingBookId: existing?._id || null,
   };
 };
 
@@ -183,33 +191,49 @@ exports.lookupByISBN = async (isbn) => {
  * Check book availability in nearby libraries
  */
 exports.checkAvailability = async (bookId, userLocation) => {
-  const LibraryBranch = require('../models/LibraryBranch');
-  const { calculateDistance } = require('../utils/haversine');
-  const config = require('../config');
+  const LibraryBranch = require("../models/LibraryBranch");
+  const { calculateDistance } = require("../utils/haversine");
+  const config = require("../config");
 
   // Find all copies of this book
   const copies = await BookCopy.find({
     bookId,
-    status: 'AVAILABLE'
-  }).populate('branchId');
+    status: "AVAILABLE",
+  }).populate("branchId");
 
   // Filter branches within delivery radius
   const availableInBranches = [];
 
   for (const copy of copies) {
-    if (!copy.branchId || copy.branchId.status !== 'ACTIVE') continue;
+    if (!copy.branchId || copy.branchId.status !== "ACTIVE") continue;
+    if (!copy.branchId.location || !copy.branchId.location.coordinates)
+      continue;
 
-    const distance = calculateDistance(
-      userLocation.latitude,
-      userLocation.longitude,
-      copy.branchId.location.coordinates[1], // latitude
-      copy.branchId.location.coordinates[0]  // longitude
-    );
+    let distance = 0;
+    let isWithinReach = true;
 
-    const isWithinReach = distance <= config.business.deliveryRadiusKm;
+    // Only calculate distance if user location is valid
+    if (
+      userLocation.latitude &&
+      userLocation.longitude &&
+      !isNaN(userLocation.latitude) &&
+      !isNaN(userLocation.longitude)
+    ) {
+      distance = calculateDistance(
+        userLocation.latitude,
+        userLocation.longitude,
+        copy.branchId.location.coordinates[1], // latitude
+        copy.branchId.location.coordinates[0], // longitude
+      );
+      isWithinReach = distance <= config.business.deliveryRadiusKm;
+    } else {
+      // No user location — show all branches, mark distance as unknown
+      distance = 0;
+      isWithinReach = true;
+    }
 
     const existingBranch = availableInBranches.find(
-      b => b.branchId.toString() === copy.branchId._id.toString()
+      (b) => b.branchId.toString() === copy.branchId._id.toString(),
     );
 
     if (existingBranch) {
@@ -221,7 +245,7 @@ exports.checkAvailability = async (bookId, userLocation) => {
         address: copy.branchId.address,
         distance: Math.round(distance * 10) / 10, // Round to 1 decimal
         availableCopies: 1,
-        isWithinReach
+        isWithinReach,
       });
     }
   }
@@ -231,8 +255,11 @@ exports.checkAvailability = async (bookId, userLocation) => {
 
   return {
     bookId,
-    totalAvailable: availableInBranches.reduce((sum, b) => sum + b.availableCopies, 0),
-    branches: availableInBranches
+    totalAvailable: availableInBranches.reduce(
+      (sum, b) => sum + b.availableCopies,
+      0,
+    ),
+    branches: availableInBranches,
   };
 };
 
@@ -240,6 +267,6 @@ exports.checkAvailability = async (bookId, userLocation) => {
  * Get books by age rating
  */
 exports.getBooksByAge = async (ageGroup) => {
-  const books = await Book.find({ ageRating: ageGroup }).sort('-createdAt');
+  const books = await Book.find({ ageRating: ageGroup }).sort("-createdAt");
   return books;
 };

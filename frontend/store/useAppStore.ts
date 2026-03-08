@@ -4,17 +4,16 @@
  * Persists to AsyncStorage so the session survives refreshes.
  * Works on web (uses AsyncStorage, not SecureStore for storage key).
  */
-import bookService from '@/api/services/bookService';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Image } from 'expo-image';
-import { create } from 'zustand';
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { Image } from "expo-image";
+import { create } from "zustand";
 
-export type AppRole = 'USER' | 'LIBRARIAN' | 'ADMIN';
+export type AppRole = "USER" | "LIBRARIAN" | "ADMIN";
 
 export interface AppProfile {
   profileId: string;
   name: string;
-  accountType: 'PARENT' | 'CHILD';
+  accountType: "PARENT" | "CHILD";
   ageGroup?: string;
   age: number; // numeric, derived from ageGroup or set directly
   preferredGenres?: string[];
@@ -26,8 +25,7 @@ interface SetAuthPayload {
   email: string;
   token: string;
   role: AppRole;
-  profiles: Omit<AppProfile, 'age'>[] &
-  Partial<Pick<AppProfile, 'age'>>[];
+  profiles: Omit<AppProfile, "age">[] & Partial<Pick<AppProfile, "age">>[];
 }
 
 interface AppStore {
@@ -40,33 +38,37 @@ interface AppStore {
   isAuthenticated: boolean;
   isLoading: boolean;
   topBooksPrefetched: boolean;
+  hasDeliveryAddress: boolean;
 
   hydrate: () => Promise<void>;
   setAuth: (data: SetAuthPayload) => Promise<void>;
-  addProfile: (profile: Omit<AppProfile, 'age'> & { age?: number }) => Promise<void>;
+  setHasDeliveryAddress: (val: boolean) => void;
+  addProfile: (
+    profile: Omit<AppProfile, "age"> & { age?: number },
+  ) => Promise<void>;
   setActiveProfile: (profileId: string) => Promise<void>;
   clearAuth: () => Promise<void>;
   prefetchTopBooks: () => Promise<void>;
 }
 
-const STORAGE_KEY = '@app_auth_v1';
+const STORAGE_KEY = "@app_auth_v1";
 
 /** Convert backend ageGroup string ("6-8") to a display number (6). */
 export function ageGroupToNum(ag?: string): number {
   if (!ag) return 25;
-  const n = parseInt(ag.split('-')[0], 10);
+  const n = parseInt(ag.split("-")[0], 10);
   return isNaN(n) ? 25 : n;
 }
 
 /** Convert a numeric age to the closest backend ageGroup. */
-export function numToAgeGroup(age: number): AppProfile['ageGroup'] {
-  if (age <= 3) return '0-3';
-  if (age <= 6) return '4-6';
-  if (age <= 8) return '6-8';
-  if (age <= 10) return '8-10';
-  if (age <= 12) return '10-12';
-  if (age <= 15) return '12-15';
-  return '15+';
+export function numToAgeGroup(age: number): AppProfile["ageGroup"] {
+  if (age <= 3) return "0-3";
+  if (age <= 6) return "4-6";
+  if (age <= 8) return "6-8";
+  if (age <= 10) return "8-10";
+  if (age <= 12) return "10-12";
+  if (age <= 15) return "12-15";
+  return "15+";
 }
 
 const useAppStore = create<AppStore>((set, get) => ({
@@ -74,11 +76,12 @@ const useAppStore = create<AppStore>((set, get) => ({
   email: null,
   token: null,
   activeProfileId: null,
-  role: 'USER',
+  role: "USER",
   profiles: [],
   isAuthenticated: false,
   isLoading: true,
   topBooksPrefetched: false,
+  hasDeliveryAddress: false,
 
   // ── Hydrate from AsyncStorage (call on app launch) ──────────────────────────
   hydrate: async () => {
@@ -96,19 +99,27 @@ const useAppStore = create<AppStore>((set, get) => ({
     }
   },
 
+  // ── Track whether the user has set a delivery address ───────────────────────
+  setHasDeliveryAddress: (val) => set({ hasDeliveryAddress: val }),
+
   // ── Store auth + profiles after login / register ────────────────────────────
   setAuth: async ({ userId, email, token, role, profiles }) => {
     const augmented: AppProfile[] = profiles.map((p) => ({
       profileId: (p as any).profileId ?? String(Date.now() + Math.random()),
       name: (p as any).name,
-      accountType: (p as any).accountType ?? 'PARENT',
+      accountType: (p as any).accountType ?? "PARENT",
       ageGroup: (p as any).ageGroup,
       age: (p as any).age ?? ageGroupToNum((p as any).ageGroup),
       preferredGenres: (p as any).preferredGenres ?? [],
       preferredLanguages: (p as any).preferredLanguages ?? [],
     }));
     const state = {
-      userId, email, token, role, profiles: augmented, isAuthenticated: true,
+      userId,
+      email,
+      token,
+      role,
+      profiles: augmented,
+      isAuthenticated: true,
     };
     set(state);
     await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(state));
@@ -119,7 +130,7 @@ const useAppStore = create<AppStore>((set, get) => ({
     const p: AppProfile = {
       profileId: profile.profileId ?? String(Date.now() + Math.random()),
       name: profile.name,
-      accountType: profile.accountType ?? 'CHILD',
+      accountType: profile.accountType ?? "CHILD",
       ageGroup: profile.ageGroup ?? numToAgeGroup(profile.age ?? 10),
       age: profile.age ?? ageGroupToNum(profile.ageGroup),
       preferredGenres: profile.preferredGenres ?? [],
@@ -131,9 +142,14 @@ const useAppStore = create<AppStore>((set, get) => ({
       const json = await AsyncStorage.getItem(STORAGE_KEY);
       if (json) {
         const data = JSON.parse(json);
-        await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify({ ...data, profiles }));
+        await AsyncStorage.setItem(
+          STORAGE_KEY,
+          JSON.stringify({ ...data, profiles }),
+        );
       }
-    } catch { /* non-critical */ }
+    } catch {
+      /* non-critical */
+    }
   },
 
   // ── Set active profile ──────────────────────────────────────────────────────
@@ -143,17 +159,29 @@ const useAppStore = create<AppStore>((set, get) => ({
       const json = await AsyncStorage.getItem(STORAGE_KEY);
       if (json) {
         const data = JSON.parse(json);
-        await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify({ ...data, activeProfileId: profileId }));
+        await AsyncStorage.setItem(
+          STORAGE_KEY,
+          JSON.stringify({ ...data, activeProfileId: profileId }),
+        );
       }
-    } catch { /* non-critical */ }
+    } catch {
+      /* non-critical */
+    }
   },
 
   // ── Sign out ────────────────────────────────────────────────────────────────
   clearAuth: async () => {
     await AsyncStorage.removeItem(STORAGE_KEY);
     set({
-      userId: null, email: null, token: null, activeProfileId: null, role: 'USER',
-      profiles: [], isAuthenticated: false, topBooksPrefetched: false,
+      userId: null,
+      email: null,
+      token: null,
+      activeProfileId: null,
+      role: "USER",
+      profiles: [],
+      isAuthenticated: false,
+      topBooksPrefetched: false,
+      hasDeliveryAddress: false,
     });
   },
 
@@ -161,13 +189,19 @@ const useAppStore = create<AppStore>((set, get) => ({
   prefetchTopBooks: async () => {
     if (get().topBooksPrefetched) return;
     try {
+      // Lazy import to avoid require cycle:
+      // useAppStore → bookService → axiosInstance → useAppStore
+      const bookService = (await import("@/api/services/bookService")).default;
       const response = await bookService.getBooks({ limit: 10 });
       if (response.data?.books) {
-        const urls = response.data.books.map((b: any) => {
-          if (b.coverImage) return b.coverImage;
-          if (b.isbn) return `https://covers.openlibrary.org/b/isbn/${b.isbn}-M.jpg`;
-          return null;
-        }).filter(Boolean);
+        const urls = response.data.books
+          .map((b: any) => {
+            if (b.coverImage) return b.coverImage;
+            if (b.isbn)
+              return `https://covers.openlibrary.org/b/isbn/${b.isbn}-M.jpg`;
+            return null;
+          })
+          .filter(Boolean);
         if (urls.length > 0) {
           Image.prefetch(urls);
         }

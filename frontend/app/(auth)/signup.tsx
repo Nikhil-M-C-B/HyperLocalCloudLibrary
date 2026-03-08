@@ -8,15 +8,15 @@ import { sendVerificationEmail } from "@/utils/emailVerification";
 import { useRouter } from "expo-router";
 import { useState } from "react";
 import {
-  ActivityIndicator,
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    KeyboardAvoidingView,
+    Platform,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
@@ -562,7 +562,7 @@ export default function SignupScreen() {
           });
         }
       }
-      router.replace("/(select-profile)");
+      router.replace("/(user)/delivery-map?next=select-profile");
     } catch (e: any) {
       setGlobalError(e.message || "Registration failed. Please try again.");
       setLoading(false);
