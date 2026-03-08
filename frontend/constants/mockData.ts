@@ -20,6 +20,7 @@ export interface Book {
   ageMax: number;
   keyWords: string[];
   coverImage?: string;
+  isbn?: string;
 }
 
 export const MOCK_BOOKS: Book[] = [

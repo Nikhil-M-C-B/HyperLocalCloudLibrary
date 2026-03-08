@@ -7,19 +7,23 @@ const Joi = require('joi');
 const router = express.Router();
 
 // Validation schemas
+// Only isbn is required — all other fields are auto-filled from Google Books /
+// Open Library. Librarian-supplied values always override fetched metadata.
 const createBookSchema = Joi.object({
-  title: Joi.string().required(),
-  author: Joi.string().required(),
-  isbn: Joi.number().required(),
-  genre: Joi.array().items(Joi.string()).min(1).required(),
-  language: Joi.string(),
-  ageRating: Joi.string().pattern(/^\d+-\d+$/).required().messages({
+  isbn: Joi.string().required(),
+  title: Joi.string().optional(),
+  author: Joi.string().optional(),
+  genre: Joi.array().items(Joi.string()).min(1).optional(),
+  language: Joi.string().optional(),
+  ageRating: Joi.string().pattern(/^\d+-\d+$/).optional().messages({
     'string.pattern.base': 'ageRating must be in "min-max" format (e.g. "4-6").'
   }),
-  collectionName: Joi.string(),
+  collectionName: Joi.string().optional(),
   bookURL: Joi.string().uri().optional(),
-  summary: Joi.string().max(1000).required(),
-  coverImage: Joi.string()
+  summary: Joi.string().max(1000).optional(),
+  coverImage: Joi.string().optional(),
+  pageCount: Joi.number().integer().optional(),
+  publisher: Joi.string().optional(),
 });
 
 const updateBookSchema = Joi.object({

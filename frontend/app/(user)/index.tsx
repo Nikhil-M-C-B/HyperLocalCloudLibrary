@@ -42,6 +42,7 @@ function mapBook(b: any): Book {
     ageMax: parseInt(b.ageRating?.split("-")[1]) || 99,
     keyWords: [],
     coverImage: b.coverImage,
+    isbn: b.isbn != null ? String(b.isbn) : undefined,
   };
 }
 

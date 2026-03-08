@@ -117,28 +117,25 @@ export default function LibrarianDashboard() {
   };
 
   const handleAddBook = async () => {
-    if (!form.title.trim() || !form.author.trim() || !form.isbn.trim() || !form.summary.trim() || selectedGenres.length === 0) {
-      Alert.alert('Missing fields', 'Title, Author, ISBN, Genres, and Summary are required.');
-      return;
-    }
-
-    const min = parseInt(form.minAge, 10);
-    const max = parseInt(form.maxAge, 10);
-    if (isNaN(min) || isNaN(max) || min >= max) {
-      Alert.alert('Invalid Age Rating', 'Please enter valid minimum and maximum ages where Minimum < Maximum.');
+    if (!form.isbn.trim()) {
+      Alert.alert('ISBN required', 'Please enter an ISBN — all other details are fetched automatically.');
       return;
     }
 
     setSaving(true);
     try {
       const body: Record<string, unknown> = {
-        title: form.title.trim(),
-        author: form.author.trim(),
         isbn: Number(form.isbn),
-        genre: selectedGenres,
-        summary: form.summary.trim(),
-        ageRating: `${min}-${max}`,
       };
+
+      // Optional overrides — only sent if the librarian filled them in
+      if (form.title.trim()) body.title = form.title.trim();
+      if (form.author.trim()) body.author = form.author.trim();
+      if (form.summary.trim()) body.summary = form.summary.trim();
+      if (selectedGenres.length > 0) body.genre = selectedGenres;
+      const min = parseInt(form.minAge, 10);
+      const max = parseInt(form.maxAge, 10);
+      if (!isNaN(min) && !isNaN(max) && min < max) body.ageRating = `${min}-${max}`;
 
       const res = await fetch(`${API_BASE_URL}/books`, {
         method: 'POST',
@@ -147,7 +144,7 @@ export default function LibrarianDashboard() {
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.message ?? 'Failed to add book');
-      Alert.alert('✅ Book added!', `"${form.title}" has been added to the library.`);
+      Alert.alert('✅ Book added!', 'The book has been added to the library.');
       setForm({ title: '', author: '', isbn: '', minAge: '', maxAge: '', summary: '' });
       setSelectedGenres([]);
     } catch (err: any) {
@@ -258,12 +255,15 @@ export default function LibrarianDashboard() {
           {tab === 'add' && (
             <View style={s.section}>
               <Text style={s.sectionTitle}>Add a new book</Text>
+              <Text style={{ fontSize: Typography.label, color: Colors.textMuted, marginBottom: Spacing.md, lineHeight: 18 }}>
+                Only ISBN is required — title, author, cover and summary are fetched automatically.
+              </Text>
 
               {([
-                { key: 'title', label: 'Book Title *', ph: 'e.g. The Alchemist', multi: false },
-                { key: 'author', label: 'Author *', ph: 'e.g. Paulo Coelho', multi: false },
-                { key: 'isbn', label: 'ISBN *', ph: '978-...', multi: false },
-                { key: 'summary', label: 'Summary *', ph: 'Brief description…', multi: true },
+                { key: 'isbn', label: 'ISBN *', ph: '978-3-16-148410-0', multi: false },
+                { key: 'title', label: 'Title (optional override)', ph: 'Auto-filled from ISBN', multi: false },
+                { key: 'author', label: 'Author (optional override)', ph: 'Auto-filled from ISBN', multi: false },
+                { key: 'summary', label: 'Summary (optional override)', ph: 'Auto-filled from ISBN', multi: true },
               ] as const).map(f => (
                 <View key={f.key} style={{ gap: 5, marginBottom: Spacing.md }}>
                   <Text style={s.label}>{f.label}</Text>
@@ -285,11 +285,11 @@ export default function LibrarianDashboard() {
                   selectedGenres={selectedGenres}
                   onGenresChange={setSelectedGenres}
                   isChild={false}
-                  title="📚 Related Genres *"
+                  title="📚 Genres (optional override)"
                 />
               </View>
 
-              <Text style={s.label}>Age Rating *</Text>
+              <Text style={s.label}>Age Rating (optional override)</Text>
               <View style={{ gap: Spacing.sm, marginBottom: Spacing.md, marginTop: 8 }}>
                 <View>
                   <Text style={[s.label, { fontSize: Typography.label - 1, color: Colors.textMuted, marginBottom: 4 }]}>Min Age:</Text>

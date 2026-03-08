@@ -116,15 +116,14 @@ exports.createBook = async (bookData) => {
 
   if (!data.title || !data.author) {
     throw new AppError(
-      "title and author are required (could not be fetched from ISBN lookup)",
+      "Could not determine title and author from ISBN — please provide them manually",
       400,
     );
   }
+
+  // Default age rating to all-ages if APIs couldn't determine it
   if (!data.ageRating) {
-    throw new AppError(
-      "ageRating is required and could not be determined automatically — please provide it",
-      400,
-    );
+    data.ageRating = '0-99';
   }
 
   // Remove internal tracking field before saving

@@ -16,21 +16,35 @@ interface Props {
 }
 
 export function BookCover({ book, width, height, fontSize = 13 }: Props) {
-  const [hasError, setHasError] = React.useState(false);
+  // Stage: 'primary' → try coverImage, 'fallback' → try Open Library by ISBN, 'error' → text placeholder
+  const [stage, setStage] = React.useState<'primary' | 'fallback' | 'error'>('primary');
 
-  let coverUrl = book.coverImage;
-  if (!coverUrl && book.isbn) {
-    coverUrl = `https://covers.openlibrary.org/b/isbn/${book.isbn}-M.jpg?default=false`;
-  }
+  const primaryUrl = book.coverImage || null;
+  const fallbackUrl = book.isbn
+    ? `https://covers.openlibrary.org/b/isbn/${book.isbn}-L.jpg`
+    : null;
 
-  if (coverUrl && !hasError) {
+  const handleError = () => {
+    if (stage === 'primary' && fallbackUrl) {
+      setStage('fallback');
+    } else {
+      setStage('error');
+    }
+  };
+
+  let coverUrl: string | null = null;
+  if (stage === 'primary' && primaryUrl) coverUrl = primaryUrl;
+  else if (stage === 'fallback' && fallbackUrl) coverUrl = fallbackUrl;
+  else if (stage === 'primary' && !primaryUrl && fallbackUrl) coverUrl = fallbackUrl;
+
+  if (coverUrl && stage !== 'error') {
     return (
       <Image
         source={{ uri: coverUrl }}
         style={[styles.cover, { width, height, borderRadius: Radius.md, backgroundColor: '#f0f0f0' }]}
         contentFit="cover"
         transition={200}
-        onError={() => setHasError(true)}
+        onError={handleError}
       />
     );
   }
