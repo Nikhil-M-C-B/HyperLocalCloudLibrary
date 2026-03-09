@@ -1,4 +1,5 @@
 const userService = require("../services/userService");
+const circulationService = require("../services/circulationService");
 const catchAsync = require("../utils/catchAsync");
 
 /**
@@ -102,6 +103,23 @@ exports.getReadingHistory = catchAsync(async (req, res) => {
   res.status(200).json({
     status: "success",
     data: { history },
+  });
+});
+
+/**
+ * Get all issues for a user (across all profiles or filtered by profileId)
+ * GET /users/:id/issues?profileId=xxx&status=ISSUED
+ */
+exports.getUserIssues = catchAsync(async (req, res) => {
+  const filters = {
+    status: req.query.status,
+    profileId: req.query.profileId,
+  };
+  const issues = await circulationService.getUserIssues(req.params.id, filters);
+  res.status(200).json({
+    status: "success",
+    results: issues.length,
+    data: { issues },
   });
 });
 

@@ -61,7 +61,7 @@ const bc = StyleSheet.create({
   monthLabel: { fontSize: 10, color: Colors.textSecondary, fontWeight: "600" },
 });
 
-type Tab = "overview" | "branches" | "add";
+type Tab = "overview" | "branches" | "add" | "books";
 
 export default function AdminDashboard() {
   const router = useRouter();
@@ -83,10 +83,69 @@ export default function AdminDashboard() {
   );
   const [topBranch, setTopBranch] = useState<any>(null);
   const [recentActivity, setRecentActivity] = useState<any[]>([]);
+  const [allAdminBooks, setAllAdminBooks] = useState<any[]>([]);
+  const [bookSearchQuery, setBookSearchQuery] = useState("");
+  const [deletingBookId, setDeletingBookId] = useState<string | null>(null);
 
   useEffect(() => {
     fetchData();
+    if (tab === "books") fetchAdminBooks();
   }, [tab]);
+
+  const fetchAdminBooks = async () => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/books?limit=200`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const json = await res.json();
+      setAllAdminBooks(json.data?.books || []);
+    } catch (err) {
+      console.warn("Failed to fetch books for admin", err);
+    }
+  };
+
+  const handleDeleteBook = (bookId: string, bookTitle: string) => {
+    const doDelete = async () => {
+      setDeletingBookId(bookId);
+      try {
+        const res = await fetch(`${API_BASE_URL}/books/${bookId}`, {
+          method: "DELETE",
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!res.ok) {
+          const json = await res.json().catch(() => ({}));
+          throw new Error(json.message ?? "Failed to delete book");
+        }
+        setAllAdminBooks((prev) => prev.filter((b) => b._id !== bookId));
+        if (Platform.OS === "web") {
+          window.alert(`"${bookTitle}" has been deleted.`);
+        } else {
+          Alert.alert("Deleted", `"${bookTitle}" has been deleted.`);
+        }
+      } catch (err: any) {
+        if (Platform.OS === "web") {
+          window.alert(err.message ?? "Failed to delete book.");
+        } else {
+          Alert.alert("Error", err.message ?? "Failed to delete book.");
+        }
+      } finally {
+        setDeletingBookId(null);
+      }
+    };
+
+    if (Platform.OS === "web") {
+      if (window.confirm(`Delete "${bookTitle}"? This cannot be undone.`)) doDelete();
+    } else {
+      Alert.alert(
+        "Delete Book",
+        `Delete "${bookTitle}"? This cannot be undone and removes all copies.`,
+        [
+          { text: "Cancel", style: "cancel" },
+          { text: "Delete", style: "destructive", onPress: doDelete },
+        ]
+      );
+    }
+  };
 
   const fetchData = async () => {
     try {
@@ -329,6 +388,7 @@ export default function AdminDashboard() {
   const tabs: { id: Tab; label: string; emoji: string }[] = [
     { id: "overview", label: "Overview", emoji: "📊" },
     { id: "branches", label: "Branches", emoji: "🏛️" },
+    { id: "books", label: "Books", emoji: "📚" },
     { id: "add", label: "Add Branch", emoji: "➕" },
   ];
 
@@ -422,7 +482,7 @@ export default function AdminDashboard() {
         {tab === "overview" && (
           <View style={s.section}>
             {/* Issues per month chart */}
-            <Text style={s.sectionTitle}>📈 Books Issued — Last 6 Months</Text>
+            <Text style={s.sectionTitle}>Books Issued — Last 6 Months</Text>
             <View style={s.chartCard}>
               <BarChart data={chartData} />
             </View>
@@ -431,7 +491,7 @@ export default function AdminDashboard() {
             {topBranch && (
               <>
                 <Text style={[s.sectionTitle, { marginTop: Spacing.lg }]}>
-                  🏆 Top Branch This Month
+                  Top Branch This Month
                 </Text>
                 <View style={s.topBranchCard}>
                   <Text style={s.topBranchName}>{topBranch.name}</Text>
@@ -457,7 +517,7 @@ export default function AdminDashboard() {
             {recentActivity.length > 0 && (
               <>
                 <Text style={[s.sectionTitle, { marginTop: Spacing.lg }]}>
-                  🕐 Recent Activity
+                  Recent Activity
                 </Text>
                 {recentActivity.map((a, i) => (
                   <View key={i} style={s.activityRow}>
@@ -515,6 +575,49 @@ export default function AdminDashboard() {
                 </TouchableOpacity>
               </View>
             ))}
+          </View>
+        )}
+
+        {tab === "books" && (
+          <View style={s.section}>
+            <Text style={s.sectionTitle}>Manage Books ({allAdminBooks.length})</Text>
+            <TextInput
+              style={[s.fieldInput, { marginBottom: Spacing.md }]}
+              placeholder="Search books…"
+              placeholderTextColor={Colors.textMuted}
+              value={bookSearchQuery}
+              onChangeText={setBookSearchQuery}
+              autoCorrect={false}
+            />
+            {allAdminBooks
+              .filter(b =>
+                !bookSearchQuery.trim() ||
+                b.title?.toLowerCase().includes(bookSearchQuery.toLowerCase()) ||
+                b.author?.toLowerCase().includes(bookSearchQuery.toLowerCase())
+              )
+              .map((b) => (
+                <View key={b._id} style={s.bookRow}>
+                  <View style={{ flex: 1, gap: 2 }}>
+                    <Text style={s.bookRowTitle} numberOfLines={1}>{b.title}</Text>
+                    <Text style={s.bookRowAuthor}>{b.author}</Text>
+                    <Text style={s.bookRowGenre}>{(b.genre || []).join(" · ")}</Text>
+                  </View>
+                  <TouchableOpacity
+                    style={[s.deleteBtn, deletingBookId === b._id && { opacity: 0.5 }]}
+                    onPress={() => handleDeleteBook(b._id, b.title)}
+                    disabled={deletingBookId === b._id}
+                  >
+                    {deletingBookId === b._id
+                      ? <ActivityIndicator size="small" color="#fff" />
+                      : <Text style={s.deleteBtnText}>🗑️ Delete</Text>
+                    }
+                  </TouchableOpacity>
+                </View>
+              ))
+            }
+            {allAdminBooks.length === 0 && (
+              <Text style={s.sectionTitle}>No books found.</Text>
+            )}
           </View>
         )}
 
@@ -583,7 +686,7 @@ export default function AdminDashboard() {
                 {saving ? (
                   <ActivityIndicator color={Colors.buttonPrimaryText} />
                 ) : (
-                  <Text style={s.btnPrimaryText}>🏛️ Register Branch</Text>
+                  <Text style={s.btnPrimaryText}>Register Branch</Text>
                 )}
               </TouchableOpacity>
             </View>
@@ -794,6 +897,34 @@ const s = StyleSheet.create({
     fontWeight: "800",
     color: Colors.accentSage,
   },
+
+  bookRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: Colors.card,
+    borderRadius: Radius.lg,
+    padding: Spacing.md,
+    marginBottom: Spacing.sm,
+    borderWidth: 1,
+    borderColor: Colors.cardBorder,
+    gap: Spacing.sm,
+  },
+  bookRowTitle: {
+    fontSize: Typography.body,
+    fontWeight: "700",
+    color: Colors.textPrimary,
+  },
+  bookRowAuthor: { fontSize: Typography.label, color: Colors.textSecondary },
+  bookRowGenre: { fontSize: Typography.label - 1, color: Colors.textMuted },
+  deleteBtn: {
+    backgroundColor: Colors.error,
+    borderRadius: Radius.lg,
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 8,
+    minWidth: 80,
+    alignItems: "center",
+  },
+  deleteBtnText: { fontSize: Typography.label, fontWeight: "800", color: "#fff" },
 
   addDesc: {
     fontSize: Typography.body,

@@ -1,6 +1,7 @@
 import locationService from "@/api/services/locationService";
 import GenreSelector from "@/components/GenreSelector";
 import LanguageSelector from "@/components/LanguageSelector";
+import { NavBar, NAV_BOTTOM_PAD } from "@/components/NavBar";
 import { API_BASE_URL } from "@/constants/config";
 import { Colors, Radius, Spacing, Typography } from "@/constants/theme";
 import useAppStore, { AppProfile, ageGroupToNum } from "@/store/useAppStore";
@@ -329,6 +330,7 @@ export default function EditProfileScreen() {
 
   return (
     <SafeAreaView style={s.safe}>
+      {Platform.OS === 'web' && <NavBar role="user" active="profile" />}
       <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : undefined}
         style={{ flex: 1 }}
@@ -760,13 +762,14 @@ export default function EditProfileScreen() {
           <View style={{ height: Spacing.xxl }} />
         </ScrollView>
       </KeyboardAvoidingView>
+      {Platform.OS !== 'web' && <NavBar role="user" active="profile" />}
     </SafeAreaView>
   );
 }
 
 const s = StyleSheet.create({
   safe: { flex: 1, backgroundColor: Colors.background },
-  scroll: { paddingBottom: Spacing.xl },
+  scroll: { paddingBottom: NAV_BOTTOM_PAD + Spacing.xl },
 
   header: {
     flexDirection: "row",

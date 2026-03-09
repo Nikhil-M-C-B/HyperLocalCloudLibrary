@@ -25,9 +25,15 @@ exports.getAllBooks = async (filters = {}) => {
     query.language = filters.language;
   }
 
-  // Text search
+  // Text search — use regex so stop words like "the", "a", "of" are not ignored
   if (filters.search) {
-    query.$text = { $search: filters.search };
+    const escapedSearch = filters.search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const searchRegex = new RegExp(escapedSearch, 'i');
+    query.$or = [
+      { title: searchRegex },
+      { author: searchRegex },
+      { summary: searchRegex },
+    ];
   }
 
   if (filters.daysAgo) {

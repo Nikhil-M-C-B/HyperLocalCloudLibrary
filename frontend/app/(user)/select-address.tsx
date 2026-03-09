@@ -1,10 +1,12 @@
 import locationService from "@/api/services/locationService";
+import { NavBar, NAV_BOTTOM_PAD } from "@/components/NavBar";
 import { Colors, Radius, Spacing, Typography } from "@/constants/theme";
 import useAppStore from "@/store/useAppStore";
 import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useState } from "react";
 import {
     ActivityIndicator,
+    Platform,
     ScrollView,
     StyleSheet,
     Text,
@@ -74,6 +76,7 @@ export default function SelectAddressScreen() {
 
   return (
     <SafeAreaView style={st.safe}>
+      {Platform.OS === 'web' && <NavBar role="user" active="profile" />}
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={st.scroll}
@@ -181,13 +184,14 @@ export default function SelectAddressScreen() {
           </>
         )}
       </ScrollView>
+      {Platform.OS !== 'web' && <NavBar role="user" active="profile" />}
     </SafeAreaView>
   );
 }
 
 const st = StyleSheet.create({
   safe: { flex: 1, backgroundColor: Colors.background },
-  scroll: { paddingHorizontal: Spacing.xl, paddingTop: Spacing.xxl },
+  scroll: { paddingHorizontal: Spacing.xl, paddingTop: Spacing.xxl, paddingBottom: NAV_BOTTOM_PAD },
 
   title: {
     fontSize: Typography.title + 4,

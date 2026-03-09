@@ -1,9 +1,11 @@
 import bookService from '@/api/services/bookService';
+import { NavBar } from '@/components/NavBar';
 import { Colors, Radius, Spacing } from '@/constants/theme';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import {
   Dimensions,
+  Platform,
   ScrollView,
   StyleSheet,
   Text, TouchableOpacity,
@@ -13,14 +15,73 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 const { width, height } = Dimensions.get('window');
 
-// ─── Sample reading content (per book ideally; using placeholder for mock) ────
-const SAMPLE_PAGES = [
-  "Once upon a time, in a land where books floated on clouds and stories grew on trees, there lived a very curious little rabbit named Leo.",
-  "Leo loved nothing more than hopping through the meadow and finding new books hidden under flowers and behind rocks. Every day was a new adventure.",
-  "One morning, Leo found a golden book with no title on its cover. He opened it carefully, and the pages glowed a warm amber colour.",
-  '"This book," whispered the wind, "tells the story of whoever reads it." Leo\'s eyes went wide. He turned to the first page and began to read.',
-  "And so Leo discovered that every story begins with a single curious step — and that the most magical book of all is the one you hold in your hands right now.",
-];
+// ─── Per-book reading content based on genre ─────────────────────────────────
+function getPages(book: any): string[] {
+  const title = book?.title || 'this story';
+  const author = book?.author || 'the author';
+  const genres: string[] = (book?.genre || book?.genres || []).map((g: string) => g.toLowerCase());
+
+  const hasGenre = (...gs: string[]) => gs.some(g => genres.some(bg => bg.includes(g)));
+
+  if (hasGenre('picture book', 'bedtime')) {
+    return [
+      `In "${title}" by ${author}, we begin in a cosy little room where everything is getting ready for bed.`,
+      `The moon peeked through the curtains and smiled softly. "Time to sleep," it whispered to the toys, the lamp, and the small bowl of porridge.`,
+      `One by one, each object in the room said goodnight — the red balloon, the great green room, the stars outside the window.`,
+      `The little child in the story pulled the blanket up to their chin and let out a big, sleepy yawn.`,
+      `And as the last page turns, you too might feel your eyes grow heavy... because the best stories always end with peaceful dreams. Goodnight!`,
+    ];
+  }
+
+  if (hasGenre('fantasy', 'magic')) {
+    return [
+      `"${title}" by ${author} begins on an ordinary morning that is about to become extraordinarily magical.`,
+      `The hero of our story had no idea that today was the day a mysterious letter would arrive — sealed with wax and addressed in shimmering silver ink.`,
+      `"You have been chosen," the letter read. "The world beyond the old oak tree awaits your courage." Our hero's heart leapt with excitement and a little bit of fear.`,
+      `Armed with only a cloak, a curious mind, and a small glowing stone found in the garden, the journey into the enchanted realm began.`,
+      `By the end of the day, three riddles had been solved, a grumpy dragon had been befriended, and our hero discovered the most important magic of all: believing in yourself.`,
+    ];
+  }
+
+  if (hasGenre('adventure', 'action')) {
+    return [
+      `"${title}" by ${author} throws us straight into a thrilling chase through narrow cobblestone streets as the sun sets over the harbour.`,
+      `Our brave hero had discovered a crumpled map tucked inside an old library book. X marked a spot deep in the jungle — three days' journey away.`,
+      `Day one: crossing the rope bridge over the roaring river. Day two: outsmarting the clever thieves who wanted the map. Day three: finding the entrance hidden behind a waterfall.`,
+      `Inside the cave glittered something unexpected — not gold, not jewels, but an entire library of stories no one had ever told before.`,
+      `"The greatest adventure," our hero read on the very last page of the very last book, "is always the one you haven't started yet."`,
+    ];
+  }
+
+  if (hasGenre('science', 'educational', 'non-fiction')) {
+    return [
+      `"${title}" by ${author} is packed with fascinating facts that will make you see the world in a completely new way!`,
+      `Did you know that trees talk to each other through underground networks of roots and fungi? Scientists call it the "Wood Wide Web."`,
+      `Bees can recognise human faces, octopuses have three hearts, and a group of flamingos is called a flamboyance. Animals are truly amazing!`,
+      `Space is so big that if you drove a car at 100 km/h towards the nearest star, Proxima Centauri, it would take over 45 million years to arrive.`,
+      `Learning is like building a tower — every new fact is another brick. Keep reading, keep asking questions, and your tower of knowledge will touch the clouds!`,
+    ];
+  }
+
+  if (hasGenre('fiction', "children's novel", 'classic')) {
+    return [
+      `"${title}" by ${author} introduces us to a character unlike anyone we have ever met — someone who sees the world a little differently than the rest.`,
+      `At school, nobody seemed to understand our hero. But alone, with a stack of library books and an overactive imagination, anything was possible.`,
+      `The day everything changed began with a dare — a dare to stand up, speak out, and tell the truth loudly, even if your voice shook.`,
+      `From that day forward, friendships formed in unexpected places, and the quietest person in the room turned out to have the loudest heart.`,
+      `By the final chapter, our hero had learned that being different is not a weakness — it is the thing that makes you unforgettable. And so can you be.`,
+    ];
+  }
+
+  // Default fallback
+  return [
+    `"${title}" by ${author} opens in a world brimming with possibility, where every turn of the page reveals something new and wonderful.`,
+    `Our story begins with a question — the kind of question that keeps you awake at night and pulls you out of bed in the morning to find the answer.`,
+    `Along the way, our hero meets companions both expected and surprising: an old keeper of secrets, a mischievous little creature, and a puzzle no one has solved in a hundred years.`,
+    `With each challenge faced, our hero grows a little braver, a little kinder, and a little wiser — discovering that the best adventures change you from the inside.`,
+    `As the last words are read and the cover gently closes, a smile spreads across your face. Because this story, like all great stories, will stay with you forever.`,
+  ];
+}
 
 const MIN_SIZE = 16;
 const MAX_SIZE = 40;
@@ -53,8 +114,6 @@ export default function ReadingView() {
     return () => { active = false; };
   }, [id]);
 
-  const progress = (page + 1) / SAMPLE_PAGES.length;
-
   if (loading || !book) {
     return (
       <SafeAreaView style={[s.safe, { justifyContent: 'center', alignItems: 'center' }]}>
@@ -63,8 +122,12 @@ export default function ReadingView() {
     );
   }
 
+  const pages = getPages(book);
+  const progress = (page + 1) / pages.length;
+
   return (
     <SafeAreaView style={s.safe}>
+      {Platform.OS === 'web' && <NavBar role="child" active="home" />}
 
       {/* ── Top bar ── */}
       <View style={s.topBar}>
@@ -97,7 +160,7 @@ export default function ReadingView() {
       <View style={s.progressBar}>
         <View style={[s.progressFill, { width: `${progress * 100}%` }]} />
       </View>
-      <Text style={s.progressLabel}>{page + 1} / {SAMPLE_PAGES.length} pages</Text>
+      <Text style={s.progressLabel}>{page + 1} / {pages.length} pages</Text>
 
       {/* ── Page content — warm cream reading surface ── */}
       <View style={s.pageCard}>
@@ -106,7 +169,7 @@ export default function ReadingView() {
           contentContainerStyle={s.pageContent}
         >
           <Text style={[s.pageText, { fontSize }]}>
-            {SAMPLE_PAGES[page].replace(/"/g, '&quot;')}
+            {pages[page]}
           </Text>
         </ScrollView>
       </View>
@@ -123,7 +186,7 @@ export default function ReadingView() {
 
         {/* Page dots */}
         <View style={s.dots}>
-          {SAMPLE_PAGES.map((_, i) => (
+          {pages.map((_, i) => (
             <TouchableOpacity key={i} onPress={() => setPage(i)}>
               <View
                 style={[
@@ -135,7 +198,7 @@ export default function ReadingView() {
           ))}
         </View>
 
-        {page < SAMPLE_PAGES.length - 1 ? (
+        {page < pages.length - 1 ? (
           <TouchableOpacity style={s.navBtn} onPress={() => setPage(p => p + 1)}>
             <Text style={s.navBtnText}>Next →</Text>
           </TouchableOpacity>
@@ -149,6 +212,7 @@ export default function ReadingView() {
         )}
       </View>
 
+      {Platform.OS !== 'web' && <NavBar role="child" active="home" />}
     </SafeAreaView>
   );
 }

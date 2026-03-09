@@ -411,7 +411,7 @@ function StepParentPreferences({
           <ActivityIndicator color={Colors.buttonPrimaryText} />
         ) : (
           <Text style={st.btnPrimaryText}>
-            {step === 0 ? "Next →" : "Done — Let's go! 🎉"}
+            {step === 0 ? "Next →" : "Done — Let's go!"}
           </Text>
         )}
       </TouchableOpacity>

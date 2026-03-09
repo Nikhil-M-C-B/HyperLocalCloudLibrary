@@ -1,4 +1,5 @@
 import issueService from '@/api/services/issueService';
+import { NavBar, NAV_BOTTOM_PAD } from '@/components/NavBar';
 import { Colors, Radius, Spacing, Typography } from '@/constants/theme';
 import useAppStore from '@/store/useAppStore';
 import { useRouter } from 'expo-router';
@@ -7,6 +8,7 @@ import {
   ActivityIndicator,
   Dimensions,
   Image,
+  Platform,
   ScrollView,
   StyleSheet,
   Text, TouchableOpacity,
@@ -76,18 +78,18 @@ export default function MyBooks() {
 
             return {
               id: i._id,
-              bookId: i.bookId?._id || i.bookId,
-              title: i.bookId?.title || 'Unknown Title',
-              author: i.bookId?.author || 'Unknown Author',
-              coverColor: i.bookId?.coverColor || '#C5DDB8',
-              coverAccent: i.bookId?.coverAccent || '#4A7C59',
-              coverImage: i.bookId?.coverImage,
+              bookId: i.copyId?.bookId?._id || i.copyId?.bookId,
+              title: i.copyId?.bookId?.title || 'Unknown Title',
+              author: i.copyId?.bookId?.author || 'Unknown Author',
+              coverColor: i.copyId?.bookId?.coverColor || '#C5DDB8',
+              coverAccent: i.copyId?.bookId?.coverAccent || '#4A7C59',
+              coverImage: i.copyId?.bookId?.coverImage,
               borrowedDate: fmt(new Date(i.issueDate)),
               dueDate: fmt(dueObj),
               returnedDate: i.returnDate ? fmt(new Date(i.returnDate)) : undefined,
               status: isReturned ? 'returned' : isOverdue ? 'overdue' : 'active',
               fine: i.fineAmount > 0 ? i.fineAmount : undefined,
-              library: i.branchId?.name || 'Local Library',
+              library: i.copyId?.branchId?.name || 'Local Library',
             };
           });
           setBorrowHistory(mapped);
@@ -115,6 +117,7 @@ export default function MyBooks() {
 
   return (
     <SafeAreaView style={s.safe}>
+      {Platform.OS === 'web' && <NavBar role="user" active="mybooks" />}
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={s.scroll}>
 
         {/* Header */}
@@ -172,7 +175,6 @@ export default function MyBooks() {
         <View style={s.list}>
           {shown.length === 0 && (
             <View style={s.emptyState}>
-              <Text style={s.emptyIcon}>📭</Text>
               <Text style={s.emptyText}>No books here yet</Text>
             </View>
           )}
@@ -183,7 +185,7 @@ export default function MyBooks() {
                 key={record.id}
                 style={s.bookCard}
                 activeOpacity={0.85}
-                onPress={() => record.status !== 'returned' && router.push(`/(user)/track/${record.bookId}`)}
+                onPress={() => record.status !== 'returned' && router.push(`/(user)/track/${record.id}`)}
               >
                 {/* Mini cover */}
                 {record.coverImage ? (
@@ -197,7 +199,7 @@ export default function MyBooks() {
                 <View style={s.bookInfo}>
                   <Text style={s.bookTitle} numberOfLines={1}>{record.title}</Text>
                   <Text style={s.bookAuthor}>{record.author}</Text>
-                  <Text style={s.bookLibrary}>🏛️ {record.library}</Text>
+                  <Text style={s.bookLibrary}>{record.library}</Text>
 
                   <View style={s.bookBottomRow}>
                     <View style={[s.statusPill, { backgroundColor: cfg.bg }]}>
@@ -224,13 +226,14 @@ export default function MyBooks() {
 
         <View style={{ height: Spacing.xxl }} />
       </ScrollView>
+      {Platform.OS !== 'web' && <NavBar role="user" active="mybooks" />}
     </SafeAreaView>
   );
 }
 
 const s = StyleSheet.create({
   safe: { flex: 1, backgroundColor: Colors.background },
-  scroll: { paddingBottom: Spacing.xl },
+  scroll: { paddingBottom: NAV_BOTTOM_PAD + Spacing.xl },
 
   header: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',

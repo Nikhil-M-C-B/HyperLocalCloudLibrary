@@ -64,6 +64,7 @@ router.use(protect);
 // User routes
 router.get("/:id", userController.getUser);
 router.put("/:id", validate(updateUserSchema), userController.updateUser);
+router.get("/:id/issues", userController.getUserIssues);
 router.put(
   "/:id/location",
   validate(updateLocationSchema),

@@ -2,6 +2,7 @@ import bookService from "@/api/services/bookService";
 import locationService from "@/api/services/locationService";
 import AddressPickerModal from "@/components/AddressPickerModal";
 import { BookCover } from "@/components/BookCover";
+import { NavBar, NAV_BOTTOM_PAD } from "@/components/NavBar";
 import { type Book } from "@/constants/mockData";
 import { Colors, Radius, Spacing, Typography } from "@/constants/theme";
 import useAppStore from "@/store/useAppStore";
@@ -10,6 +11,7 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
     ActivityIndicator,
+    Platform,
     ScrollView,
     StyleSheet,
     Text,
@@ -67,6 +69,7 @@ export default function OrderScreen() {
     "address",
   );
   const [orderProcessing, setOrderProcessing] = useState(false);
+  const [issuedId, setIssuedId] = useState<string | null>(null);
 
   // Address picker state
   const [showAddressPicker, setShowAddressPicker] = useState(false);
@@ -169,7 +172,8 @@ export default function OrderScreen() {
     if (!book || !selectedLib || !activeProfileId) return;
     setOrderProcessing(true);
     try {
-      await bookService.issueBook(book.id, selectedLib, activeProfileId);
+      const result = await bookService.issueBook(book.id, selectedLib, activeProfileId);
+      setIssuedId(result?.data?.issue?._id ?? null);
       setStep("placed");
     } catch (err: any) {
       console.warn("Failed to issue book", err);
@@ -186,8 +190,8 @@ export default function OrderScreen() {
   if (step === "placed") {
     return (
       <SafeAreaView style={s.safe}>
+        {Platform.OS === 'web' && <NavBar role="user" active="mybooks" />}
         <View style={s.successScreen}>
-          <Text style={s.successEmoji}>🎉</Text>
           <Text style={s.successTitle}>Order Placed!</Text>
           <Text style={s.successSub}>
             Your book will arrive in 1–2 working days.{"\n"}
@@ -195,7 +199,7 @@ export default function OrderScreen() {
           </Text>
           <TouchableOpacity
             style={s.btnPrimary}
-            onPress={() => router.push("/(user)/track/ord-001")}
+            onPress={() => router.push(`/(user)/track/${issuedId || 'unknown'}`)}
           >
             <Text style={s.btnPrimaryText}>📦 Track my order</Text>
           </TouchableOpacity>
@@ -206,6 +210,7 @@ export default function OrderScreen() {
             <Text style={s.btnGhostText}>← Back home</Text>
           </TouchableOpacity>
         </View>
+        {Platform.OS !== 'web' && <NavBar role="user" active="mybooks" />}
       </SafeAreaView>
     );
   }
@@ -222,6 +227,7 @@ export default function OrderScreen() {
 
   return (
     <SafeAreaView style={s.safe}>
+      {Platform.OS === 'web' && <NavBar role="user" active="mybooks" />}
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={s.scroll}
@@ -571,13 +577,14 @@ export default function OrderScreen() {
         onClose={() => setShowAddressPicker(false)}
         onSelect={handleAddressSelected}
       />
+      {Platform.OS !== 'web' && <NavBar role="user" active="mybooks" />}
     </SafeAreaView>
   );
 }
 
 const s = StyleSheet.create({
   safe: { flex: 1, backgroundColor: Colors.background },
-  scroll: { paddingHorizontal: Spacing.xl, paddingBottom: Spacing.xl },
+  scroll: { paddingHorizontal: Spacing.xl, paddingBottom: NAV_BOTTOM_PAD + Spacing.xl },
   successScreen: {
     flex: 1,
     alignItems: "center",

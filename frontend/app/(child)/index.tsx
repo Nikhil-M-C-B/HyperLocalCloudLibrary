@@ -1,5 +1,6 @@
 import bookService from '@/api/services/bookService';
 import { BookCover } from '@/components/BookCover';
+import { NavBar, NAV_BOTTOM_PAD } from '@/components/NavBar';
 import { GENRES, type Book } from '@/constants/mockData';
 import { Colors, Radius, Spacing, Typography } from '@/constants/theme';
 import useAppStore from '@/store/useAppStore';
@@ -7,6 +8,7 @@ import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import {
   Dimensions,
+  Platform,
   ScrollView,
   StyleSheet,
   Text, TouchableOpacity,
@@ -15,7 +17,11 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 const { width } = Dimensions.get('window');
-const CARD_W = (width - Spacing.xl * 2 - Spacing.md) / 2;
+// Cap card width so they stay proportionate on tablets/laptops.
+// On a 375 px phone  → ~148 px wide (unchanged feel).
+// On a 1400 px laptop → capped at 160 px instead of 660 px.
+const MAX_CARD_W = 160;
+const CARD_W = Math.min((width - Spacing.xl * 2 - Spacing.md) / 2, MAX_CARD_W);
 const CARD_H = CARD_W * 1.4;
 const BOOKS_PER_PAGE = 6;
 
@@ -155,6 +161,7 @@ export default function ChildHome() {
 
   return (
     <SafeAreaView style={s.safe}>
+      {Platform.OS === 'web' && <NavBar role="child" active="home" />}
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={s.scroll}>
 
         {/* ── Header ── */}
@@ -243,8 +250,10 @@ export default function ChildHome() {
         </View>
 
         {/* bottom padding for FAB */}
-        <View style={{ height: 90 }} />
+        <View style={{ height: NAV_BOTTOM_PAD + 90 }} />
       </ScrollView>
+
+      {Platform.OS !== 'web' && <NavBar role="child" active="home" />}
 
       {/* ── Chatbot FAB ── */}
       <TouchableOpacity style={s.fab} activeOpacity={0.85}>
@@ -301,7 +310,7 @@ const s = StyleSheet.create({
 
   // FAB
   fab: {
-    position: 'absolute', bottom: 28, right: 24,
+    position: 'absolute', bottom: Platform.OS !== 'web' ? 100 : 28, right: 24,
     backgroundColor: Colors.accentSage,
     borderRadius: Radius.full,
     paddingVertical: 12, paddingHorizontal: 18,

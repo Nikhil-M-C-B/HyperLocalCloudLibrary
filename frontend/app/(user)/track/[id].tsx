@@ -1,8 +1,10 @@
 import issueService from '@/api/services/issueService';
+import { NavBar, NAV_BOTTOM_PAD } from '@/components/NavBar';
 import { Colors, Radius, Spacing, Typography } from '@/constants/theme';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import {
+  Platform,
   ScrollView,
   StyleSheet,
   Text, TouchableOpacity,
@@ -58,6 +60,7 @@ export default function TrackOrderScreen() {
 
   return (
     <SafeAreaView style={s.safe}>
+      {Platform.OS === 'web' && <NavBar role="user" active="mybooks" />}
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={s.scroll}>
 
         <TouchableOpacity style={s.backBtn} onPress={() => router.back()}>
@@ -138,13 +141,14 @@ export default function TrackOrderScreen() {
 
         <View style={{ height: Spacing.xxl }} />
       </ScrollView>
+      {Platform.OS !== 'web' && <NavBar role="user" active="mybooks" />}
     </SafeAreaView>
   );
 }
 
 const s = StyleSheet.create({
   safe: { flex: 1, backgroundColor: Colors.background },
-  scroll: { paddingHorizontal: Spacing.xl, paddingBottom: Spacing.xl },
+  scroll: { paddingHorizontal: Spacing.xl, paddingBottom: NAV_BOTTOM_PAD + Spacing.xl },
 
   backBtn: { marginTop: Spacing.md, marginBottom: Spacing.lg },
   backText: { fontSize: Typography.body, color: Colors.accentSage, fontWeight: '700' },

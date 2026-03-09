@@ -1,8 +1,12 @@
 import bookService from '@/api/services/bookService';
+import { NavBar, NAV_BOTTOM_PAD } from '@/components/NavBar';
 import { Colors, Radius, Spacing, Typography } from '@/constants/theme';
+import useAppStore from '@/store/useAppStore';
+import useChildTrackingStore from '@/store/useChildTrackingStore';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import {
+  Platform,
   ScrollView,
   StyleSheet,
   Text, TouchableOpacity,
@@ -41,13 +45,14 @@ const QUIZZES: Record<string, { q: string; options: string[]; answer: number }[]
   ],
 };
 
-// Answer button tints cycling per option index
-const OPTION_TINTS = [Colors.browseSurface, Colors.buttonPrimary, Colors.accentSageLight, '#FDE8E8'];
-const OPTION_TEXT = [Colors.accentPeriwinkle, Colors.buttonPrimaryText, Colors.accentSage, Colors.error];
+// Answer letter labels
+const LETTERS = ['A', 'B', 'C', 'D'];
 
 export default function QuizScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
+  const { activeProfileId } = useAppStore();
+  const { recordQuizResult } = useChildTrackingStore();
 
   const [bookTitle, setBookTitle] = useState('Loading book...');
   useEffect(() => {
@@ -88,6 +93,19 @@ export default function QuizScreen() {
       setCurrent(c => c + 1);
       setSelected(null);
     } else {
+      // Record the quiz result before showing the results screen
+      const finalScore = score;
+      const pct = Math.round((finalScore / questions.length) * 100);
+      if (activeProfileId) {
+        recordQuizResult(activeProfileId, {
+          bookId: id as string,
+          bookTitle,
+          score: finalScore,
+          total: questions.length,
+          pct,
+          date: new Date().toISOString(),
+        });
+      }
       setDone(true);
     }
   };
@@ -109,14 +127,17 @@ export default function QuizScreen() {
           : 'Keep going — reading helps!';
     return (
       <SafeAreaView style={s.safe}>
+        {Platform.OS === 'web' && <NavBar role="child" active="home" />}
         <ScrollView contentContainerStyle={s.resultScroll}>
           <TouchableOpacity style={s.backBtn} onPress={() => router.back()}>
             <Text style={s.backText}>←</Text>
           </TouchableOpacity>
 
-          <Text style={s.resultEmoji}>{emoji}</Text>
-          <Text style={s.resultScore}>{score} / {questions.length}</Text>
-          <Text style={s.resultMsg}>{msg}</Text>
+        {/* Results header */}
+          <View style={s.resultHeader}>
+            <Text style={s.resultScore}>{score} / {questions.length}</Text>
+            <Text style={s.resultMsg}>{msg}</Text>
+          </View>
 
           {/* Score bar */}
           <View style={s.scoreBar}>
@@ -125,11 +146,11 @@ export default function QuizScreen() {
           <Text style={s.pctLabel}>{pct}%</Text>
 
           <TouchableOpacity style={s.btnPrimary} onPress={handleReset} activeOpacity={0.82}>
-            <Text style={s.btnPrimaryText}>🔄 Generate a new quiz</Text>
+            <Text style={s.btnPrimaryText}>Try again</Text>
           </TouchableOpacity>
 
           <TouchableOpacity style={s.btnSecondary} onPress={() => router.back()} activeOpacity={0.82}>
-            <Text style={s.btnSecondaryText}>← Back to book</Text>
+            <Text style={s.btnSecondaryText}>Back to book</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -137,9 +158,10 @@ export default function QuizScreen() {
             onPress={() => router.replace('/(child)')}
             activeOpacity={0.82}
           >
-            <Text style={s.btnGhostText}>🏠 Go home</Text>
+            <Text style={s.btnGhostText}>Home</Text>
           </TouchableOpacity>
         </ScrollView>
+        {Platform.OS !== 'web' && <NavBar role="child" active="home" />}
       </SafeAreaView>
     );
   }
@@ -147,6 +169,7 @@ export default function QuizScreen() {
   // ── Question screen ─────────────────────────────────────────────────────────
   return (
     <SafeAreaView style={s.safe}>
+      {Platform.OS === 'web' && <NavBar role="child" active="home" />}
       <ScrollView contentContainerStyle={s.scroll}>
 
         {/* Back + progress */}
@@ -189,7 +212,7 @@ export default function QuizScreen() {
                 key={i}
                 style={[
                   s.optionBtn,
-                  { backgroundColor: OPTION_TINTS[i % OPTION_TINTS.length] },
+                  isSelected && !isCorrect && !isWrong && s.optionSelected,
                   isCorrect && s.optionCorrect,
                   isWrong && s.optionWrong,
                 ]}
@@ -197,13 +220,19 @@ export default function QuizScreen() {
                 activeOpacity={0.78}
                 disabled={selected !== null}
               >
+                <View style={[
+                  s.letterBadge,
+                  isCorrect && s.letterBadgeCorrect,
+                  isWrong && s.letterBadgeWrong,
+                ]}>
+                  <Text style={s.letterText}>{LETTERS[i]}</Text>
+                </View>
                 <Text style={[
                   s.optionText,
-                  { color: OPTION_TEXT[i % OPTION_TEXT.length] },
                   isCorrect && { color: Colors.success },
                   isWrong && { color: Colors.error },
                 ]}>
-                  {isCorrect ? '✓ ' : isWrong ? '✗ ' : ''}{opt}
+                  {opt}
                 </Text>
               </TouchableOpacity>
             );
@@ -218,8 +247,8 @@ export default function QuizScreen() {
           ]}>
             <Text style={s.feedbackText}>
               {selected === q.answer
-                ? '🎉 Correct! Well done!'
-                : `Not quite! The answer was: "${q.options[q.answer]}"`}
+                ? 'Correct! Well done!'
+                : `Not quite — the answer was: "${q.options[q.answer]}"`}
             </Text>
           </View>
         )}
@@ -228,22 +257,23 @@ export default function QuizScreen() {
         {selected !== null && (
           <TouchableOpacity style={s.btnPrimary} onPress={handleNext} activeOpacity={0.82}>
             <Text style={s.btnPrimaryText}>
-              {current < questions.length - 1 ? 'Next question →' : 'See my results 🏆'}
+              {current < questions.length - 1 ? 'Next question →' : 'See my results'}
             </Text>
           </TouchableOpacity>
         )}
 
         <View style={{ height: Spacing.xxl }} />
       </ScrollView>
+      {Platform.OS !== 'web' && <NavBar role="child" active="home" />}
     </SafeAreaView>
   );
 }
 
 const s = StyleSheet.create({
   safe: { flex: 1, backgroundColor: Colors.browseSurface },
-  scroll: { paddingHorizontal: Spacing.xl, paddingBottom: Spacing.xl },
+  scroll: { paddingHorizontal: Spacing.xl, paddingBottom: NAV_BOTTOM_PAD + Spacing.xl },
   resultScroll: {
-    paddingHorizontal: Spacing.xl, paddingBottom: Spacing.xxl,
+    paddingHorizontal: Spacing.xl, paddingBottom: NAV_BOTTOM_PAD + Spacing.xxl,
     alignItems: 'center', gap: Spacing.md,
   },
 
@@ -278,12 +308,22 @@ const s = StyleSheet.create({
 
   optionsGrid: { gap: Spacing.md, marginBottom: Spacing.lg },
   optionBtn: {
-    borderRadius: Radius.lg, padding: Spacing.md,
-    borderWidth: 2, borderColor: 'transparent',
+    flexDirection: 'row', alignItems: 'center', gap: Spacing.md,
+    backgroundColor: Colors.card, borderRadius: Radius.lg, padding: Spacing.md,
+    borderWidth: 2, borderColor: Colors.cardBorder,
   },
+  optionSelected: { borderColor: Colors.accentSage, backgroundColor: Colors.accentSageLight },
   optionCorrect: { borderColor: Colors.success, backgroundColor: '#E8F5E9' },
   optionWrong: { borderColor: Colors.error, backgroundColor: '#FFEBEE' },
-  optionText: { fontSize: Typography.bodyChild - 2, fontWeight: '700', lineHeight: 24 },
+  letterBadge: {
+    width: 32, height: 32, borderRadius: 16,
+    backgroundColor: Colors.accentSage,
+    alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+  },
+  letterBadgeCorrect: { backgroundColor: Colors.success },
+  letterBadgeWrong: { backgroundColor: Colors.error },
+  letterText: { fontSize: 14, fontWeight: '800', color: Colors.textOnDark },
+  optionText: { fontSize: Typography.bodyChild - 2, fontWeight: '600', color: Colors.textPrimary, flex: 1 },
 
   feedbackBox: { borderRadius: Radius.lg, padding: Spacing.md, marginBottom: Spacing.md },
   feedbackCorrect: { backgroundColor: '#E8F5E9' },
@@ -306,7 +346,7 @@ const s = StyleSheet.create({
   btnGhostText: { fontSize: Typography.body, fontWeight: '600', color: Colors.textMuted },
 
   // Results
-  resultEmoji: { fontSize: 80, marginTop: Spacing.xl },
+  resultHeader: { alignItems: 'center', gap: Spacing.xs, width: '100%', marginTop: Spacing.xl },
   resultScore: { fontSize: 52, fontWeight: '900', color: Colors.accentSage },
   resultMsg: { fontSize: Typography.body + 2, color: Colors.textSecondary, textAlign: 'center', lineHeight: 26 },
   scoreBar: {

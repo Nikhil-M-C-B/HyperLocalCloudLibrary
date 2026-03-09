@@ -91,7 +91,7 @@ export default function LibrarianDashboard() {
     return {
       id: iss._id,
       title: iss.copyId?.bookId?.title || 'Unknown Book',
-      user: iss.userId?.name || 'Unknown User',
+      user: iss.userId?.profiles?.[0]?.name || iss.userId?.email || 'Unknown User',
       due: due.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
       daysLeft: diffDays,
       overdue: diffDays < 0 || iss.status === 'OVERDUE',
@@ -168,7 +168,7 @@ export default function LibrarianDashboard() {
           <View style={s.menuCard}>
             <Text style={s.menuTitle}>Librarian Panel</Text>
             <TouchableOpacity style={s.menuItem} onPress={handleSignOut}>
-              <Text style={s.menuItemText}>🚪 Sign Out</Text>
+              <Text style={s.menuItemText}>Sign Out</Text>
             </TouchableOpacity>
             <TouchableOpacity style={s.menuCancel} onPress={() => setMenuVisible(false)}>
               <Text style={s.menuCancelText}>Cancel</Text>
@@ -217,7 +217,7 @@ export default function LibrarianDashboard() {
                 <View key={book.id} style={[s.issueCard, book.overdue && s.issueCardOverdue]}>
                   <View style={{ flex: 1, gap: 3 }}>
                     <Text style={s.issueName}>{book.title}</Text>
-                    <Text style={s.issueUser}>👤 {book.user}</Text>
+                    <Text style={s.issueUser}>{book.user}</Text>
                     <Text style={[s.issueDue, book.overdue && { color: Colors.error }]}>
                       {book.overdue ? `⚠️ Overdue by ${Math.abs(book.daysLeft)} days` : `Due: ${book.due} · ${book.daysLeft}d left`}
                     </Text>
@@ -234,12 +234,12 @@ export default function LibrarianDashboard() {
             <View style={s.section}>
               <Text style={s.sectionTitle}>Overdue Returns ({PENDING_RETURNS.length})</Text>
               {PENDING_RETURNS.length === 0 ? (
-                <Text style={s.empty}>🎉 No overdue returns!</Text>
+                <Text style={s.empty}>No overdue returns!</Text>
               ) : PENDING_RETURNS.map(book => (
                 <View key={book.id} style={[s.issueCard, s.issueCardOverdue]}>
                   <View style={{ flex: 1, gap: 3 }}>
                     <Text style={s.issueName}>{book.title}</Text>
-                    <Text style={s.issueUser}>👤 {book.user}</Text>
+                    <Text style={s.issueUser}>{book.user}</Text>
                     <Text style={[s.issueDue, { color: Colors.error }]}>
                       ⚠️ Overdue by {Math.abs(book.daysLeft)} days · Fine: ₹{Math.abs(book.daysLeft) * 2}
                     </Text>
@@ -324,15 +324,25 @@ export default function LibrarianDashboard() {
               <TouchableOpacity style={[s.btnPrimary, saving && { opacity: 0.6 }]} activeOpacity={0.82} onPress={handleAddBook} disabled={saving}>
                 {saving
                   ? <ActivityIndicator color={Colors.buttonPrimaryText} />
-                  : <Text style={s.btnPrimaryText}>📚 Add Book to Library</Text>
+                  : <Text style={s.btnPrimaryText}>Add Book to Library</Text>
                 }
               </TouchableOpacity>
+
+              {/* Delete books — admin only */}
+              <View style={{ marginTop: Spacing.lg, backgroundColor: Colors.browseSurface, borderRadius: Radius.lg, padding: Spacing.md, borderWidth: 1, borderColor: Colors.cardBorder }}>
+                <Text style={{ fontSize: Typography.label, fontWeight: '700', color: Colors.textSecondary }}>
+                  🗑️ Deleting books
+                </Text>
+                <Text style={{ fontSize: Typography.label, color: Colors.textMuted, marginTop: 4, lineHeight: 18 }}>
+                  Only admins can permanently delete a book from the catalog. Contact your admin or use the Admin Dashboard → Books tab.
+                </Text>
+              </View>
             </View>
           )}
 
           {/* Issue history link */}
           <TouchableOpacity style={s.historyLink} onPress={() => router.push('/(librarian)/history')}>
-            <Text style={s.historyLinkText}>📜 Full issue history →</Text>
+            <Text style={s.historyLinkText}>Full issue history →</Text>
           </TouchableOpacity>
 
           <View style={{ height: Spacing.xxl }} />

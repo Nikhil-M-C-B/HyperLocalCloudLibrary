@@ -40,14 +40,14 @@ exports.issueBook = async (issueData) => {
       throw new AppError("Library branch not found or inactive", 404);
     }
 
+    // Resolve delivery location (needed for eligibility check and delivery record)
+    const activeAddress =
+      user.deliveryAddresses?.find((a) => a.isDefault) ||
+      user.deliveryAddresses?.[0] ||
+      user.deliveryAddress;
+
     // 3. Delivery Eligibility Check (Haversine Logic)
     if (type === "PHYSICAL") {
-      // Resolve delivery location: prefer new multi-address format, fall back to legacy field
-      const activeAddress =
-        user.deliveryAddresses?.find((a) => a.isDefault) ||
-        user.deliveryAddresses?.[0] ||
-        user.deliveryAddress;
-
       if (
         !activeAddress?.location?.coordinates ||
         activeAddress.location.coordinates.length < 2
@@ -136,7 +136,7 @@ exports.issueBook = async (issueData) => {
             issueId: issue[0]._id,
             branchId,
             userId,
-            deliveryAddress: `${user.deliveryAddress.street}, ${user.deliveryAddress.city}`,
+            deliveryAddress: [activeAddress?.street, activeAddress?.city, activeAddress?.state, activeAddress?.pincode].filter(Boolean).join(', ') || 'Address not set',
             scheduledAt: scheduledDate,
             status: "SCHEDULED",
           },

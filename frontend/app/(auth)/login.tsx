@@ -81,7 +81,6 @@ export default function LoginScreen() {
             <Text style={st.backArrow}>←</Text>
           </TouchableOpacity>
           <View style={st.header}>
-            <Text style={st.emoji}>👋</Text>
             <Text style={st.title}>Welcome back</Text>
             <Text style={st.subtitle}>Sign in to your account</Text>
           </View>

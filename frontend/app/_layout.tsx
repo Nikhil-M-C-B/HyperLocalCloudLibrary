@@ -1,12 +1,20 @@
 import { Colors } from "@/constants/theme";
+import useChildTrackingStore from "@/store/useChildTrackingStore";
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
+import { useEffect } from "react";
 
 export const unstable_settings = {
   anchor: "(auth)",
 };
 
 export default function RootLayout() {
+  const { hydrate } = useChildTrackingStore();
+
+  useEffect(() => {
+    hydrate();
+  }, []);
+
   return (
     <>
       <Stack screenOptions={{ headerShown: false }}>
