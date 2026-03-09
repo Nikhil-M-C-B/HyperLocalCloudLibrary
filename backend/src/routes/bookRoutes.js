@@ -10,7 +10,7 @@ const router = express.Router();
 // Only isbn is required — all other fields are auto-filled from Google Books /
 // Open Library. Librarian-supplied values always override fetched metadata.
 const createBookSchema = Joi.object({
-  isbn: Joi.string().required(),
+  isbn: Joi.alternatives().try(Joi.string(), Joi.number()).required(),
   title: Joi.string().optional(),
   author: Joi.string().optional(),
   genre: Joi.array().items(Joi.string()).min(1).optional(),

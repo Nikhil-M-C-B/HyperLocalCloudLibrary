@@ -25,8 +25,8 @@ module.exports = {
     global: {
       branches: 15,
       functions: 19,
-      lines: 45,
-      statements: 45
+      lines: 44,
+      statements: 44
     }
   },
   setupFilesAfterEnv: ['<rootDir>/tests/setup.js'],

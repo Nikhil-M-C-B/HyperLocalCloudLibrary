@@ -41,6 +41,25 @@ function _truncate(str, max) {
   return str.length > max ? str.slice(0, max - 3) + '...' : str;
 }
 
+/**
+ * Clean raw Google Books / Open Library category tags into human-readable genres.
+ * Removes structured tags (Serie:..., nyt:...), list-like marketing strings,
+ * and anything with = or / characters.
+ */
+function _cleanGenres(raw = []) {
+  return raw
+    .flatMap(g => g.split(',').map(s => s.trim()))   // split comma-separated entries
+    .filter(g =>
+      g.length > 0 &&
+      !g.includes(':') &&          // removes "Serie:...", "nyt:..."
+      !g.includes('=') &&          // removes "nyt:chapter_books=2010-11-06"
+      !g.includes('/') &&          // removes path-like strings
+      !/^\d/.test(g) &&            // removes strings starting with a digit
+      g.split(' ').length <= 4     // removes long marketing phrases
+    )
+    .map(g => g.charAt(0).toUpperCase() + g.slice(1)); // capitalise first letter
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Google Books
 // ─────────────────────────────────────────────────────────────────────────────
@@ -78,7 +97,7 @@ async function _fetchFromGoogleBooks(isbn) {
     title:       info.title       || null,
     author:      info.authors?.join(', ') || null,
     isbn,
-    genre:       info.categories  || [],
+    genre:       _cleanGenres(info.categories),
     language:    info.language === 'en' ? 'English' : (info.language || 'English'),
     summary:     _truncate(info.description, 1000),
     coverImage,
@@ -147,7 +166,7 @@ async function _fetchFromOpenLibrary(isbn) {
   }
 
   const authors = entry.authors?.map(a => a.name).join(', ') || null;
-  const genres  = entry.subjects?.slice(0, 5).map(s => s.name) || [];
+  const genres  = _cleanGenres(entry.subjects?.slice(0, 5).map(s => s.name) || []);
   // If the data endpoint didn't give us a cover, fall back to the Open Library
   // covers CDN which returns a 404 (triggering onError in the app) when absent.
   const coverFromApi = entry.cover?.large || entry.cover?.medium || entry.cover?.small || null;
@@ -183,7 +202,8 @@ async function _fetchFromOpenLibrary(isbn) {
  */
 exports.fetchByISBN = async (isbn) => {
   // Normalise ISBN — strip hyphens and spaces
-  const cleanISBN = isbn.replace(/[-\s]/g, '');
+  const cleanISBN = String(isbn).replace(/[-\s]/g, '');
+  console.log('[fetchByISBN] cleanISBN:', cleanISBN);
 
   let google = null;
   let openLib = null;
@@ -191,23 +211,29 @@ exports.fetchByISBN = async (isbn) => {
   // 1. Try Google Books
   try {
     google = await _fetchFromGoogleBooks(cleanISBN);
+    console.log('[fetchByISBN] Google Books:', google ? `title="${google.title}" author="${google.author}"` : 'NULL');
   } catch (err) {
-    console.warn(`[BookMetadata] Google Books failed for ISBN ${cleanISBN}: ${err.message}`);
+    console.warn(`[BookMetadata] Google Books THREW for ISBN ${cleanISBN}: ${err.message}`);
   }
 
   // 2. Try Open Library — always fetch when Google Books returned sparse data
   //    (no summary, no genre, or no cover) or returned nothing at all
   const googleIsSparse = !google || !google.summary || !google.genre?.length || !google.coverImage;
+  console.log('[fetchByISBN] googleIsSparse:', googleIsSparse);
   if (googleIsSparse) {
     try {
       openLib = await _fetchFromOpenLibrary(cleanISBN);
+      console.log('[fetchByISBN] Open Library:', openLib ? `title="${openLib.title}" author="${openLib.author}"` : 'NULL');
     } catch (err) {
-      console.warn(`[BookMetadata] Open Library failed for ISBN ${cleanISBN}: ${err.message}`);
+      console.warn(`[BookMetadata] Open Library THREW for ISBN ${cleanISBN}: ${err.message}`);
     }
   }
 
   // 3. Nothing found at all
-  if (!google && !openLib) return null;
+  if (!google && !openLib) {
+    console.warn('[fetchByISBN] Both sources returned nothing for ISBN:', cleanISBN);
+    return null;
+  }
 
   // 4. Merge: Google Books primary, Open Library fills gaps
   if (!google) return openLib;

@@ -99,4 +99,12 @@ module.exports = {
     email: process.env.SHIPROCKET_EMAIL || '',
     password: process.env.SHIPROCKET_PASSWORD || '',
   },
+
+  // AWS S3
+  s3: {
+    accessKeyId:     process.env.AWS_ACCESS_KEY || '',
+    secretAccessKey: process.env.AWS_SECRET     || '',
+    bucket:          process.env.AWS_BUCKET     || '',
+    region:          process.env.AWS_REGION     || 'ap-south-1',
+  },
 };

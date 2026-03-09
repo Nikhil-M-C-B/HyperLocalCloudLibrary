@@ -2,6 +2,7 @@ const Book = require("../models/Book");
 const BookCopy = require("../models/BookCopy");
 const AppError = require("../utils/AppError");
 const bookMetadataService = require("./bookMetadataService");
+const s3Service = require("./s3Service");
 
 /**
  * Get all books with filters
@@ -85,6 +86,7 @@ exports.getBookById = async (bookId) => {
  */
 exports.createBook = async (bookData) => {
   let data = { ...bookData };
+  console.log('[createBook] Received body:', JSON.stringify(data));
 
   if (data.isbn) {
     // Check for duplicate ISBN first
@@ -95,7 +97,11 @@ exports.createBook = async (bookData) => {
 
     // Auto-enrich missing fields from external APIs
     try {
+      console.log('[createBook] Fetching metadata for ISBN:', data.isbn);
       const metadata = await bookMetadataService.fetchByISBN(data.isbn);
+      console.log('[createBook] Metadata result:', metadata
+        ? JSON.stringify({ title: metadata.title, author: metadata.author, ageRating: metadata.ageRating, hasSummary: !!metadata.summary, hasCover: !!metadata.coverImage, genreCount: metadata.genre?.length })
+        : 'NULL — no metadata found');
       if (metadata) {
         // Only fill fields the librarian left blank
         data.title = data.title || metadata.title;
@@ -105,16 +111,41 @@ exports.createBook = async (bookData) => {
         data.summary = data.summary || metadata.summary;
         data.coverImage = data.coverImage || metadata.coverImage;
         data.ageRating = data.ageRating || metadata.ageRating;
+        data.publishedDate = data.publishedDate || metadata.publishedDate;
         // Store extra metadata not in the form
         data._metadataSource = metadata.source;
       }
     } catch (err) {
       // Metadata fetch failure must never block book creation
-      console.warn(`[bookService] Metadata enrichment failed: ${err.message}`);
+      console.warn(`[createBook] Metadata enrichment THREW: ${err.message}`, err.stack);
     }
+  } else {
+    console.log('[createBook] No ISBN in body — skipping metadata fetch');
+  }
+
+  console.log('[createBook] After enrichment — title:', data.title, '| author:', data.author, '| ageRating:', data.ageRating, '| genre:', data.genre, '| summaryLen:', data.summary?.length ?? 0);
+
+  // Fallback genre so the array is never empty
+  if (!data.genre || data.genre.length === 0) {
+    data.genre = ['General'];
+  }
+
+  // Fallback summary — summary is required in the schema
+  if (!data.summary) {
+    data.summary = 'No description available.';
+  }
+
+  // Upload cover to S3 for permanent self-hosted storage
+  if (data.coverImage) {
+    console.log('[createBook] Uploading cover to S3...');
+    data.coverImage = await s3Service.uploadCoverFromUrl(data.isbn, data.coverImage);
+    console.log('[createBook] Cover URL after S3:', data.coverImage);
+  } else {
+    console.log('[createBook] No coverImage to upload');
   }
 
   if (!data.title || !data.author) {
+    console.error('[createBook] FAILING — missing title or author. title:', data.title, '| author:', data.author);
     throw new AppError(
       "Could not determine title and author from ISBN — please provide them manually",
       400,
@@ -123,6 +154,7 @@ exports.createBook = async (bookData) => {
 
   // Default age rating to all-ages if APIs couldn't determine it
   if (!data.ageRating) {
+    console.log('[createBook] No ageRating from metadata, defaulting to 0-99');
     data.ageRating = '0-99';
   }
 
@@ -159,6 +191,11 @@ exports.deleteBook = async (bookId) => {
     throw new AppError("Book not found", 404);
   }
 
+  // Delete S3 cover if it was uploaded there
+  if (book.coverImage) {
+    await s3Service.deleteCover(book.coverImage);
+  }
+
   // Also delete all copies
   await BookCopy.deleteMany({ bookId });
 
@@ -172,7 +209,7 @@ exports.deleteBook = async (bookId) => {
 exports.lookupByISBN = async (isbn) => {
   if (!isbn) throw new AppError("ISBN is required", 400);
 
-  const existing = await Book.findOne({ isbn: isbn.replace(/[-\s]/g, "") });
+  const existing = await Book.findOne({ isbn: String(isbn).replace(/[-\s]/g, "") });
 
   const metadata = await bookMetadataService.fetchByISBN(isbn);
   if (!metadata) {

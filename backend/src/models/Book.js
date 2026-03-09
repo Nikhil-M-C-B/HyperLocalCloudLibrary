@@ -22,7 +22,7 @@ const bookSchema = new mongoose.Schema({
       type: String,
       trim: true
     }],
-    validate: [v => Array.isArray(v) && v.length > 0, 'At least one genre is required']
+    default: [],
   },
   language: {
     type: String,
