@@ -274,9 +274,10 @@ function StepAddProfile({
                 style={st.input}
                 placeholder="Age"
                 placeholderTextColor={Colors.textMuted}
-                keyboardType="numeric"
+                keyboardType="number-pad"
+                maxLength={3}
                 value={age}
-                onChangeText={setAge}
+                onChangeText={(text) => setAge(text.replace(/[^0-9]/g, ''))}
               />
             </>
           )}

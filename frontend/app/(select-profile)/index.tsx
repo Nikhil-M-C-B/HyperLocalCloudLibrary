@@ -232,7 +232,7 @@ export default function SelectProfileScreen() {
     <SafeAreaView style={s.safe}>
       <View style={s.header}>
         <Text style={s.owl}>🦉</Text>
-        <Text style={s.title}>Who's reading{"\n"}today?</Text>
+        <Text style={s.title}>Who&apos;s reading{"\n"}today?</Text>
         <Text style={s.subtitle}>Choose a profile to continue</Text>
       </View>
 
@@ -303,9 +303,10 @@ export default function SelectProfileScreen() {
                       style={s.input}
                       placeholder="e.g. 8"
                       placeholderTextColor={Colors.textMuted}
-                      keyboardType="numeric"
+                      keyboardType="number-pad"
+                      maxLength={3}
                       value={age}
-                      onChangeText={setAge}
+                      onChangeText={(text) => setAge(text.replace(/[^0-9]/g, ''))}
                     />
                   </View>
                 </>

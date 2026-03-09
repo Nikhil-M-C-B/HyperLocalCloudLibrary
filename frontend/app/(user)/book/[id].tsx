@@ -151,6 +151,31 @@ export default function UserBookDetail() {
           <Text style={s.summaryText}>{book.summary}</Text>
         </View>
 
+        {/* Reviews & Comments */}
+        <View style={s.reviewsSection}>
+          <Text style={s.reviewsTitle}>💬 Reviews & Comments</Text>
+          {[
+            { name: 'Ananya S.', rating: 5, comment: 'My kids absolutely loved this book! They couldn\'t put it down and kept asking to read it again.' },
+            { name: 'Rahul M.', rating: 4, comment: 'A wonderful story with great illustrations. Perfect for bedtime reading with the little ones.' },
+            { name: 'Priya K.', rating: 5, comment: 'Beautifully written and engaging. My daughter finished it in one sitting and immediately wanted more!' },
+          ].map((review, idx) => (
+            <View key={idx} style={s.reviewCard}>
+              <View style={s.reviewHeader}>
+                <View style={s.reviewAvatar}>
+                  <Text style={s.reviewAvatarText}>{review.name[0]}</Text>
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={s.reviewName}>{review.name}</Text>
+                  <Text style={s.reviewStars}>
+                    {'★'.repeat(review.rating)}{'☆'.repeat(5 - review.rating)}
+                  </Text>
+                </View>
+              </View>
+              <Text style={s.reviewComment}>{review.comment}</Text>
+            </View>
+          ))}
+        </View>
+
         {/* Actions */}
         <View style={s.actions}>
           {book.availableCopies > 0 ? (
@@ -222,6 +247,22 @@ const s = StyleSheet.create({
   },
   summaryLabel: { fontSize: Typography.body, fontWeight: '800', color: Colors.textPrimary },
   summaryText: { fontSize: Typography.body, color: Colors.textSecondary, lineHeight: 24 },
+
+  reviewsSection: { marginBottom: Spacing.lg, gap: Spacing.sm },
+  reviewsTitle: { fontSize: Typography.body, fontWeight: '800', color: Colors.textPrimary, marginBottom: 4 },
+  reviewCard: {
+    backgroundColor: Colors.card, borderRadius: Radius.lg,
+    padding: Spacing.md, borderWidth: 1, borderColor: Colors.cardBorder, gap: 8,
+  },
+  reviewHeader: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  reviewAvatar: {
+    width: 36, height: 36, borderRadius: 18,
+    backgroundColor: Colors.accentSageLight, alignItems: 'center', justifyContent: 'center',
+  },
+  reviewAvatarText: { fontSize: Typography.body, fontWeight: '800', color: Colors.accentSage },
+  reviewName: { fontSize: Typography.label, fontWeight: '700', color: Colors.textPrimary },
+  reviewStars: { fontSize: 12, color: Colors.accentPeach, letterSpacing: 1 },
+  reviewComment: { fontSize: Typography.label, color: Colors.textSecondary, lineHeight: 20 },
 
   actions: { gap: Spacing.md },
   btnPrimary: {

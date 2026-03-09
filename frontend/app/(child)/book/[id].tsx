@@ -135,6 +135,29 @@ export default function ChildBookDetail() {
           <Text style={s.summaryText}>{book.summary}</Text>
         </View>
 
+        {/* Reviews & Comments */}
+        <View style={s.reviewsSection}>
+          <Text style={s.reviewsTitle}>🌟 What readers say</Text>
+          {[
+            { name: 'Aarav', emoji: '🧒', rating: 5, comment: 'This was so much fun to read! I loved every page and want to read it again!' },
+            { name: 'Meera', emoji: '👧', rating: 4, comment: 'Really cool story! The characters were amazing and I couldn\'t stop reading.' },
+            { name: 'Kabir', emoji: '🧑', rating: 5, comment: 'One of the best books I\'ve ever read! I told all my friends about it!' },
+          ].map((review, idx) => (
+            <View key={idx} style={s.reviewCard}>
+              <View style={s.reviewHeader}>
+                <Text style={s.reviewEmoji}>{review.emoji}</Text>
+                <View style={{ flex: 1 }}>
+                  <Text style={s.reviewName}>{review.name}</Text>
+                  <Text style={s.reviewStars}>
+                    {'⭐'.repeat(review.rating)}{'☆'.repeat(5 - review.rating)}
+                  </Text>
+                </View>
+              </View>
+              <Text style={s.reviewComment}>{review.comment}</Text>
+            </View>
+          ))}
+        </View>
+
         {/* Quick facts — simple for children */}
         <View style={s.factsRow}>
           <View style={s.factCard}>
@@ -223,6 +246,18 @@ const s = StyleSheet.create({
   },
   summaryLabel: { fontSize: Typography.body, fontWeight: '800', color: Colors.textPrimary },
   summaryText: { fontSize: Typography.bodyChild - 2, color: Colors.textSecondary, lineHeight: 24 },
+
+  reviewsSection: { marginBottom: Spacing.lg, gap: Spacing.sm },
+  reviewsTitle: { fontSize: Typography.bodyChild - 2, fontWeight: '800', color: Colors.textPrimary, marginBottom: 4, textAlign: 'center' },
+  reviewCard: {
+    backgroundColor: Colors.card, borderRadius: Radius.lg,
+    padding: Spacing.md, borderWidth: 1, borderColor: Colors.cardBorder, gap: 8,
+  },
+  reviewHeader: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  reviewEmoji: { fontSize: 28 },
+  reviewName: { fontSize: Typography.label, fontWeight: '700', color: Colors.textPrimary },
+  reviewStars: { fontSize: 14, letterSpacing: 1 },
+  reviewComment: { fontSize: Typography.bodyChild - 2, color: Colors.textSecondary, lineHeight: 22 },
 
   factsRow: { flexDirection: 'row', gap: Spacing.sm, marginBottom: Spacing.xl },
   factCard: {

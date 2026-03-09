@@ -656,13 +656,7 @@ export default function UserHome() {
               </Text>
             </TouchableOpacity>
 
-            {/* ── Monitor children ── */}
-            <TouchableOpacity
-              style={s.monitorBanner}
-              onPress={() => router.push("/(user)/monitor")}
-            >
-              <Text style={s.monitorText}>👁️ Monitor child profiles →</Text>
-            </TouchableOpacity>
+
           </>
         )}
 
@@ -800,19 +794,7 @@ const s = StyleSheet.create({
     fontWeight: "700",
     color: Colors.textPrimary,
   },
-  monitorBanner: {
-    marginHorizontal: Spacing.xl,
-    backgroundColor: Colors.browseSurface,
-    borderRadius: Radius.lg,
-    padding: Spacing.md,
-    borderWidth: 1,
-    borderColor: Colors.cardBorder,
-  },
-  monitorText: {
-    fontSize: Typography.body,
-    fontWeight: "700",
-    color: Colors.accentPeriwinkle,
-  },
+
 
   // Hamburger menu modal
   modalOverlay: {
