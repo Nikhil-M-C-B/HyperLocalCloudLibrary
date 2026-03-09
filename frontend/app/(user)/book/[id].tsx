@@ -18,7 +18,7 @@ function mapBook(b: any): Book {
     id: b._id || b.id,
     title: b.title || 'Unknown Title',
     author: b.author || 'Unknown Author',
-    pages: 200,
+    pages: b.pageCount || null,
     releaseYear: b.publishedDate
       ? (parseInt(b.publishedDate.match(/\d{4}/)?.[0]) || new Date(b.createdAt || Date.now()).getFullYear())
       : new Date(b.createdAt || Date.now()).getFullYear(),
@@ -127,7 +127,7 @@ export default function UserBookDetail() {
         {/* Metadata table */}
         <View style={s.metaTable}>
           {[
-            ['Pages', `${book.pages}`],
+            ['Pages', book.pages ? `${book.pages} pages` : '—'],
             ['Published', `${book.releaseYear}`],
             ['Genre', book.genres.join(', ')],
             ['Age range', `${book.ageMin}–${book.ageMax} years`],

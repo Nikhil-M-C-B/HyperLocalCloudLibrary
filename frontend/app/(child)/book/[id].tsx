@@ -163,7 +163,7 @@ export default function ChildBookDetail() {
         {/* Quick facts — simple for children */}
         <View style={s.factsRow}>
           <View style={s.factCard}>
-            <Text style={s.factValue}>{book.pages}</Text>
+            <Text style={s.factValue}>{book.pages ?? '—'}</Text>
             <Text style={s.factLabel}>pages</Text>
           </View>
           <View style={s.factCard}>

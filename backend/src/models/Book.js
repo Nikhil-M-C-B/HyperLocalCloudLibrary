@@ -54,6 +54,10 @@ const bookSchema = new mongoose.Schema({
   coverImage: {
     type: String
   },
+  pageCount: {
+    type: Number,
+    min: 1
+  },
   publishedDate: {
     type: String,
     trim: true
