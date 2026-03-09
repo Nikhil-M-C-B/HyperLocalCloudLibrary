@@ -53,6 +53,10 @@ const bookSchema = new mongoose.Schema({
   },
   coverImage: {
     type: String
+  },
+  publishedDate: {
+    type: String,
+    trim: true
   }
 }, {
   timestamps: true

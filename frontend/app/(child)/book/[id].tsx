@@ -10,7 +10,9 @@ function mapBook(b: any): Book {
     title: b.title || 'Unknown Title',
     author: b.author || 'Unknown Author',
     pages: b.pages || 200,
-    releaseYear: new Date(b.createdAt || Date.now()).getFullYear(),
+    releaseYear: b.publishedDate
+      ? (parseInt(b.publishedDate.match(/\d{4}/)?.[0]) || new Date(b.createdAt || Date.now()).getFullYear())
+      : new Date(b.createdAt || Date.now()).getFullYear(),
     genres: b.genre || [],
     summary: b.summary || 'A fantastic new adventure awaits...',
     rating: 4.5,

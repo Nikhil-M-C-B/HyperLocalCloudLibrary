@@ -148,7 +148,10 @@ async function _fetchFromOpenLibrary(isbn) {
 
   const authors = entry.authors?.map(a => a.name).join(', ') || null;
   const genres  = entry.subjects?.slice(0, 5).map(s => s.name) || [];
-  const cover   = entry.cover?.large || entry.cover?.medium || entry.cover?.small || null;
+  // If the data endpoint didn't give us a cover, fall back to the Open Library
+  // covers CDN which returns a 404 (triggering onError in the app) when absent.
+  const coverFromApi = entry.cover?.large || entry.cover?.medium || entry.cover?.small || null;
+  const cover = coverFromApi || `https://covers.openlibrary.org/b/isbn/${isbn}-L.jpg`;
 
   return {
     title:       entry.title       || null,
@@ -214,10 +217,11 @@ exports.fetchByISBN = async (isbn) => {
     ...google,
     summary:    google.summary    || openLib.summary,
     genre:      google.genre?.length ? google.genre : openLib.genre,
-    coverImage: google.coverImage || openLib.coverImage,
-    publisher:  google.publisher  || openLib.publisher,
-    pageCount:  google.pageCount  || openLib.pageCount,
-    ageRating:  google.ageRating  || openLib.ageRating,
-    source:     'google_books+open_library',
+    coverImage:    google.coverImage    || openLib.coverImage,
+    publisher:     google.publisher     || openLib.publisher,
+    pageCount:     google.pageCount     || openLib.pageCount,
+    ageRating:     google.ageRating     || openLib.ageRating,
+    publishedDate: google.publishedDate || openLib.publishedDate,
+    source:        'google_books+open_library',
   };
 };

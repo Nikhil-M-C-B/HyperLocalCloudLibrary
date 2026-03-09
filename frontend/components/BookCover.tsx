@@ -25,7 +25,10 @@ export function BookCover({ book, width, height, fontSize = 13 }: Props) {
     : null;
 
   const handleError = () => {
-    if (stage === 'primary' && fallbackUrl) {
+    // Only advance to 'fallback' if we were actually showing the primaryUrl.
+    // If primaryUrl was null and we jumped straight to fallbackUrl, an error
+    // should go directly to 'error' (no point retrying the same URL).
+    if (stage === 'primary' && primaryUrl && fallbackUrl) {
       setStage('fallback');
     } else {
       setStage('error');

@@ -125,8 +125,8 @@ export default function SelectProfileScreen() {
     if (profile.accountType === "CHILD") {
       router.replace("/(child)");
     } else {
-      // Parent profile — prompt to select delivery address
-      router.replace("/(user)/select-address");
+      // Parent profile — go straight to home; address selection is optional and available from settings
+      router.replace("/(user)");
     }
   };
 
