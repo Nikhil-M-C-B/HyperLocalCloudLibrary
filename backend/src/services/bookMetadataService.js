@@ -178,8 +178,19 @@ async function _fetchFromOpenLibrary(isbn) {
   const coverFromApi = entry.cover?.large || entry.cover?.medium || entry.cover?.small || null;
   const cover = coverFromApi || `https://covers.openlibrary.org/b/isbn/${isbn}-L.jpg`;
 
+  // Open Library stores series as a subject named "Serie:Series_Name_With_Underscores".
+  // Extract it and prepend to the title so e.g. "The Mark of Athena" becomes
+  // "The Heroes of Olympus: The Mark of Athena".
+  const seriesSubject = entry.subjects?.find(s => /^serie:/i.test(s.name));
+  const seriesName = seriesSubject
+    ? seriesSubject.name.replace(/^serie:/i, '').replace(/_/g, ' ').trim()
+    : null;
+  const olTitle = seriesName && entry.title && !entry.title.includes(':')
+    ? `${seriesName}: ${entry.title}`
+    : (entry.title || null);
+
   return {
-    title:       entry.title       || null,
+    title:       olTitle,
     author:      authors,
     isbn,
     genre:       genres,
@@ -241,10 +252,18 @@ exports.fetchByISBN = async (isbn) => {
   if (!google) return openLib;
   if (!openLib) return google;
 
+  // Prefer whichever title is longer — OL enriches with the series prefix
+  // (e.g. "The Heroes of Olympus: The Mark of Athena") while Google Books may
+  // only return the bare title when no subtitle field is present.
+  const bestTitle = (openLib.title?.length ?? 0) > (google.title?.length ?? 0)
+    ? openLib.title
+    : google.title;
+
   return {
     ...google,
-    summary:    google.summary    || openLib.summary,
-    genre:      google.genre?.length ? google.genre : openLib.genre,
+    title:         bestTitle,
+    summary:       google.summary    || openLib.summary,
+    genre:         google.genre?.length ? google.genre : openLib.genre,
     coverImage:    google.coverImage    || openLib.coverImage,
     publisher:     google.publisher     || openLib.publisher,
     pageCount:     google.pageCount     || openLib.pageCount,
