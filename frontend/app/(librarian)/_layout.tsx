@@ -5,6 +5,7 @@ export default function LibrarianLayout() {
   return (
     <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: Colors.librarianTint } }}>
       <Stack.Screen name="index" />
+      <Stack.Screen name="inventory" />
     </Stack>
   );
 }

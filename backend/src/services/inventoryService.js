@@ -118,6 +118,43 @@ exports.markAsReturned = async (copyId) => {
 };
 
 /**
+ * Get inventory for a single book broken down by branch.
+ * Returns one summary object per branch that has at least one copy of the book.
+ */
+exports.getBookInventoryByBranch = async (bookId) => {
+  const copies = await BookCopy.find({ bookId })
+    .populate('branchId', 'name address')
+    .lean();
+
+  const branchMap = {};
+  for (const copy of copies) {
+    const branch = copy.branchId;
+    if (!branch) continue;
+    const id = branch._id.toString();
+    if (!branchMap[id]) {
+      branchMap[id] = {
+        branchId: id,
+        branchName: branch.name || 'Unknown',
+        total: 0,
+        available: 0,
+        issued: 0,
+        damaged: 0,
+        lost: 0,
+      };
+    }
+    branchMap[id].total++;
+    switch (copy.status) {
+      case 'AVAILABLE': branchMap[id].available++; break;
+      case 'ISSUED':    branchMap[id].issued++;    break;
+      case 'DAMAGED':   branchMap[id].damaged++;   break;
+      case 'LOST':      branchMap[id].lost++;      break;
+    }
+  }
+
+  return Object.values(branchMap);
+};
+
+/**
  * Get inventory stats for a branch
  */
 exports.getBranchInventoryStats = async (branchId) => {

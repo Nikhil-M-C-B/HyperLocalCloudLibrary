@@ -24,6 +24,7 @@ router.use(restrictTo('LIBRARIAN', 'ADMIN'));
 
 router.post('/', validate(addCopiesSchema), inventoryController.addBookCopies);
 router.put('/:copyId', validate(updateStatusSchema), inventoryController.updateCopyStatus);
+router.get('/book/:bookId', inventoryController.getBookInventory);
 router.get('/branch/:branchId', inventoryController.getInventoryByBranch);
 router.get('/branch/:branchId/stats', inventoryController.getBranchStats);
 

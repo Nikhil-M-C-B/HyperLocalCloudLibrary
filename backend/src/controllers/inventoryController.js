@@ -31,6 +31,20 @@ exports.updateCopyStatus = catchAsync(async (req, res) => {
 });
 
 /**
+ * Get per-branch inventory breakdown for a single book
+ * GET /inventory/book/:bookId
+ */
+exports.getBookInventory = catchAsync(async (req, res) => {
+  const inventory = await inventoryService.getBookInventoryByBranch(req.params.bookId);
+
+  res.status(200).json({
+    status: 'success',
+    results: inventory.length,
+    data: { inventory },
+  });
+});
+
+/**
  * Get inventory by branch
  * GET /inventory/branch/:branchId
  */

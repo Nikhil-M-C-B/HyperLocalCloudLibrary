@@ -21,7 +21,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 // Stats configuration without hardcoded values
 const STAT_TINTS = [Colors.accentSageLight, Colors.browseSurface, '#FDE8E8', '#E8F5E9'];
 
-type Tab = 'issued' | 'returns' | 'add';
+type Tab = 'issued' | 'returns' | 'add' | 'inventory';
 
 function StatCard({ label, value, icon, tint }: { label: string; value: string; icon: string; tint: string }) {
   return (
@@ -158,6 +158,7 @@ export default function LibrarianDashboard() {
     { id: 'issued', label: 'Issued', emoji: '📤' },
     { id: 'returns', label: 'Overdue', emoji: '⚠️' },
     { id: 'add', label: 'Add Book', emoji: '➕' },
+    { id: 'inventory', label: 'Inventory', emoji: '📦' },
   ];
 
   return (
@@ -202,7 +203,13 @@ export default function LibrarianDashboard() {
               <TouchableOpacity
                 key={t.id}
                 style={[s.tabBtn, tab === t.id && s.tabBtnActive]}
-                onPress={() => setTab(t.id)}
+                onPress={() => {
+                if (t.id === 'inventory') {
+                  router.push('/(librarian)/inventory');
+                } else {
+                  setTab(t.id);
+                }
+              }}
               >
                 <Text style={[s.tabText, tab === t.id && s.tabTextActive]}>{t.emoji} {t.label}</Text>
               </TouchableOpacity>

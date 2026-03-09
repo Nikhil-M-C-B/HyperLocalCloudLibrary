@@ -20,20 +20,60 @@ const config = require('../config');
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * Map Google Books age / maturity rating to our enum.
- * Google uses: NOT_MATURE | MATURE
- * We derive age group from categories/title heuristics when rating is missing.
+ * Map book categories / maturity rating to our "min-max" age range format.
+ *
+ * Sources:
+ *   categories     — Google Books volumeInfo.categories  OR  Open Library subject names
+ *   maturityRating — Google Books volumeInfo.maturityRating (NOT_MATURE | MATURE)
+ *
+ * Always returns a "min-max" string (e.g. "0-3", "8-12") or null.
+ * null means the caller should fall back to a default (handled in bookService).
  */
 function _mapAgeRating(categories = [], maturityRating = '') {
-  if (maturityRating === 'MATURE') return '15+';
-
   const joined = categories.join(' ').toLowerCase();
-  if (joined.includes('baby') || joined.includes('toddler'))    return '0-3';
-  if (joined.includes('juvenile') && joined.includes('fiction')) return '6-8';
-  if (joined.includes('juvenile'))                               return '4-6';
-  if (joined.includes('young adult'))                            return '12-15';
-  if (joined.includes('children'))                               return '6-8';
-  return null; // caller must let librarian choose if unknown
+
+  // ── Explicit numeric ranges ──────────────────────────────────────────────
+  // "Ages 4-8", "Ages 9-12", "Ages 4 to 8"
+  const rangeMatch = joined.match(/ages?\s+(\d+)\s*[-–to]+\s*(\d+)/i);
+  if (rangeMatch) return `${rangeMatch[1]}-${rangeMatch[2]}`;
+
+  // "4 and up", "8 years and up", "8+"
+  const upMatch = joined.match(/(\d+)\s*(?:years?|yr)?\s*(?:(?:and|&)\s*(?:up|over|older)|\+)/);
+  if (upMatch) {
+    const min = parseInt(upMatch[1], 10);
+    return `${min}-99`;
+  }
+
+  // ── Audience keywords (most specific → least specific) ──────────────────
+  if (joined.includes('board book'))                                         return '0-3';
+  if (joined.includes('baby') || joined.includes('toddler'))                 return '0-3';
+  if (joined.includes('preschool'))                                          return '3-5';
+  if (joined.includes('kindergarten'))                                       return '4-6';
+  if (joined.includes('picture book'))                                       return '4-8';
+  if (joined.includes('easy reader') || joined.includes('easy-to-read'))     return '4-8';
+  if (joined.includes('beginning reader') || joined.includes('beginner reader') ||
+      joined.includes('early reader'))                                        return '5-8';
+  if (joined.includes('middle grade') || joined.includes('middle-grade'))    return '8-12';
+  if (joined.includes('chapter book'))                                       return '6-10';
+  // Young adult before generic "juvenile" because YA is more specific
+  if (joined.includes('young adult') || joined.includes('ya fiction') ||
+      joined.includes('teen fiction'))                                        return '12-18';
+  if (joined.includes('teen'))                                               return '13-18';
+  if (joined.includes('juvenile fiction') || joined.includes('juvenile nonfiction')) return '8-12';
+  if (joined.includes('juvenile'))                                           return '6-12';
+  if (joined.includes("children's fiction") || joined.includes("children's nonfiction") ||
+      joined.includes("children's stories"))                                 return '4-10';
+  if (joined.includes('children'))                                           return '4-10';
+
+  // Mature / adult content
+  if (maturityRating === 'MATURE')                                           return '16-99';
+
+  // Generic adult categories — reasonable floor
+  if (joined.includes('fiction') || joined.includes('nonfiction') ||
+      joined.includes('biography') || joined.includes('history') ||
+      joined.includes('science') || joined.includes('novel'))                return '14-99';
+
+  return null; // truly unknown — caller applies fallback
 }
 
 function _truncate(str, max) {
@@ -200,7 +240,7 @@ async function _fetchFromOpenLibrary(isbn) {
     pageCount:   entry.number_of_pages || null,
     publisher:   entry.publishers?.[0]?.name || null,
     publishedDate: entry.publish_date || null,
-    ageRating:   null, // Open Library doesn't reliably provide this
+    ageRating:   _mapAgeRating(entry.subjects?.map(s => s.name) || [], ''),
     source:      'open_library',
   };
 }
