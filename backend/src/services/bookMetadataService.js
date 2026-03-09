@@ -93,8 +93,14 @@ async function _fetchFromGoogleBooks(isbn) {
     ? cover.replace(/^http:\/\//, 'https://').replace(/&edge=curl/, '')
     : null;
 
+  // Combine title + subtitle so "The Son of Neptune" + "Heroes of Olympus, Book 2"
+  // becomes "The Son of Neptune: Heroes of Olympus, Book 2", preserving the full name.
+  const fullTitle = info.subtitle
+    ? `${info.title}: ${info.subtitle}`
+    : (info.title || null);
+
   return {
-    title:       info.title       || null,
+    title:       fullTitle,
     author:      info.authors?.join(', ') || null,
     isbn,
     genre:       _cleanGenres(info.categories),
