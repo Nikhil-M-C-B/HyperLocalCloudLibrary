@@ -86,7 +86,6 @@ exports.getBookById = async (bookId) => {
  */
 exports.createBook = async (bookData) => {
   let data = { ...bookData };
-  console.log('[createBook] Received body:', JSON.stringify(data));
 
   if (data.isbn) {
     // Check for duplicate ISBN first
@@ -97,11 +96,7 @@ exports.createBook = async (bookData) => {
 
     // Auto-enrich missing fields from external APIs
     try {
-      console.log('[createBook] Fetching metadata for ISBN:', data.isbn);
       const metadata = await bookMetadataService.fetchByISBN(data.isbn);
-      console.log('[createBook] Metadata result:', metadata
-        ? JSON.stringify({ title: metadata.title, author: metadata.author, ageRating: metadata.ageRating, hasSummary: !!metadata.summary, hasCover: !!metadata.coverImage, genreCount: metadata.genre?.length })
-        : 'NULL — no metadata found');
       if (metadata) {
         // Only fill fields the librarian left blank
         data.title = data.title || metadata.title;
@@ -119,11 +114,7 @@ exports.createBook = async (bookData) => {
       // Metadata fetch failure must never block book creation
       console.warn(`[createBook] Metadata enrichment THREW: ${err.message}`, err.stack);
     }
-  } else {
-    console.log('[createBook] No ISBN in body — skipping metadata fetch');
   }
-
-  console.log('[createBook] After enrichment — title:', data.title, '| author:', data.author, '| ageRating:', data.ageRating, '| genre:', data.genre, '| summaryLen:', data.summary?.length ?? 0);
 
   // Fallback genre so the array is never empty
   if (!data.genre || data.genre.length === 0) {
@@ -137,11 +128,7 @@ exports.createBook = async (bookData) => {
 
   // Upload cover to S3 for permanent self-hosted storage
   if (data.coverImage) {
-    console.log('[createBook] Uploading cover to S3...');
     data.coverImage = await s3Service.uploadCoverFromUrl(data.isbn, data.coverImage);
-    console.log('[createBook] Cover URL after S3:', data.coverImage);
-  } else {
-    console.log('[createBook] No coverImage to upload');
   }
 
   if (!data.title || !data.author) {
@@ -154,7 +141,6 @@ exports.createBook = async (bookData) => {
 
   // Default age rating to all-ages if APIs couldn't determine it
   if (!data.ageRating) {
-    console.log('[createBook] No ageRating from metadata, defaulting to 0-99');
     data.ageRating = '0-99';
   }
 

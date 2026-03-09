@@ -203,7 +203,6 @@ async function _fetchFromOpenLibrary(isbn) {
 exports.fetchByISBN = async (isbn) => {
   // Normalise ISBN — strip hyphens and spaces
   const cleanISBN = String(isbn).replace(/[-\s]/g, '');
-  console.log('[fetchByISBN] cleanISBN:', cleanISBN);
 
   let google = null;
   let openLib = null;
@@ -211,7 +210,6 @@ exports.fetchByISBN = async (isbn) => {
   // 1. Try Google Books
   try {
     google = await _fetchFromGoogleBooks(cleanISBN);
-    console.log('[fetchByISBN] Google Books:', google ? `title="${google.title}" author="${google.author}"` : 'NULL');
   } catch (err) {
     console.warn(`[BookMetadata] Google Books THREW for ISBN ${cleanISBN}: ${err.message}`);
   }
@@ -219,11 +217,9 @@ exports.fetchByISBN = async (isbn) => {
   // 2. Try Open Library — always fetch when Google Books returned sparse data
   //    (no summary, no genre, or no cover) or returned nothing at all
   const googleIsSparse = !google || !google.summary || !google.genre?.length || !google.coverImage;
-  console.log('[fetchByISBN] googleIsSparse:', googleIsSparse);
   if (googleIsSparse) {
     try {
       openLib = await _fetchFromOpenLibrary(cleanISBN);
-      console.log('[fetchByISBN] Open Library:', openLib ? `title="${openLib.title}" author="${openLib.author}"` : 'NULL');
     } catch (err) {
       console.warn(`[BookMetadata] Open Library THREW for ISBN ${cleanISBN}: ${err.message}`);
     }
