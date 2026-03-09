@@ -174,6 +174,8 @@ export default function SelectProfileScreen() {
     const ageGroup = numToAgeGroup(ageNum);
 
     try {
+      // "15+" profiles get the adult view but with a content filter for 16+/18+ books.
+      const accountType = ageGroup === '15+' ? 'PARENT' : 'CHILD';
       const res = await fetch(`${API_BASE_URL}/users/${userId}/children`, {
         method: "POST",
         headers: {
@@ -193,17 +195,18 @@ export default function SelectProfileScreen() {
         profileId:
           backendProfile?.profileId ?? String(Date.now() + Math.random()),
         name: name.trim(),
-        accountType: "CHILD",
+        accountType: backendProfile?.accountType ?? accountType,
         ageGroup,
         age: ageNum,
         preferredGenres: genres,
         preferredLanguages: languages,
       });
     } catch {
+      const accountType = ageGroup === '15+' ? 'PARENT' : 'CHILD';
       await addProfile({
         profileId: String(Date.now() + Math.random()),
         name: name.trim(),
-        accountType: "CHILD",
+        accountType,
         ageGroup,
         age: ageNum,
         preferredGenres: genres,

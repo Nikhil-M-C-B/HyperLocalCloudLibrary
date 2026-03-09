@@ -1,4 +1,6 @@
 const User = require("../models/User");
+const Auth = require("../models/Auth");
+const Issue = require("../models/Issue");
 const AppError = require("../utils/AppError");
 const mongoose = require("mongoose");
 
@@ -50,11 +52,15 @@ exports.createChildProfile = async (parentId, profileData) => {
     throw new AppError("User not found", 404);
   }
 
+  // Profiles with ageGroup "15+" get the adult view (PARENT) but will have
+  // a book-level filter applied on the frontend so they don't see 16+/18+ content.
+  const accountType = profileData.ageGroup === '15+' ? 'PARENT' : 'CHILD';
+
   // Create new profile
   const newProfile = {
     profileId: new mongoose.Types.ObjectId(),
     name: profileData.name,
-    accountType: "CHILD",
+    accountType,
     ageGroup: profileData.ageGroup,
     preferredGenres: profileData.preferredGenres || [],
     preferredLanguages: profileData.preferredLanguages || [],
@@ -370,4 +376,27 @@ exports.isUserWithinDeliveryZone = async (
   });
 
   return !!eligible;
+};
+
+/**
+ * Delete an entire user account.
+ * Blocked if the user has any active (ISSUED/OVERDUE) issues.
+ */
+exports.deleteAccount = async (userId) => {
+  const activeIssues = await Issue.findOne({
+    userId,
+    status: { $in: ['ISSUED', 'OVERDUE'] },
+  });
+
+  if (activeIssues) {
+    throw new AppError(
+      'You have unreturned books. Please return all books before deleting your account.',
+      400,
+    );
+  }
+
+  await User.findByIdAndDelete(userId);
+  await Auth.findOneAndDelete({ userId });
+
+  return { message: 'Account deleted successfully' };
 };

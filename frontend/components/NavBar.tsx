@@ -13,7 +13,7 @@ type Props = UserProps | ChildProps;
 
 const USER_ITEMS: { id: UserTab; label: string; icon: string; route: string }[] = [
   { id: 'home',    label: 'Home',      icon: 'home',       route: '/(user)'            },
-  { id: 'mybooks', label: 'My Books',  icon: 'menu-book',  route: '/(user)/my-books'   },
+  { id: 'mybooks', label: 'My Orders', icon: 'receipt-long', route: '/(user)/my-books'  },
   { id: 'profile', label: 'Profile',   icon: 'person',     route: '/(user)/edit-profile'},
   { id: 'switch',  label: 'Profiles',  icon: 'swap-horiz', route: '/(select-profile)'  },
 ];

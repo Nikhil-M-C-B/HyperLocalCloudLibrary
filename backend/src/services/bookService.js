@@ -10,9 +10,20 @@ const s3Service = require("./s3Service");
 exports.getAllBooks = async (filters = {}) => {
   const query = {};
 
-  // Apply filters
-  if (filters.ageGroup) {
-    query.ageRating = filters.ageGroup;
+  // Age-appropriate content filter.
+  // maxAge = the child profile's upper age bound (e.g. 10 for ageGroup "8-10").
+  // Only show books whose ageRating minimum ≤ maxAge — this hides adult/teen books from children.
+  // Uses MongoDB $expr to compare the numeric part of the "min-max" string field.
+  if (filters.maxAge !== undefined) {
+    const maxAge = parseInt(filters.maxAge, 10);
+    if (!isNaN(maxAge)) {
+      query.$expr = {
+        $lte: [
+          { $toInt: { $arrayElemAt: [{ $split: ['$ageRating', '-'] }, 0] } },
+          maxAge,
+        ],
+      };
+    }
   }
 
   if (filters.genre) {
@@ -145,9 +156,9 @@ exports.createBook = async (bookData) => {
     );
   }
 
-  // Default age rating to all-ages if APIs couldn't determine it
+  // Safe fallback: unknown age rating → adult-only (protects child profiles)
   if (!data.ageRating) {
-    data.ageRating = '0-99';
+    data.ageRating = '16-99';
   }
 
   // Remove internal tracking field before saving

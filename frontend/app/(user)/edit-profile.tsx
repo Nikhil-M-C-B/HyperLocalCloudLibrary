@@ -5,6 +5,7 @@ import { NavBar, NAV_BOTTOM_PAD } from "@/components/NavBar";
 import { API_BASE_URL } from "@/constants/config";
 import { Colors, Radius, Spacing, Typography } from "@/constants/theme";
 import useAppStore, { AppProfile, ageGroupToNum } from "@/store/useAppStore";
+import issueService from "@/api/services/issueService";
 import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import {
@@ -69,7 +70,7 @@ function ChildProfileCard({
 // ── Main ─────────────────────────────────────────────────────────────────────
 export default function EditProfileScreen() {
   const router = useRouter();
-  const { userId, email, token, profiles, activeProfileId, setAuth, role } =
+  const { userId, email, token, profiles, activeProfileId, setAuth, role, clearAuth } =
     useAppStore();
 
   // Determine which profile we're editing: default to active, or query param
@@ -95,6 +96,36 @@ export default function EditProfileScreen() {
   const [step, setStep] = useState<
     "details" | "languages" | "genres" | "addresses"
   >("details");
+
+  // ── Delete account state ──
+  const isMainProfile = profiles[0]?.profileId === editingProfileId;
+  const [deleteStep, setDeleteStep] = useState<'closed' | 'warn' | 'confirm'>('closed');
+  const [deleteConfirmText, setDeleteConfirmText] = useState('');
+  const [deleting, setDeleting] = useState(false);
+
+  const handleDeleteAccount = async () => {
+    setDeleting(true);
+    try {
+      const res = await fetch(`${API_BASE_URL}/users/${userId}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.message || 'Failed to delete account.');
+      await clearAuth();
+      router.replace('/(auth)/welcome');
+    } catch (e: any) {
+      if (Platform.OS === 'web') {
+        window.alert(e.message || 'Failed to delete account.');
+      } else {
+        Alert.alert('Error', e.message || 'Failed to delete account.');
+      }
+    } finally {
+      setDeleting(false);
+      setDeleteStep('closed');
+      setDeleteConfirmText('');
+    }
+  };
 
   // ── Address state ──
   const [addresses, setAddresses] = useState<any[]>([]);
@@ -331,6 +362,81 @@ export default function EditProfileScreen() {
   return (
     <SafeAreaView style={s.safe}>
       {Platform.OS === 'web' && <NavBar role="user" active="profile" />}
+
+      {/* ── Delete Account: Step 1 — Warning ── */}
+      <Modal
+        transparent
+        visible={deleteStep === 'warn'}
+        animationType="fade"
+        onRequestClose={() => setDeleteStep('closed')}
+      >
+        <View style={s.deleteModalOverlay}>
+          <View style={s.deleteModalCard}>
+            <Text style={s.deleteModalTitle}>⚠️ Delete Account</Text>
+            <Text style={s.deleteModalBody}>
+              This will permanently delete your account, all profiles, borrowing history, and saved addresses.{'\n\n'}This action cannot be undone.
+            </Text>
+            <View style={{ flexDirection: 'row', gap: Spacing.md, marginTop: Spacing.lg }}>
+              <TouchableOpacity
+                style={[s.btnPrimary, { flex: 1, backgroundColor: Colors.card, borderWidth: 1.5, borderColor: Colors.cardBorder }]}
+                onPress={() => setDeleteStep('closed')}
+              >
+                <Text style={[s.btnPrimaryText, { color: Colors.textSecondary }]}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[s.btnPrimary, { flex: 1, backgroundColor: Colors.error }]}
+                onPress={() => { setDeleteStep('confirm'); setDeleteConfirmText(''); }}
+              >
+                <Text style={s.btnPrimaryText}>Yes, proceed</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ── Delete Account: Step 2 — Type "confirm" ── */}
+      <Modal
+        transparent
+        visible={deleteStep === 'confirm'}
+        animationType="fade"
+        onRequestClose={() => setDeleteStep('closed')}
+      >
+        <View style={s.deleteModalOverlay}>
+          <View style={s.deleteModalCard}>
+            <Text style={s.deleteModalTitle}>Confirm Deletion</Text>
+            <Text style={s.deleteModalBody}>
+              Type <Text style={{ fontWeight: '800' }}>confirm</Text> below to permanently delete your account.
+            </Text>
+            <TextInput
+              style={[s.fieldInput, { marginTop: Spacing.md }]}
+              value={deleteConfirmText}
+              onChangeText={setDeleteConfirmText}
+              placeholder="Type confirm here"
+              placeholderTextColor={Colors.textMuted}
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+            <View style={{ flexDirection: 'row', gap: Spacing.md, marginTop: Spacing.lg }}>
+              <TouchableOpacity
+                style={[s.btnPrimary, { flex: 1, backgroundColor: Colors.card, borderWidth: 1.5, borderColor: Colors.cardBorder }]}
+                onPress={() => setDeleteStep('closed')}
+                disabled={deleting}
+              >
+                <Text style={[s.btnPrimaryText, { color: Colors.textSecondary }]}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[s.btnPrimary, { flex: 1, backgroundColor: Colors.error, opacity: deleteConfirmText.toLowerCase() === 'confirm' && !deleting ? 1 : 0.4 }]}
+                onPress={handleDeleteAccount}
+                disabled={deleteConfirmText.toLowerCase() !== 'confirm' || deleting}
+              >
+                {deleting
+                  ? <ActivityIndicator color={Colors.buttonPrimaryText} />
+                  : <Text style={s.btnPrimaryText}>Delete Forever</Text>}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
       <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : undefined}
         style={{ flex: 1 }}
@@ -759,6 +865,37 @@ export default function EditProfileScreen() {
             </View>
           )}
 
+          {/* Delete Account button — only the main profile / account creator */}
+          {isMainProfile && step === 'details' && (
+            <View style={[s.section, { paddingTop: 0 }]}>
+              <TouchableOpacity
+                style={s.deleteAccountBtn}
+                activeOpacity={0.82}
+                onPress={async () => {
+                  // Block if there are active issues
+                  try {
+                    const res = await issueService.getUserIssues(userId!, profiles[0]?.profileId ?? '');
+                    const issues: any[] = res?.data?.issues ?? [];
+                    const hasActive = issues.some(
+                      (i: any) => i.status === 'ISSUED' || i.status === 'OVERDUE',
+                    );
+                    if (hasActive) {
+                      if (Platform.OS === 'web') {
+                        window.alert('You have unreturned books. Please return all books before deleting your account.');
+                      } else {
+                        Alert.alert('Cannot Delete', 'You have unreturned books. Please return all books before deleting your account.');
+                      }
+                      return;
+                    }
+                  } catch { /* if check fails, let backend enforce it */ }
+                  setDeleteStep('warn');
+                }}
+              >
+                <Text style={s.deleteAccountBtnText}>🗑 Delete Account</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
           <View style={{ height: Spacing.xxl }} />
         </ScrollView>
       </KeyboardAvoidingView>
@@ -1044,5 +1181,45 @@ const s = StyleSheet.create({
     fontSize: Typography.body,
     fontWeight: "800",
     color: Colors.buttonPrimaryText,
+  },
+
+  // Delete account
+  deleteAccountBtn: {
+    borderWidth: 1.5,
+    borderColor: Colors.error,
+    borderRadius: Radius.md,
+    paddingVertical: Spacing.md,
+    alignItems: 'center',
+    marginTop: Spacing.sm,
+  },
+  deleteAccountBtnText: {
+    fontSize: Typography.body,
+    fontWeight: '700',
+    color: Colors.error,
+  },
+  deleteModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: Spacing.xl,
+  },
+  deleteModalCard: {
+    backgroundColor: Colors.card,
+    borderRadius: Radius.lg,
+    padding: Spacing.xl,
+    width: '100%',
+    maxWidth: 420,
+  },
+  deleteModalTitle: {
+    fontSize: Typography.title,
+    fontWeight: '800',
+    color: Colors.error,
+    marginBottom: Spacing.sm,
+  },
+  deleteModalBody: {
+    fontSize: Typography.body,
+    color: Colors.textSecondary,
+    lineHeight: 22,
   },
 });

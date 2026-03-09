@@ -244,10 +244,29 @@ exports.getUserIssues = async (userId, filters = {}) => {
     .populate({
       path: "copyId",
       populate: {
-        path: "bookId",
+        path: "bookId branchId",
       },
     })
     .sort("-issueDate");
+
+  // Attach delivery status in a single batch query
+  if (issues.length > 0) {
+    const issueIds = issues.map((i) => i._id);
+    const deliveries = await Delivery.find({ issueId: { $in: issueIds } })
+      .select("issueId status scheduledAt deliveredAt")
+      .lean();
+
+    const deliveryMap = {};
+    for (const d of deliveries) {
+      deliveryMap[d.issueId.toString()] = d;
+    }
+
+    return issues.map((issue) => {
+      const plain = issue.toObject();
+      plain.delivery = deliveryMap[issue._id.toString()] || null;
+      return plain;
+    });
+  }
 
   return issues;
 };

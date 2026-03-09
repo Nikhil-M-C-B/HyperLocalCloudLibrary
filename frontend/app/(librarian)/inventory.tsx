@@ -53,6 +53,10 @@ export default function InventoryScreen() {
   const [branchInventory, setBranchInventory] = useState<any[]>([]);
   const [loadingBranchInv, setLoadingBranchInv] = useState(false);
 
+  // Search inside expand panels
+  const [branchSearch, setBranchSearch] = useState('');      // filter branches in By-Book panel
+  const [bookInBranchSearch, setBookInBranchSearch] = useState(''); // filter books in By-Branch panel
+
   // Add copies modal
   const [modalVisible, setModalVisible] = useState(false);
   const [modalCtx, setModalCtx] = useState({ bookId: '', bookTitle: '', branchId: '', branchName: '' });
@@ -107,9 +111,11 @@ export default function InventoryScreen() {
   const selectBook = async (bookId: string) => {
     if (selectedBookId === bookId) {
       setSelectedBookId(null);
+      setBranchSearch('');
       return;
     }
     setSelectedBookId(bookId);
+    setBranchSearch('');
     setLoadingBookInv(true);
     try {
       const res = await fetch(`${API_BASE_URL}/inventory/book/${bookId}`, { headers: hdrs });
@@ -125,9 +131,11 @@ export default function InventoryScreen() {
   const selectBranch = async (branchId: string) => {
     if (selectedBranchId === branchId) {
       setSelectedBranchId(null);
+      setBookInBranchSearch('');
       return;
     }
     setSelectedBranchId(branchId);
+    setBookInBranchSearch('');
     setLoadingBranchInv(true);
     try {
       const res = await fetch(`${API_BASE_URL}/inventory/branch/${branchId}`, { headers: hdrs });
@@ -204,6 +212,22 @@ export default function InventoryScreen() {
     else if (copy.status === 'DAMAGED' || copy.status === 'LOST') branchBookMap[id].damaged++;
   }
   const branchBooks = Object.values(branchBookMap);
+
+  // Build the branch list for the By-Book expand panel:
+  // merge all known branches with inventory data already fetched.
+  // Branches with no copies show zeros.
+  const invByBranchId: Record<string, BranchStat> = {};
+  for (const stat of bookInventory) invByBranchId[stat.branchId] = stat;
+
+  const filteredBranchesForBook = branches.filter((b) =>
+    !branchSearch.trim() ||
+    b.name?.toLowerCase().includes(branchSearch.toLowerCase())
+  );
+
+  const filteredBooksInBranch = branchBooks.filter((bk) =>
+    !bookInBranchSearch.trim() ||
+    bk.title.toLowerCase().includes(bookInBranchSearch.toLowerCase())
+  );
 
   return (
     <SafeAreaView style={s.safe}>
@@ -331,30 +355,45 @@ export default function InventoryScreen() {
 
                   {selectedBookId === book._id && (
                     <View style={s.expandPanel}>
+                      {/* Branch search */}
+                      <TextInput
+                        style={s.searchInner}
+                        placeholder="Search branches…"
+                        placeholderTextColor={Colors.textMuted}
+                        value={branchSearch}
+                        onChangeText={setBranchSearch}
+                      />
                       {loadingBookInv ? (
                         <ActivityIndicator color={Colors.accentSage} />
-                      ) : bookInventory.length === 0 ? (
-                        <Text style={s.empty}>No copies tracked yet.</Text>
+                      ) : filteredBranchesForBook.length === 0 ? (
+                        <Text style={s.empty}>No branches match.</Text>
                       ) : (
-                        bookInventory.map((branch) => (
-                          <View key={branch.branchId} style={s.detailRow}>
-                            <View style={{ flex: 1 }}>
-                              <Text style={s.detailName}>{branch.branchName}</Text>
-                              <Text style={s.detailStats}>
-                                ✅ {branch.available} avail · 📤 {branch.issued} issued
-                                {branch.damaged > 0 ? ` · ⚠️ ${branch.damaged} dmg` : ''}
-                                {branch.lost > 0 ? ` · ❌ ${branch.lost} lost` : ''}
-                                {' · '}total {branch.total}
-                              </Text>
+                        filteredBranchesForBook.map((b) => {
+                          const stat = invByBranchId[b._id];
+                          return (
+                            <View key={b._id} style={s.detailRow}>
+                              <View style={{ flex: 1 }}>
+                                <Text style={s.detailName}>{b.name}</Text>
+                                {stat ? (
+                                  <Text style={s.detailStats}>
+                                    ✅ {stat.available} avail · 📤 {stat.issued} issued
+                                    {stat.damaged > 0 ? ` · ⚠️ ${stat.damaged} dmg` : ''}
+                                    {stat.lost > 0 ? ` · ❌ ${stat.lost} lost` : ''}
+                                    {' · '}total {stat.total}
+                                  </Text>
+                                ) : (
+                                  <Text style={s.detailStats}>No copies yet</Text>
+                                )}
+                              </View>
+                              <TouchableOpacity
+                                style={s.addBtn}
+                                onPress={() => openAddModal(book._id, book.title, b._id, b.name)}
+                              >
+                                <Text style={s.addBtnText}>+ Add</Text>
+                              </TouchableOpacity>
                             </View>
-                            <TouchableOpacity
-                              style={s.addBtn}
-                              onPress={() => openAddModal(book._id, book.title, branch.branchId, branch.branchName)}
-                            >
-                              <Text style={s.addBtnText}>+ Add</Text>
-                            </TouchableOpacity>
-                          </View>
-                        ))
+                          );
+                        })
                       )}
                     </View>
                   )}
@@ -396,12 +435,20 @@ export default function InventoryScreen() {
 
                     {selectedBranchId === branch._id && (
                       <View style={s.expandPanel}>
+                        {/* Book search */}
+                        <TextInput
+                          style={s.searchInner}
+                          placeholder="Search books in this branch…"
+                          placeholderTextColor={Colors.textMuted}
+                          value={bookInBranchSearch}
+                          onChangeText={setBookInBranchSearch}
+                        />
                         {loadingBranchInv ? (
                           <ActivityIndicator color={Colors.accentSage} />
-                        ) : branchBooks.length === 0 ? (
-                          <Text style={s.empty}>No inventory records for this branch.</Text>
+                        ) : filteredBooksInBranch.length === 0 ? (
+                          <Text style={s.empty}>{branchBooks.length === 0 ? 'No inventory records for this branch.' : 'No books match.'}</Text>
                         ) : (
-                          branchBooks.map((bk) => (
+                          filteredBooksInBranch.map((bk) => (
                             <View key={bk.bookId} style={s.detailRow}>
                               <View style={{ flex: 1 }}>
                                 <Text style={s.detailName} numberOfLines={1}>{bk.title}</Text>
@@ -530,6 +577,18 @@ const s = StyleSheet.create({
     color: Colors.textMuted,
     fontSize: Typography.body,
     paddingVertical: Spacing.lg,
+  },
+
+  searchInner: {
+    backgroundColor: Colors.card,
+    borderRadius: Radius.md,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: 10,
+    borderWidth: 1.5,
+    borderColor: Colors.cardBorder,
+    fontSize: Typography.label,
+    color: Colors.textPrimary,
+    marginBottom: Spacing.sm,
   },
 
   // Modal

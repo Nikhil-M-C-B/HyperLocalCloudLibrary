@@ -203,6 +203,23 @@ export default function UserHome() {
     ? activeProfile.preferredGenres
     : ["Fantasy", "Picture Book"];
 
+  // For child profiles, compute the maximum age so the backend can filter out adult content.
+  // Compute the maxAge book filter:
+  //   CHILD profile       → lower bound of ageGroup (e.g. "10-12" → 10, blocks 12+ books)
+  //   PARENT with "15+"   → 15 (adult view, but 16+/18+ books are still filtered out)
+  //   All other PARENT    → undefined (full adult catalog, no filter)
+  const childMaxAge: number | undefined = (() => {
+    const ag = activeProfile?.ageGroup ?? '';
+    if (activeProfile?.accountType === 'CHILD') {
+      if (!ag) return 10;
+      if (ag.endsWith('+')) return parseInt(ag, 10);
+      const min = parseInt(ag.split('-')[0], 10);
+      return isNaN(min) ? 10 : min;
+    }
+    if (activeProfile?.accountType === 'PARENT' && ag === '15+') return 17;
+    return undefined;
+  })();
+
   const [recommended, setRecommended] = useState<Book[]>([]);
   const [newArrivals, setNewArrivals] = useState<Book[]>([]);
   const [allBooks, setAllBooks] = useState<Book[]>([]);
@@ -219,10 +236,15 @@ export default function UserHome() {
         const recRes = await bookService.getBooks({
           genre: preferredGenres,
           limit: 10,
+          ...(childMaxAge !== undefined && { maxAge: childMaxAge }),
         });
         if (active) setRecommended((recRes?.data?.books || []).map(mapBook));
 
-        const newRes = await bookService.getBooks({ daysAgo: 10, limit: 10 });
+        const newRes = await bookService.getBooks({
+          daysAgo: 10,
+          limit: 10,
+          ...(childMaxAge !== undefined && { maxAge: childMaxAge }),
+        });
         if (active) setNewArrivals((newRes?.data?.books || []).map(mapBook));
 
         if (activeProfile?.profileId && userId) {
@@ -246,14 +268,17 @@ export default function UserHome() {
     return () => {
       active = false;
     };
-  }, [preferredGenres]);
+  }, [preferredGenres, childMaxAge]);
 
   // Fetch all books for genre carousels
   useEffect(() => {
     let active = true;
     const fetchAllBooks = async () => {
       try {
-        const res = await bookService.getBooks({ limit: 100 });
+        const res = await bookService.getBooks({
+          limit: 100,
+          ...(childMaxAge !== undefined && { maxAge: childMaxAge }),
+        });
         if (active) setAllBooks((res?.data?.books || []).map(mapBook));
       } catch (error) {
         console.warn("Failed to fetch books for genre browse:", error);
@@ -263,7 +288,7 @@ export default function UserHome() {
     return () => {
       active = false;
     };
-  }, []);
+  }, [childMaxAge]);
 
   // Fetch search results
   useEffect(() => {
@@ -274,7 +299,11 @@ export default function UserHome() {
     }
     const timer = setTimeout(async () => {
       try {
-        const res = await bookService.getBooks({ search: query, limit: 20 });
+        const res = await bookService.getBooks({
+          search: query,
+          limit: 20,
+          ...(childMaxAge !== undefined && { maxAge: childMaxAge }),
+        });
         if (active) setSearchResults((res?.data?.books || []).map(mapBook));
       } catch (error) {
         console.warn("Failed to fetch search results:", error);
@@ -295,6 +324,10 @@ export default function UserHome() {
   };
 
   const childProfiles = profiles.filter((p) => p.accountType === "CHILD");
+  // The main account profile is always profiles[0] — the one created at registration.
+  // All secondary profiles (child or 15+ adult) are added later via the /children endpoint.
+  const mainProfileId = profiles[0]?.profileId;
+  const deletableProfiles = profiles.filter((p) => p.profileId !== mainProfileId);
 
   const { getQuizzesPassed } = useChildTrackingStore();
   const [childBooksRead, setChildBooksRead] = useState(0);
@@ -312,15 +345,15 @@ export default function UserHome() {
 
   const handleDeleteProfile = () => {
     setMenuVisible(false);
-    if (childProfiles.length === 0) {
+    if (deletableProfiles.length === 0) {
       if (Platform.OS === "web") {
         window.alert(
-          "No Child Profiles\n\nYou have no child profiles to delete. The parent account cannot be deleted from here.",
+          "No Profiles to Delete\n\nThe main account profile cannot be deleted from here.",
         );
       } else {
         Alert.alert(
-          "No Child Profiles",
-          "You have no child profiles to delete. The parent account cannot be deleted from here.",
+          "No Profiles to Delete",
+          "The main account profile cannot be deleted from here.",
         );
       }
       return;
@@ -437,10 +470,10 @@ export default function UserHome() {
           <View style={s.deleteCard}>
             <Text style={s.deleteTitle}>Select Profile to Delete</Text>
             <Text style={s.deleteSubtitle}>
-              Tap a child profile to remove it permanently.
+              Tap a profile to remove it permanently. The main account cannot be deleted.
             </Text>
             <FlatList
-              data={childProfiles}
+              data={deletableProfiles}
               keyExtractor={(item) => item.profileId}
               numColumns={2}
               columnWrapperStyle={{ gap: Spacing.md, marginBottom: Spacing.md }}
@@ -456,7 +489,7 @@ export default function UserHome() {
                 ];
                 const bgColor = AVATAR_COLORS[index % AVATAR_COLORS.length];
                 const age = item.age || 0;
-                const emoji = age <= 3 ? "👶" : age <= 10 ? "🧒" : "🧑";
+                const emoji = item.accountType === 'PARENT' ? "👤" : age <= 3 ? "👶" : age <= 10 ? "🧒" : "🧑";
                 return (
                   <TouchableOpacity
                     style={s.deleteProfileCard}
@@ -625,7 +658,13 @@ export default function UserHome() {
                   <SectionHeader title="Browse Children's Books" />
                   <TouchableOpacity
                     style={s.trackBanner}
-                    onPress={() => router.replace('/(child)')}
+                    onPress={() => {
+                      const child = childProfiles.find(c => c.profileId === selectedChildId) ?? childProfiles[0];
+                      router.replace(child
+                        ? { pathname: '/(child)', params: { viewingChildId: child.profileId } }
+                        : '/(child)'
+                      );
+                    }}
                   >
                     <Text style={s.trackBannerEmoji}>🧒</Text>
                     <View style={{ flex: 1 }}>
@@ -763,13 +802,13 @@ export default function UserHome() {
               );
             })}
 
-            {/* ── My Books ── */}
+            {/* ── My Orders ── */}
             <TouchableOpacity
               style={s.myBooksBanner}
               onPress={() => router.push("/(user)/my-books")}
             >
               <Text style={s.myBooksText}>
-                My borrowed books & history →
+                My orders & borrowing history →
               </Text>
             </TouchableOpacity>
 

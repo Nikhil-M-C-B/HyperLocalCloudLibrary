@@ -552,6 +552,8 @@ export default function SignupScreen() {
       for (const cp of profiles) {
         const ageNum = parseInt(cp.age, 10);
         const ageGroup = numToAgeGroup(ageNum);
+        // "15+" profiles get the adult view with a content filter for 16+/18+ books.
+        const accountType = ageGroup === '15+' ? 'PARENT' : 'CHILD';
         try {
           const childRes = await fetch(
             `${API_BASE_URL}/users/${user.id}/children`,
@@ -575,7 +577,7 @@ export default function SignupScreen() {
             profileId:
               backendProfile?.profileId ?? String(Date.now() + Math.random()),
             name: cp.name,
-            accountType: "CHILD",
+            accountType: backendProfile?.accountType ?? accountType,
             ageGroup,
             age: ageNum,
             preferredGenres: cp.genres,
@@ -585,7 +587,7 @@ export default function SignupScreen() {
           await addProfile({
             profileId: String(Date.now() + Math.random()),
             name: cp.name,
-            accountType: "CHILD",
+            accountType,
             ageGroup,
             age: ageNum,
             preferredGenres: cp.genres,

@@ -18,7 +18,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 const { width } = Dimensions.get('window');
 
-type BookStatus = 'active' | 'returned' | 'overdue';
+type DeliveryStatus = 'SCHEDULED' | 'DISPATCHED' | 'OUT_FOR_DELIVERY' | 'DELIVERED' | 'FAILED' | 'CANCELLED';
+type BookStatus = 'placed' | 'dispatched' | 'out_for_delivery' | 'delivered' | 'returned' | 'overdue' | 'active';
 
 interface BorrowRecord {
   id: string;
@@ -34,15 +35,20 @@ interface BorrowRecord {
   status: BookStatus;
   fine?: number;
   library: string;
+  deliveryStatus?: DeliveryStatus | null;
 }
 
 const STATUS_CONFIG: Record<BookStatus, { label: string; bg: string; text: string }> = {
-  active: { label: '📖 Borrowed', bg: '#E8F5E9', text: Colors.success },
-  returned: { label: '✅ Returned', bg: Colors.accentSageLight + '50', text: Colors.accentSage },
-  overdue: { label: '⚠️ Overdue', bg: '#FFEBEE', text: Colors.error },
+  placed:            { label: '📋 Order Placed',       bg: '#EEF2FF', text: '#5B5EA6' },
+  dispatched:        { label: '📦 Packed at Library',  bg: '#FFF8E1', text: '#F57F17' },
+  out_for_delivery:  { label: '🛵 Out for Delivery',   bg: '#FFF3E0', text: '#E65100' },
+  delivered:         { label: '📬 Delivered',          bg: '#E8F5E9', text: Colors.success },
+  active:            { label: '📖 Borrowed',            bg: '#E8F5E9', text: Colors.success },
+  returned:          { label: '✅ Returned',            bg: Colors.accentSageLight + '80', text: Colors.accentSage },
+  overdue:           { label: '⚠️ Overdue',            bg: '#FFEBEE', text: Colors.error },
 };
 
-type Filter = 'all' | BookStatus;
+type Filter = 'all' | 'active' | 'returned' | 'overdue';
 
 export default function MyBooks() {
   const router = useRouter();
@@ -76,6 +82,25 @@ export default function MyBooks() {
 
             const fmt = (d: Date) => `${d.toLocaleString('default', { month: 'short' })} ${d.getDate()}`;
 
+            const dlv: DeliveryStatus | null = i.delivery?.status ?? null;
+
+            let status: BookStatus;
+            if (isReturned) {
+              status = 'returned';
+            } else if (isOverdue) {
+              status = 'overdue';
+            } else if (dlv === 'OUT_FOR_DELIVERY') {
+              status = 'out_for_delivery';
+            } else if (dlv === 'DISPATCHED') {
+              status = 'dispatched';
+            } else if (dlv === 'DELIVERED') {
+              status = 'delivered';
+            } else if (dlv === 'SCHEDULED') {
+              status = 'placed';
+            } else {
+              status = 'active'; // digital or unknown delivery state
+            }
+
             return {
               id: i._id,
               bookId: i.copyId?.bookId?._id || i.copyId?.bookId,
@@ -87,9 +112,10 @@ export default function MyBooks() {
               borrowedDate: fmt(new Date(i.issueDate)),
               dueDate: fmt(dueObj),
               returnedDate: i.returnDate ? fmt(new Date(i.returnDate)) : undefined,
-              status: isReturned ? 'returned' : isOverdue ? 'overdue' : 'active',
+              status,
               fine: i.fineAmount > 0 ? i.fineAmount : undefined,
               library: i.copyId?.branchId?.name || 'Local Library',
+              deliveryStatus: dlv,
             };
           });
           setBorrowHistory(mapped);
@@ -104,7 +130,11 @@ export default function MyBooks() {
     return () => { active = false; };
   }, [userId, activeProfileId]);
 
-  const shown = filter === 'all' ? borrowHistory : borrowHistory.filter(b => b.status === filter);
+  // For the filter pills, 'active' covers all in-progress statuses (placed/dispatched/out/delivered/active)
+  const ACTIVE_STATUSES: BookStatus[] = ['placed', 'dispatched', 'out_for_delivery', 'delivered', 'active'];
+  const shown = filter === 'all' ? borrowHistory
+    : filter === 'active' ? borrowHistory.filter(b => ACTIVE_STATUSES.includes(b.status))
+    : borrowHistory.filter(b => b.status === filter);
   const totalFine = borrowHistory.filter(b => b.fine).reduce((a, b) => a + (b.fine ?? 0), 0);
 
   if (loading) {
@@ -125,7 +155,7 @@ export default function MyBooks() {
           <TouchableOpacity onPress={() => router.back()} style={s.backBtn}>
             <Text style={s.backArrow}>←</Text>
           </TouchableOpacity>
-          <Text style={s.title}>My Books</Text>
+          <Text style={s.title}>My Orders</Text>
           <View style={{ width: 40 }} />
         </View>
 
@@ -185,7 +215,7 @@ export default function MyBooks() {
                 key={record.id}
                 style={s.bookCard}
                 activeOpacity={0.85}
-                onPress={() => record.status !== 'returned' && router.push(`/(user)/track/${record.id}`)}
+                onPress={() => router.push(`/(user)/track/${record.id}`)}
               >
                 {/* Mini cover */}
                 {record.coverImage ? (
@@ -199,26 +229,26 @@ export default function MyBooks() {
                 <View style={s.bookInfo}>
                   <Text style={s.bookTitle} numberOfLines={1}>{record.title}</Text>
                   <Text style={s.bookAuthor}>{record.author}</Text>
-                  <Text style={s.bookLibrary}>{record.library}</Text>
+                  <Text style={s.bookLibrary}>🏛️ {record.library}</Text>
 
-                  <View style={s.bookBottomRow}>
-                    <View style={[s.statusPill, { backgroundColor: cfg.bg }]}>
-                      <Text style={[s.statusPillText, { color: cfg.text }]}>{cfg.label}</Text>
-                    </View>
-                    <Text style={s.dateText}>
-                      {record.status === 'returned'
-                        ? `Returned ${record.returnedDate}`
-                        : `Due ${record.dueDate}`}
-                    </Text>
+                  {/* Status pill — always shown prominently */}
+                  <View style={[s.statusPill, { backgroundColor: cfg.bg, alignSelf: 'flex-start', marginTop: 4 }]}>
+                    <Text style={[s.statusPillText, { color: cfg.text }]}>{cfg.label}</Text>
                   </View>
+
+                  <Text style={[s.dateText, { marginTop: 3 }]}>
+                    {record.status === 'returned'
+                      ? `Returned ${record.returnedDate}`
+                      : record.status === 'overdue'
+                        ? `Due ${record.dueDate} · ⚠️ overdue`
+                        : `Due ${record.dueDate}`}
+                  </Text>
                   {record.fine && (
                     <Text style={s.fineText}>Fine: ₹{record.fine}</Text>
                   )}
                 </View>
 
-                {record.status === 'active' && (
-                  <Text style={s.arrowIcon}>→</Text>
-                )}
+                <Text style={s.arrowIcon}>→</Text>
               </TouchableOpacity>
             );
           })}

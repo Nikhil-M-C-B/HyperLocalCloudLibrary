@@ -7,13 +7,15 @@ const catchAsync = require("../utils/catchAsync");
  */
 exports.getAllBooks = catchAsync(async (req, res) => {
   const filters = {
-    ageGroup: req.query.age,
-    genre: req.query.genre,
+    // Range-based age filter: show books where ageRating minimum ≤ maxAge.
+    // maxAge is the child profile's upper age bound (e.g. 10 for ageGroup "8-10").
+    maxAge:   req.query.maxAge !== undefined ? parseInt(req.query.maxAge, 10) : undefined,
+    genre:    req.query.genre,
     language: req.query.language,
-    search: req.query.search,
-    sort: req.query.sort,
-    limit: req.query.limit,
-    daysAgo: req.query.daysAgo,
+    search:   req.query.search,
+    sort:     req.query.sort,
+    limit:    req.query.limit,
+    daysAgo:  req.query.daysAgo,
   };
 
   const books = await bookService.getAllBooks(filters);

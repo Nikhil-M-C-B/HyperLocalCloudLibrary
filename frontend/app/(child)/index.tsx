@@ -4,7 +4,7 @@ import { NavBar, NAV_BOTTOM_PAD } from '@/components/NavBar';
 import { GENRES, type Book } from '@/constants/mockData';
 import { Colors, Radius, Spacing, Typography } from '@/constants/theme';
 import useAppStore from '@/store/useAppStore';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import {
   Dimensions,
@@ -110,12 +110,38 @@ function PageDots({ total, current }: { total: number; current: number }) {
 }
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
+// Helper: derive the age threshold from the LOWER bound of an ageGroup string like "8-10" or "15+".
+// Using the lower bound ensures we never show a book whose minimum age exceeds the child's
+// starting age — e.g. a child in "10-12" gets threshold 10, so 12+ books are excluded.
+function ageGroupToMaxAge(ageGroup: string | undefined): number {
+  const ag = ageGroup ?? '';
+  if (!ag) return 10;
+  if (ag.endsWith('+')) return parseInt(ag, 10);
+  const min = parseInt(ag.split('-')[0], 10);
+  return isNaN(min) ? 10 : min;
+}
+
 export default function ChildHome() {
   const router = useRouter();
+  const { viewingChildId } = useLocalSearchParams<{ viewingChildId?: string }>();
   const { profiles, activeProfileId, prefetchTopBooks } = useAppStore();
   const [genre, setGenre] = useState('All');
   const [page, setPage] = useState(0);
   const [books, setBooks] = useState<Book[]>([]);
+
+  const activeProfile = profiles.find(p => p.profileId === activeProfileId);
+
+  // Resolve which child profile's age limits to apply:
+  // 1. A specific child passed as param (parent browsing for that child)
+  // 2. The active profile itself if it is a CHILD
+  // 3. The first child profile in the store (parent switched view without selecting)
+  // 4. Safe default of 12
+  const childProfile =
+    (viewingChildId ? profiles.find(p => p.profileId === viewingChildId) : undefined)
+    ?? (activeProfile?.accountType === 'CHILD' ? activeProfile : undefined)
+    ?? profiles.find(p => p.accountType === 'CHILD');
+
+  const childMaxAge = ageGroupToMaxAge(childProfile?.ageGroup);
 
   useEffect(() => {
     let active = true;
@@ -125,7 +151,7 @@ export default function ChildHome() {
 
     const fetchBooks = async () => {
       try {
-        const response = await bookService.getBooks({ limit: 50 });
+        const response = await bookService.getBooks({ limit: 50, maxAge: childMaxAge });
         if (active && response.data?.books) {
           setBooks(response.data.books.map(mapBook));
         }
@@ -135,15 +161,14 @@ export default function ChildHome() {
     };
     fetchBooks();
     return () => { active = false; };
-  }, [prefetchTopBooks]);
+  }, [prefetchTopBooks, childMaxAge]);
 
-  const activeProfile = profiles.find(p => p.profileId === activeProfileId);
   const preferredGenres = activeProfile?.preferredGenres || [];
-  const firstName = activeProfile?.name?.split(' ')[0] || 'Friend';
-  const childAge = activeProfile?.age ?? 6; // default child age fallback
+  const firstName = (childProfile?.name ?? activeProfile?.name)?.split(' ')[0] || 'Friend';
 
-  // Filter books appropriate for child's age
-  const ageAppropriateBooks = books.filter(b => childAge >= b.ageMin && childAge <= b.ageMax);
+  // Frontend safety-net: only show books whose minimum age is ≤ this child's max age.
+  // The API already applies this filter; this guards against stale cache.
+  const ageAppropriateBooks = books.filter(b => childMaxAge >= b.ageMin);
 
   const filtered = genre === 'All'
     ? ageAppropriateBooks

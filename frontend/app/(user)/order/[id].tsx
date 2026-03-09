@@ -71,6 +71,8 @@ export default function OrderScreen() {
   const [orderProcessing, setOrderProcessing] = useState(false);
   const [issuedId, setIssuedId] = useState<string | null>(null);
 
+  const [loadingLibraries, setLoadingLibraries] = useState(false);
+
   // Address picker state
   const [showAddressPicker, setShowAddressPicker] = useState(false);
   const [selectedAddress, setSelectedAddress] = useState<any>(null);
@@ -163,9 +165,24 @@ export default function OrderScreen() {
     setShowAddressPicker(false);
   };
 
-  const proceedToLibrarySelection = () => {
+  const proceedToLibrarySelection = async () => {
     if (!selectedAddress) return;
-    setStep("select");
+    setStep('select');
+    setLoadingLibraries(true);
+    try {
+      const coords = selectedAddress?.location?.coordinates;
+      // coords is [lng, lat] in GeoJSON format
+      const lat = coords?.[1];
+      const lng = coords?.[0];
+      const availRes = await bookService.getBookAvailability(id as string, lat, lng);
+      if (availRes?.data?.branches) {
+        setLibraries(availRes.data.branches);
+      }
+    } catch (err) {
+      console.warn('Failed to refresh availability', err);
+    } finally {
+      setLoadingLibraries(false);
+    }
   };
 
   const confirmOrder = async () => {
@@ -420,14 +437,21 @@ export default function OrderScreen() {
           <>
             {/* Library picker */}
             <Text style={s.sectionTitle}>Choose an available library</Text>
-            {libraries.length === 0 && (
+            {loadingLibraries ? (
+              <View style={{ alignItems: 'center', paddingVertical: Spacing.xl }}>
+                <ActivityIndicator size="large" color={Colors.accentSage} />
+                <Text style={{ color: Colors.textMuted, marginTop: Spacing.sm }}>
+                  Finding branches near you…
+                </Text>
+              </View>
+            ) : libraries.length === 0 ? (
               <Text
                 style={{ color: Colors.textMuted, marginVertical: Spacing.sm }}
               >
                 No branches currently have this book in stock nearby.
               </Text>
-            )}
-            {libraries.map((lib) => (
+            ) : null}
+            {!loadingLibraries && libraries.map((lib) => (
               <TouchableOpacity
                 key={lib.branchId}
                 style={[

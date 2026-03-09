@@ -107,6 +107,19 @@ exports.getReadingHistory = catchAsync(async (req, res) => {
 });
 
 /**
+ * Delete account
+ * DELETE /users/:id
+ */
+exports.deleteAccount = catchAsync(async (req, res) => {
+  await userService.deleteAccount(req.params.id);
+
+  res.status(200).json({
+    status: 'success',
+    data: { message: 'Account deleted successfully' },
+  });
+});
+
+/**
  * Get all issues for a user (across all profiles or filtered by profileId)
  * GET /users/:id/issues?profileId=xxx&status=ISSUED
  */

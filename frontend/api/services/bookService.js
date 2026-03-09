@@ -36,9 +36,13 @@ const bookService = {
     /**
      * Check availability of a specific book across nearby libraries.
      * @param {string} bookId
+     * @param {number} [lat] - Optional latitude of user's delivery address
+     * @param {number} [lng] - Optional longitude of user's delivery address
      */
-    getBookAvailability: async (bookId) => {
-        const response = await api.get(`/books/${bookId}/availability`);
+    getBookAvailability: async (bookId, lat, lng) => {
+        const params = {};
+        if (lat != null && lng != null) { params.lat = lat; params.lng = lng; }
+        const response = await api.get(`/books/${bookId}/availability`, { params });
         return response.data;
     },
 
