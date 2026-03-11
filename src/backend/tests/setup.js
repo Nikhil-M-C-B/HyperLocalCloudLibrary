@@ -2,9 +2,9 @@
 // This runs before each test suite
 
 const mongoose = require('mongoose');
-const { MongoMemoryServer } = require('mongodb-memory-server');
+const { MongoMemoryReplSet } = require('mongodb-memory-server');
 
-let mongoServer;
+let replSet;
 
 // Set test environment variables
 process.env.NODE_ENV = 'test';
@@ -16,10 +16,12 @@ jest.setTimeout(30000);
 
 // Setup function runs before all tests
 beforeAll(async () => {
-  // Use in-memory MongoDB for testing
-  mongoServer = await MongoMemoryServer.create();
-  const mongoUri = mongoServer.getUri();
-  
+  // Use in-memory MongoDB replica set for testing (required for transactions)
+  replSet = await MongoMemoryReplSet.create({
+    replSet: { count: 1, storageEngine: 'wiredTiger' }
+  });
+  const mongoUri = replSet.getUri();
+
   await mongoose.connect(mongoUri);
 });
 
@@ -29,8 +31,8 @@ afterAll(async () => {
     await mongoose.connection.dropDatabase();
     await mongoose.connection.close();
   }
-  if (mongoServer) {
-    await mongoServer.stop();
+  if (replSet) {
+    await replSet.stop();
   }
 });
 

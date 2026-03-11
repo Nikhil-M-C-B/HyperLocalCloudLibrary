@@ -67,7 +67,7 @@ const bookSchema = new mongoose.Schema({
 });
 
 // Indexes for search
-bookSchema.index({ title: 'text', author: 'text' });
+bookSchema.index({ title: 'text', author: 'text' }, { language_override: 'textSearchLanguage' });
 bookSchema.index({ genre: 1 });
 bookSchema.index({ ageRating: 1 });
 
