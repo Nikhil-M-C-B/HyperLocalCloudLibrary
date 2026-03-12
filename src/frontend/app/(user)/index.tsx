@@ -220,6 +220,30 @@ export default function UserHome() {
     return undefined;
   })();
 
+  // When a parent switches to "For Child" mode, look up the selected (or first) child's
+  // age group so the catalog only shows age-appropriate books for that child.
+  const viewingChild =
+    profiles.find(p => p.profileId === selectedChildId && p.accountType === 'CHILD')
+    ?? profiles.find(p => p.accountType === 'CHILD');
+  const viewingChildMaxAge: number = (() => {
+    const ag = viewingChild?.ageGroup ?? '';
+    if (!ag) return 12;
+    if (ag.endsWith('+')) return parseInt(ag, 10);
+    const min = parseInt(ag.split('-')[0], 10);
+    return isNaN(min) ? 12 : min;
+  })();
+
+  // ageFilter to pass to every getBooks call:
+  //   • Logged-in CHILD profile  → maxAge (hide adult books)
+  //   • Parent in "For Child"    → maxAge of the selected child (show children's books)
+  //   • Parent in "For You"      → minAge:5 (hide toddler/picture books only; YA 12+ stays visible)
+  const ageFilter: { maxAge?: number; minAge?: number } =
+    childMaxAge !== undefined
+      ? { maxAge: childMaxAge }
+      : mode === 'forChild'
+        ? { maxAge: viewingChildMaxAge }
+        : { minAge: 5 };
+
   const [recommended, setRecommended] = useState<Book[]>([]);
   const [newArrivals, setNewArrivals] = useState<Book[]>([]);
   const [allBooks, setAllBooks] = useState<Book[]>([]);
@@ -236,14 +260,14 @@ export default function UserHome() {
         const recRes = await bookService.getBooks({
           genre: preferredGenres,
           limit: 10,
-          ...(childMaxAge !== undefined && { maxAge: childMaxAge }),
+          ...ageFilter,
         });
         if (active) setRecommended((recRes?.data?.books || []).map(mapBook));
 
         const newRes = await bookService.getBooks({
           daysAgo: 10,
           limit: 10,
-          ...(childMaxAge !== undefined && { maxAge: childMaxAge }),
+          ...ageFilter,
         });
         if (active) setNewArrivals((newRes?.data?.books || []).map(mapBook));
 
@@ -268,7 +292,7 @@ export default function UserHome() {
     return () => {
       active = false;
     };
-  }, [preferredGenres, childMaxAge]);
+  }, [preferredGenres, childMaxAge, mode, selectedChildId]);
 
   // Fetch all books for genre carousels
   useEffect(() => {
@@ -277,7 +301,7 @@ export default function UserHome() {
       try {
         const res = await bookService.getBooks({
           limit: 100,
-          ...(childMaxAge !== undefined && { maxAge: childMaxAge }),
+          ...ageFilter,
         });
         if (active) setAllBooks((res?.data?.books || []).map(mapBook));
       } catch (error) {
@@ -288,7 +312,7 @@ export default function UserHome() {
     return () => {
       active = false;
     };
-  }, [childMaxAge]);
+  }, [childMaxAge, mode, selectedChildId]);
 
   // Fetch search results
   useEffect(() => {
@@ -302,7 +326,7 @@ export default function UserHome() {
         const res = await bookService.getBooks({
           search: query,
           limit: 20,
-          ...(childMaxAge !== undefined && { maxAge: childMaxAge }),
+          ...ageFilter,
         });
         if (active) setSearchResults((res?.data?.books || []).map(mapBook));
       } catch (error) {
@@ -331,6 +355,7 @@ export default function UserHome() {
 
   const { getQuizzesPassed } = useChildTrackingStore();
   const [childBooksRead, setChildBooksRead] = useState(0);
+  const [childGenre, setChildGenre] = useState('All');
 
   // Fetch real borrow count for the selected child profile
   useEffect(() => {
@@ -653,9 +678,59 @@ export default function UserHome() {
                   </TouchableOpacity>
                 </View>
 
-                {/* Child's books (navigate into child interface) */}
+                {/* Child's books catalog */}
                 <View style={s.section}>
-                  <SectionHeader title="Browse Children's Books" />
+                  <SectionHeader title="Books for Your Child" />
+
+                  {/* Genre pills */}
+                  <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    contentContainerStyle={{ gap: Spacing.xs, paddingBottom: Spacing.md }}
+                  >
+                    {GENRES.map(g => (
+                      <TouchableOpacity
+                        key={g}
+                        style={[
+                          s.genrePill,
+                          childGenre === g && s.genrePillActive,
+                        ]}
+                        onPress={() => setChildGenre(g)}
+                      >
+                        <Text style={[s.genrePillText, childGenre === g && s.genrePillTextActive]}>{g}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </ScrollView>
+
+                  {loading ? (
+                    <ActivityIndicator size="small" color={Colors.accentSage} style={{ marginTop: Spacing.md }} />
+                  ) : (() => {
+                    const childBooks = childGenre === 'All'
+                      ? allBooks
+                      : allBooks.filter(b => b.genres.includes(childGenre));
+                    return childBooks.length === 0 ? (
+                      <Text style={s.empty}>No books found for this age group.</Text>
+                    ) : (
+                      <ScrollView
+                        horizontal
+                        showsHorizontalScrollIndicator={false}
+                        contentContainerStyle={{ gap: Spacing.md, paddingBottom: Spacing.sm }}
+                      >
+                        {childBooks.map(b => (
+                          <HorizBookCard
+                            key={b.id}
+                            book={b}
+                            onPress={() => router.push(`/(user)/book/${b.id}`)}
+                          />
+                        ))}
+                      </ScrollView>
+                    );
+                  })()}
+                </View>
+
+                {/* Navigate to full child interface */}
+                <View style={s.section}>
+                  <SectionHeader title="Child's Reading Space" />
                   <TouchableOpacity
                     style={s.trackBanner}
                     onPress={() => {
@@ -669,7 +744,7 @@ export default function UserHome() {
                     <Text style={s.trackBannerEmoji}>🧒</Text>
                     <View style={{ flex: 1 }}>
                       <Text style={s.trackBannerTitle}>Switch to child view</Text>
-                      <Text style={s.trackBannerSub}>Browse & read books for your child</Text>
+                      <Text style={s.trackBannerSub}>Browse &amp; read books for your child</Text>
                     </View>
                     <Text style={s.trackBannerArrow}>→</Text>
                   </TouchableOpacity>

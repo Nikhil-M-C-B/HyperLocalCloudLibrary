@@ -10,6 +10,8 @@ exports.getAllBooks = catchAsync(async (req, res) => {
     // Range-based age filter: show books where ageRating minimum ≤ maxAge.
     // maxAge is the child profile's upper age bound (e.g. 10 for ageGroup "8-10").
     maxAge:   req.query.maxAge !== undefined ? parseInt(req.query.maxAge, 10) : undefined,
+    // minAge hides children-only books from adult users (e.g. minAge=13 excludes "4-8" books).
+    minAge:   req.query.minAge !== undefined ? parseInt(req.query.minAge, 10) : undefined,
     genre:    req.query.genre,
     language: req.query.language,
     search:   req.query.search,

@@ -178,4 +178,4 @@ export const MOCK_BOOKS: Book[] = [
   },
 ];
 
-export const GENRES = ['All', 'Picture Book', 'Fantasy', 'Fiction', 'Classic', 'Educational', 'Adventure', 'Bedtime'];
+export const GENRES = ['All', 'Fiction', 'Non Fiction', 'Self Help', 'Technology', 'Art', 'History', 'Humour', 'Fantasy', 'Adventure', 'Picture Book', 'Classic', 'Educational', 'Bedtime'];

@@ -23,6 +23,17 @@ function getPages(book: any): string[] {
 
   const hasGenre = (...gs: string[]) => gs.some(g => genres.some(bg => bg.includes(g)));
 
+  // ── Frog and Toad Are Friends (Arnold Lobel) ──────────────────────────────
+  if (title.toLowerCase().includes('frog and toad')) {
+    return [
+      `"${title}" by ${author} is made up of five short stories, all about the wonderful friendship between Frog and Toad — two very different characters who care for each other deeply.`,
+      `In the first story, "Spring", Frog visits Toad, who is fast asleep in bed and wants to stay there until May. Frog cleverly tears the pages off Toad's calendar, skipping ahead to May so Toad will get up. Toad grumbles — but gets up anyway!`,
+      `In "The Story", Frog is sick in bed and asks Toad to tell him a story. Toad tries everything — walking on his head, pouring water on himself, banging his head against the wall — to think of one. Just as he finally has an idea, Frog falls asleep. Toad smiles and tucks him in.`,
+      `"A Lost Button" has Toad losing a big white button on their walk. Frog helps search, and animals keep finding wrong buttons — too small, wrong colour, four holes instead of two! When Toad angrily arrives home, he finds the button on the floor. He sews ALL the found buttons onto his jacket and gives it to Frog as a gift.`,
+      `In "The Letter", Toad is sad because he never gets any mail. Frog writes him a letter saying what a good friend Toad is. He gives it to a snail to deliver — but the snail is very, very slow. Frog can't keep the secret, so he tells Toad what the letter says. Four days later, when the snail finally arrives, they sit happily on the porch and wait for it together. The End. 🐸`,
+    ];
+  }
+
   if (hasGenre('picture book', 'bedtime')) {
     return [
       `In "${title}" by ${author}, we begin in a cosy little room where everything is getting ready for bed.`,

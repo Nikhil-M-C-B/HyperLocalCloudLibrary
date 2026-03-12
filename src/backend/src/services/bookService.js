@@ -12,17 +12,38 @@ exports.getAllBooks = async (filters = {}) => {
 
   // Age-appropriate content filter.
   // maxAge = the child profile's upper age bound (e.g. 10 for ageGroup "8-10").
-  // Only show books whose ageRating minimum ≤ maxAge — this hides adult/teen books from children.
+  //   → Only show books whose ageRating minimum ≤ maxAge (hides adult books from children).
+  // minAge = adult users' lower bound (e.g. 13).
+  //   → Only show books whose ageRating minimum ≥ minAge (hides picture books from adults).
   // Uses MongoDB $expr to compare the numeric part of the "min-max" string field.
-  if (filters.maxAge !== undefined) {
-    const maxAge = parseInt(filters.maxAge, 10);
-    if (!isNaN(maxAge)) {
-      query.$expr = {
-        $lte: [
-          { $toInt: { $arrayElemAt: [{ $split: ['$ageRating', '-'] }, 0] } },
-          maxAge,
-        ],
-      };
+  if (filters.maxAge !== undefined || filters.minAge !== undefined) {
+    const exprs = [];
+    if (filters.maxAge !== undefined) {
+      const maxAge = parseInt(filters.maxAge, 10);
+      if (!isNaN(maxAge)) {
+        exprs.push({
+          $lte: [
+            { $toInt: { $arrayElemAt: [{ $split: ['$ageRating', '-'] }, 0] } },
+            maxAge,
+          ],
+        });
+      }
+    }
+    if (filters.minAge !== undefined) {
+      const minAge = parseInt(filters.minAge, 10);
+      if (!isNaN(minAge)) {
+        exprs.push({
+          $gte: [
+            { $toInt: { $arrayElemAt: [{ $split: ['$ageRating', '-'] }, 0] } },
+            minAge,
+          ],
+        });
+      }
+    }
+    if (exprs.length === 1) {
+      query.$expr = exprs[0];
+    } else if (exprs.length > 1) {
+      query.$expr = { $and: exprs };
     }
   }
 

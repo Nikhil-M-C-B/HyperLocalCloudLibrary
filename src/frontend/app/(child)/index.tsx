@@ -11,7 +11,7 @@ import {
   Platform,
   ScrollView,
   StyleSheet,
-  Text, TouchableOpacity,
+  Text, TextInput, TouchableOpacity,
   View
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -126,6 +126,7 @@ export default function ChildHome() {
   const { viewingChildId } = useLocalSearchParams<{ viewingChildId?: string }>();
   const { profiles, activeProfileId, prefetchTopBooks } = useAppStore();
   const [genre, setGenre] = useState('All');
+  const [search, setSearch] = useState('');
   const [page, setPage] = useState(0);
   const [books, setBooks] = useState<Book[]>([]);
 
@@ -170,9 +171,16 @@ export default function ChildHome() {
   // The API already applies this filter; this guards against stale cache.
   const ageAppropriateBooks = books.filter(b => childMaxAge >= b.ageMin);
 
+  const searchFiltered = search.trim()
+    ? ageAppropriateBooks.filter(b =>
+        b.title.toLowerCase().includes(search.toLowerCase()) ||
+        b.author.toLowerCase().includes(search.toLowerCase())
+      )
+    : ageAppropriateBooks;
+
   const filtered = genre === 'All'
-    ? ageAppropriateBooks
-    : ageAppropriateBooks.filter(b => b.genres.includes(genre));
+    ? searchFiltered
+    : searchFiltered.filter(b => b.genres.includes(genre));
 
   const recommendedBooks = ageAppropriateBooks.filter(b =>
     b.genres.some(g => preferredGenres.includes(g))
@@ -181,8 +189,9 @@ export default function ChildHome() {
   const totalPages = Math.ceil(filtered.length / BOOKS_PER_PAGE);
   const pageBooks = filtered.slice(page * BOOKS_PER_PAGE, (page + 1) * BOOKS_PER_PAGE);
 
-  // Reset to page 0 when genre changes
+  // Reset to page 0 when genre or search changes
   const handleGenre = (g: string) => { setGenre(g); setPage(0); };
+  const handleSearch = (t: string) => { setSearch(t); setPage(0); };
 
   return (
     <SafeAreaView style={s.safe}>
@@ -203,8 +212,21 @@ export default function ChildHome() {
           </TouchableOpacity>
         </View>
 
+        {/* ── Search bar ── */}
+        <View style={s.searchWrap}>
+          <TextInput
+            style={s.searchInput}
+            placeholder="Search books or authors..."
+            placeholderTextColor={Colors.textMuted}
+            value={search}
+            onChangeText={handleSearch}
+            returnKeyType="search"
+            clearButtonMode="while-editing"
+          />
+        </View>
+
         {/* ── Based on Your interests ── */}
-        {recommendedBooks.length > 0 && (
+        {!search.trim() && recommendedBooks.length > 0 && (
           <View style={{ marginBottom: Spacing.xl }}>
             <View style={s.sectionRow}>
               <Text style={s.sectionTitle}>✨ Based on Your interests</Text>
@@ -292,6 +314,20 @@ export default function ChildHome() {
 const s = StyleSheet.create({
   safe: { flex: 1, backgroundColor: Colors.browseSurface },
   scroll: { paddingBottom: Spacing.xl },
+
+  searchWrap: {
+    marginHorizontal: Spacing.xl, marginBottom: Spacing.md,
+  },
+  searchInput: {
+    backgroundColor: Colors.card,
+    borderRadius: Radius.full,
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: 10,
+    fontSize: Typography.body,
+    color: Colors.textPrimary,
+    borderWidth: 1.5,
+    borderColor: Colors.cardBorder,
+  },
 
   header: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',

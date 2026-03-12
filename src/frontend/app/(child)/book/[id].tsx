@@ -3,6 +3,7 @@ import { BookCover } from '@/components/BookCover';
 import { NavBar, NAV_BOTTOM_PAD } from '@/components/NavBar';
 import { type Book } from '@/constants/mockData';
 import { Colors, Radius, Spacing, Typography } from '@/constants/theme';
+import useAppStore from '@/store/useAppStore';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import {
@@ -30,8 +31,9 @@ function mapBook(b: any): Book {
     rating: 4.5,
     coverColor: b.coverColor || '#C5DDB8',
     coverAccent: b.coverAccent || '#4A7C59',
-    isDigital: b.format === 'DIGITAL' || b.format === 'BOTH',
-    isPhysical: b.format === 'PHYSICAL' || b.format === 'BOTH',
+    // Default to true when the backend has no `format` field yet
+    isDigital: b.format ? (b.format === 'DIGITAL' || b.format === 'BOTH') : true,
+    isPhysical: b.format ? (b.format === 'PHYSICAL' || b.format === 'BOTH') : true,
     availableCopies: parseInt(b?.availableCopies ?? 0),
     nearestLibrary: 'Local Library',
     ageMin: parseInt(b.ageRating?.split('-')[0]) || 0,
@@ -71,8 +73,23 @@ const sc = StyleSheet.create({
 });
 
 export default function ChildBookDetail() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, viewingChildId } = useLocalSearchParams<{ id: string; viewingChildId?: string }>();
   const router = useRouter();
+  const { profiles, activeProfileId } = useAppStore();
+
+  // Derive the same age cap used in ChildHome so similar-books respect the child's age.
+  const activeProfile = profiles.find(p => p.profileId === activeProfileId);
+  const childProfile =
+    (viewingChildId ? profiles.find(p => p.profileId === viewingChildId) : undefined)
+    ?? (activeProfile?.accountType === 'CHILD' ? activeProfile : undefined)
+    ?? profiles.find(p => p.accountType === 'CHILD');
+  const childMaxAge: number = (() => {
+    const ag = childProfile?.ageGroup ?? '';
+    if (!ag) return 12;
+    if (ag.endsWith('+')) return parseInt(ag, 10);
+    const min = parseInt(ag.split('-')[0], 10);
+    return isNaN(min) ? 12 : min;
+  })();
 
   const [book, setBook] = useState<Book | null>(null);
   const [loading, setLoading] = useState(true);
@@ -107,14 +124,14 @@ export default function ChildBookDetail() {
     const fetchSimilar = async () => {
       try {
         const genre1 = book.genres[0];
-        const res1 = await bookService.getBooks({ genre: genre1, limit: 12 });
+        const res1 = await bookService.getBooks({ genre: genre1, limit: 12, maxAge: childMaxAge });
         let results: Book[] = (res1?.data?.books || [])
           .filter((b: any) => (b._id || b.id) !== book.id)
           .map(toCard);
 
         if (results.length < 3 && book.genres.length > 1) {
           const genre2 = book.genres[1];
-          const res2 = await bookService.getBooks({ genre: genre2, limit: 12 });
+          const res2 = await bookService.getBooks({ genre: genre2, limit: 12, maxAge: childMaxAge });
           const extra: Book[] = (res2?.data?.books || [])
             .filter((b: any) => (b._id || b.id) !== book.id && !results.find(r => r.id === (b._id || b.id)))
             .map(toCard);
@@ -125,7 +142,7 @@ export default function ChildBookDetail() {
           setSimilarGenre(genre1);
         }
 
-        if (active) setSimilarBooks(results.slice(0, 10));
+        if (active) setSimilarBooks(results.filter(b => b.ageMin <= childMaxAge).slice(0, 10));
       } catch {
         // silently fail — similar books are non-critical
       }
@@ -133,7 +150,7 @@ export default function ChildBookDetail() {
 
     fetchSimilar();
     return () => { active = false; };
-  }, [book?.id]);
+  }, [book?.id, childMaxAge]);
 
   useEffect(() => {
     let active = true;
@@ -240,7 +257,7 @@ export default function ChildBookDetail() {
             {book.genres.length > 0 && (
               <View style={s.genreChipRow}>
                 {book.genres.map(g => (
-                  <View key={g} style={s.genreChip}>
+                  <View key={g} style={s.genreChipSimilar}>
                     <Text style={s.genreChipText}>{g}</Text>
                   </View>
                 ))}
@@ -386,7 +403,7 @@ const s = StyleSheet.create({
   similarTitle: { fontSize: Typography.body + 1, fontWeight: '800', color: Colors.textPrimary },
   similarSeeAll: { fontSize: Typography.label, fontWeight: '700', color: Colors.accentSage },
   genreChipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: Spacing.md },
-  genreChip: {
+  genreChipSimilar: {
     backgroundColor: Colors.accentSageLight, borderRadius: Radius.full,
     paddingHorizontal: 10, paddingVertical: 4,
   },
