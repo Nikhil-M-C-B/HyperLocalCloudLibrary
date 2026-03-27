@@ -141,3 +141,24 @@ exports.checkAvailability = catchAsync(async (req, res) => {
     data: availability,
   });
 });
+
+/**
+ * Get book reviews
+ * GET /books/:bookId/reviews
+ */
+exports.getBookReviews = catchAsync(async (req, res) => {
+  const bookService = require('../services/bookService');
+  const book = await bookService.getBookById(req.params.bookId);
+
+  if (!book || !book.isbn) {
+    return res.status(200).json({ status: "success", data: { reviews: [] } });
+  }
+
+  const reviewService = require('../services/reviewService');
+  const reviews = await reviewService.fetchAggregatedReviews(book.isbn);
+
+  res.status(200).json({
+    status: "success",
+    data: { reviews },
+  });
+});

@@ -15,9 +15,7 @@ const createBookSchema = Joi.object({
   author: Joi.string().optional(),
   genre: Joi.array().items(Joi.string()).min(1).optional(),
   language: Joi.string().optional(),
-  ageRating: Joi.string().pattern(/^\d+-\d+$/).optional().messages({
-    'string.pattern.base': 'ageRating must be in "min-max" format (e.g. "4-6").'
-  }),
+  minAge: Joi.number().integer().min(0).max(99).optional(),
   collectionName: Joi.string().optional(),
   bookURL: Joi.string().uri().optional(),
   summary: Joi.string().max(1000).optional(),
@@ -32,9 +30,7 @@ const updateBookSchema = Joi.object({
   isbn: Joi.number().required(),
   genre: Joi.array().items(Joi.string()).min(1).required(),
   language: Joi.string(),
-  ageRating: Joi.string().pattern(/^\d+-\d+$/).messages({
-    'string.pattern.base': 'ageRating must be in "min-max" format (e.g. "4-6").'
-  }),
+  minAge: Joi.number().integer().min(0).max(99).optional(),
   collectionName: Joi.string(),
   bookURL: Joi.string().uri().optional(),
   summary: Joi.string().max(1000).required(),
@@ -46,6 +42,7 @@ router.get('/', bookController.getAllBooks);
 router.get('/lookup', protect, restrictTo('LIBRARIAN', 'ADMIN'), bookController.lookupByISBN);
 router.get('/:bookId', bookController.getBook);
 router.get('/:bookId/availability', protect, bookController.checkAvailability);
+router.get('/:bookId/reviews', bookController.getBookReviews);
 
 // Protected routes (Librarian/Admin only)
 router.post('/', protect, restrictTo('LIBRARIAN', 'ADMIN'), validate(createBookSchema), bookController.createBook);

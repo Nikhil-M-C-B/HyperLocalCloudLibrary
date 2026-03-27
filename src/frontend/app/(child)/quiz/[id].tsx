@@ -1,3 +1,4 @@
+import { API_BASE_URL } from '@/constants/config';
 import bookService from '@/api/services/bookService';
 import { NavBar, NAV_BOTTOM_PAD } from '@/components/NavBar';
 import { Colors, Radius, Spacing, Typography } from '@/constants/theme';
@@ -370,28 +371,66 @@ export default function QuizScreen() {
     return () => { active = false; };
   }, [id]);
 
-  // Look up quiz first by ISBN, then by MongoDB id, then fall back to default.
-  const questions = (bookIsbn ? QUIZZES[bookIsbn] : undefined) ?? QUIZZES[id ?? ''] ?? QUIZZES.default;
+  const { token } = useAppStore();
+  const [questions, setQuestions] = useState<any[] | null>(null);
+  const [loadingQuiz, setLoadingQuiz] = useState(true);
+
+  useEffect(() => {
+    let active = true;
+    const fetchQuiz = async () => {
+      try {
+        const res = await fetch(`${API_BASE_URL}/quizzes/generate/${id}`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        const json = await res.json();
+        if (active && json.data?.quiz?.questions) {
+          const adapted = json.data.quiz.questions.map((q: any) => ({
+            q: q.question,
+            options: q.options,
+            answer: q.options.indexOf(q.correctAnswer) !== -1 ? q.options.indexOf(q.correctAnswer) : 0,
+            correctAnswerString: q.correctAnswer,
+          }));
+          setQuestions(adapted);
+        } else if (active) {
+            setQuestions(QUIZZES[id as string] || QUIZZES.default);
+        }
+      } catch (err) {
+        if (active) setQuestions(QUIZZES[id as string] || QUIZZES.default);
+      } finally {
+        if (active) setLoadingQuiz(false);
+      }
+    };
+    fetchQuiz();
+    return () => { active = false; };
+  }, [id, token]);
 
   const [current, setCurrent] = useState(0);
   const [selected, setSelected] = useState<number | null>(null);
   const [score, setScore] = useState(0);
   const [done, setDone] = useState(false);
-
-  const q = questions[current];
+  const [answersData, setAnswersData] = useState<any[]>([]);
 
   const handleSelect = (i: number) => {
-    if (selected !== null) return; // already answered
+    if (selected !== null || !questions) return;
+    const q = questions[current];
     setSelected(i);
-    if (i === q.answer) setScore(s => s + 1);
+    const isCorrect = i === q.answer;
+    if (isCorrect) setScore(s => s + 1);
+
+    setAnswersData(prev => [...prev, {
+      question: q.q,
+      selectedAnswer: q.options[i],
+      correctAnswer: q.correctAnswerString || q.options[q.answer],
+      isCorrect,
+    }]);
   };
 
-  const handleNext = () => {
+  const handleNext = async () => {
+    if (!questions) return;
     if (current < questions.length - 1) {
       setCurrent(c => c + 1);
       setSelected(null);
     } else {
-      // Record the quiz result before showing the results screen
       const finalScore = score;
       const pct = Math.round((finalScore / questions.length) * 100);
       if (activeProfileId) {
@@ -404,6 +443,16 @@ export default function QuizScreen() {
           date: new Date().toISOString(),
         });
       }
+
+      try {
+        await fetch(`${API_BASE_URL}/quizzes/submit`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ bookId: id, answers: answersData }),
+        });
+      } catch (e) {
+        console.warn('Failed to submit quiz to backend', e);
+      }
       setDone(true);
     }
   };
@@ -412,8 +461,22 @@ export default function QuizScreen() {
     setCurrent(0);
     setSelected(null);
     setScore(0);
+    setAnswersData([]);
     setDone(false);
   };
+
+  if (loadingQuiz || !questions) {
+    return (
+      <SafeAreaView style={[s.safe, {justifyContent: 'center', alignItems: 'center'}]}>
+        <Text style={{fontSize: 48, marginBottom: 20}}>🪄</Text>
+        <Text style={{fontSize: Typography.body + 2, color: Colors.textSecondary, fontWeight: '700', textAlign: 'center', paddingHorizontal: 30, lineHeight: 26}}>
+          Generating an AI Quiz{'\n'}just for you...
+        </Text>
+      </SafeAreaView>
+    );
+  }
+
+  const q = questions[current];
 
   // ── Results screen ──────────────────────────────────────────────────────────
   if (done) {

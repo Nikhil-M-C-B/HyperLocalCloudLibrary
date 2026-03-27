@@ -24,6 +24,7 @@ const paymentRoutes  = require('./routes/paymentRoutes');
 const penaltyRoutes  = require('./routes/penaltyRoutes');
 const deliveryRoutes = require('./routes/deliveryRoutes');
 const shipmentRoutes = require('./routes/shipmentRoutes');
+const quizRoutes     = require('./routes/quizRoutes');
 const app = express();
 
 // ── CORS must come first — before Helmet and rate limiters ──
@@ -75,6 +76,8 @@ app.use('/api/v1/penalties', penaltyRoutes);
 app.use('/api/v1/delivery',  deliveryRoutes);
 // Shiprocket shipment routes (Platform Services — Aryan)
 app.use('/api/v1/shipments', shipmentRoutes);
+// AI Quiz Engine Routes
+app.use('/api/v1/quizzes', quizRoutes);
 
 // Handle undefined routes
 app.all('*', (req, res, next) => {

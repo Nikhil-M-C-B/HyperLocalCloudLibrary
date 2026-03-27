@@ -49,7 +49,9 @@ export default function LibrarianDashboard() {
   const [tab, setTab] = useState<Tab>('issued');
   const [menuVisible, setMenuVisible] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [form, setForm] = useState({ title: '', author: '', isbn: '', minAge: '', maxAge: '', summary: '' });
+  const [fetching, setFetching] = useState(false);
+  const [hasFetched, setHasFetched] = useState(false);
+  const [form, setForm] = useState({ title: '', author: '', isbn: '', minAge: '0', summary: '', coverImage: '' });
   const [selectedGenres, setSelectedGenres] = useState<string[]>([]);
   const [rawIssues, setRawIssues] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -116,6 +118,38 @@ export default function LibrarianDashboard() {
     router.replace('/(auth)/welcome');
   };
 
+  const handleFetchBook = async () => {
+    if (!form.isbn.trim()) {
+      Alert.alert('ISBN required', 'Please enter an ISBN to fetch.');
+      return;
+    }
+    setFetching(true);
+    try {
+      const res = await fetch(`${API_BASE_URL}/books/lookup?isbn=${form.isbn.trim()}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.message ?? 'Failed to fetch book metadata');
+      
+      const md = json.data.metadata;
+      setForm(f => ({
+        ...f,
+        title: md.title || '',
+        author: md.author || '',
+        coverImage: md.coverImage || '',
+        minAge: md.minAge !== undefined ? String(md.minAge) : '0',
+      }));
+      if (md.genre && Array.isArray(md.genre)) {
+        setSelectedGenres(md.genre);
+      }
+      setHasFetched(true);
+    } catch (err: any) {
+      Alert.alert('Not Found', err.message ?? 'Could not find book metadata.');
+    } finally {
+      setFetching(false);
+    }
+  };
+
   const handleAddBook = async () => {
     if (!form.isbn.trim()) {
       Alert.alert('ISBN required', 'Please enter an ISBN — all other details are fetched automatically.');
@@ -132,10 +166,10 @@ export default function LibrarianDashboard() {
       if (form.title.trim()) body.title = form.title.trim();
       if (form.author.trim()) body.author = form.author.trim();
       if (form.summary.trim()) body.summary = form.summary.trim();
+      if (form.coverImage.trim()) body.coverImage = form.coverImage.trim();
       if (selectedGenres.length > 0) body.genre = selectedGenres;
       const min = parseInt(form.minAge, 10);
-      const max = parseInt(form.maxAge, 10);
-      if (!isNaN(min) && !isNaN(max) && min < max) body.ageRating = `${min}-${max}`;
+      if (!isNaN(min)) body.minAge = min;
 
       const res = await fetch(`${API_BASE_URL}/books`, {
         method: 'POST',
@@ -145,8 +179,9 @@ export default function LibrarianDashboard() {
       const json = await res.json();
       if (!res.ok) throw new Error(json.message ?? 'Failed to add book');
       Alert.alert('✅ Book added!', 'The book has been added to the library.');
-      setForm({ title: '', author: '', isbn: '', minAge: '', maxAge: '', summary: '' });
+      setForm({ title: '', author: '', isbn: '', minAge: '0', summary: '', coverImage: '' });
       setSelectedGenres([]);
+      setHasFetched(false);
     } catch (err: any) {
       Alert.alert('Error', err.message ?? 'Something went wrong');
     } finally {
@@ -262,78 +297,95 @@ export default function LibrarianDashboard() {
           {tab === 'add' && (
             <View style={s.section}>
               <Text style={s.sectionTitle}>Add a new book</Text>
-              <Text style={{ fontSize: Typography.label, color: Colors.textMuted, marginBottom: Spacing.md, lineHeight: 18 }}>
-                Only ISBN is required — title, author, cover and summary are fetched automatically.
-              </Text>
+              
+              {!hasFetched ? (
+                <>
+                  <Text style={{ fontSize: Typography.label, color: Colors.textMuted, marginBottom: Spacing.md, lineHeight: 18 }}>
+                    Enter an ISBN to fetch book details before adding.
+                  </Text>
+                  <View style={{ gap: 5, marginBottom: Spacing.md }}>
+                    <Text style={s.label}>ISBN</Text>
+                    <TextInput
+                      style={s.input}
+                      placeholder="978-3-16-148410-0"
+                      placeholderTextColor={Colors.textMuted}
+                      value={form.isbn}
+                      onChangeText={v => setField('isbn', v.replace(/[^0-9]/g, ''))}
+                      keyboardType="numeric"
+                    />
+                  </View>
+                  <TouchableOpacity style={[s.btnPrimary, fetching && { opacity: 0.6 }]} activeOpacity={0.82} onPress={handleFetchBook} disabled={fetching}>
+                    {fetching
+                      ? <ActivityIndicator color={Colors.buttonPrimaryText} />
+                      : <Text style={s.btnPrimaryText}>Fetch Metadata</Text>
+                    }
+                  </TouchableOpacity>
+                </>
+              ) : (
+                <>
+                  <Text style={{ fontSize: Typography.label, color: Colors.textMuted, marginBottom: Spacing.md, lineHeight: 18 }}>
+                    Review and edit the fetched details before firmly adding to the catalog.
+                  </Text>
 
-              {([
-                { key: 'isbn', label: 'ISBN *', ph: '978-3-16-148410-0', multi: false },
-                { key: 'title', label: 'Title (optional override)', ph: 'Auto-filled from ISBN', multi: false },
-                { key: 'author', label: 'Author (optional override)', ph: 'Auto-filled from ISBN', multi: false },
-                { key: 'summary', label: 'Summary (optional override)', ph: 'Auto-filled from ISBN', multi: true },
-              ] as const).map(f => (
-                <View key={f.key} style={{ gap: 5, marginBottom: Spacing.md }}>
-                  <Text style={s.label}>{f.label}</Text>
-                  <TextInput
-                    style={[s.input, f.multi && { height: 90, textAlignVertical: 'top' }]}
-                    placeholder={f.ph}
-                    placeholderTextColor={Colors.textMuted}
-                    value={(form as any)[f.key]}
-                    onChangeText={v => setField(f.key, f.key === 'isbn' ? v.replace(/[^0-9]/g, '') : v)}
-                    keyboardType={f.key === 'isbn' ? 'numeric' : 'default'}
-                    multiline={f.multi}
-                    returnKeyType={f.multi ? 'default' : 'next'}
-                  />
-                </View>
-              ))}
+                  {([
+                    { key: 'isbn', label: 'ISBN (Editing not recommended)', ph: '', multi: false },
+                    { key: 'title', label: 'Title', ph: 'Book Title', multi: false },
+                    { key: 'author', label: 'Author', ph: 'Author Name', multi: false },
+                    { key: 'coverImage', label: 'Cover Image URL', ph: 'https://...', multi: false },
+                    { key: 'summary', label: 'Summary', ph: 'Description', multi: true },
+                  ] as const).map(f => (
+                    <View key={f.key} style={{ gap: 5, marginBottom: Spacing.md }}>
+                      <Text style={s.label}>{f.label}</Text>
+                      <TextInput
+                        style={[s.input, f.multi && { height: 90, textAlignVertical: 'top' }]}
+                        placeholder={f.ph}
+                        placeholderTextColor={Colors.textMuted}
+                        value={(form as any)[f.key]}
+                        onChangeText={v => setField(f.key, f.key === 'isbn' ? v.replace(/[^0-9]/g, '') : v)}
+                        keyboardType={f.key === 'isbn' ? 'numeric' : 'default'}
+                        multiline={f.multi}
+                        returnKeyType={f.multi ? 'default' : 'next'}
+                      />
+                    </View>
+                  ))}
 
-              <View style={{ marginBottom: Spacing.md, marginTop: 4 }}>
-                <GenreSelector
-                  selectedGenres={selectedGenres}
-                  onGenresChange={setSelectedGenres}
-                  isChild={false}
-                  title="📚 Genres (optional override)"
-                />
-              </View>
+                  <View style={{ marginBottom: Spacing.md, marginTop: 4 }}>
+                    <GenreSelector
+                      selectedGenres={selectedGenres}
+                      onGenresChange={setSelectedGenres}
+                      isChild={false}
+                      title="📚 Genres"
+                    />
+                  </View>
 
-              <Text style={s.label}>Age Rating (optional override)</Text>
-              <View style={{ gap: Spacing.sm, marginBottom: Spacing.md, marginTop: 8 }}>
-                <View>
-                  <Text style={[s.label, { fontSize: Typography.label - 1, color: Colors.textMuted, marginBottom: 4 }]}>Min Age:</Text>
-                  <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: Spacing.xs, paddingBottom: 4 }}>
-                    {Array.from({ length: 19 }).map((_, i) => (
-                      <TouchableOpacity
-                        key={`min-${i}`}
-                        style={[s.ageChip, form.minAge === String(i) && s.ageChipActive]}
-                        onPress={() => setField('minAge', String(i))}
-                      >
-                        <Text style={[s.ageChipText, form.minAge === String(i) && s.ageChipTextActive]}>{i}</Text>
-                      </TouchableOpacity>
-                    ))}
-                  </ScrollView>
-                </View>
-                <View>
-                  <Text style={[s.label, { fontSize: Typography.label - 1, color: Colors.textMuted, marginBottom: 4 }]}>Max Age:</Text>
-                  <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: Spacing.xs, paddingBottom: 4 }}>
-                    {Array.from({ length: 19 }).map((_, i) => (
-                      <TouchableOpacity
-                        key={`max-${i}`}
-                        style={[s.ageChip, form.maxAge === String(i) && s.ageChipActive]}
-                        onPress={() => setField('maxAge', String(i))}
-                      >
-                        <Text style={[s.ageChipText, form.maxAge === String(i) && s.ageChipTextActive]}>{i}</Text>
-                      </TouchableOpacity>
-                    ))}
-                  </ScrollView>
-                </View>
-              </View>
+                  <Text style={s.label}>Minimum Recommended Age</Text>
+                  <View style={{ gap: Spacing.sm, marginBottom: Spacing.md, marginTop: 8 }}>
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: Spacing.xs, paddingBottom: 4 }}>
+                      {Array.from({ length: 19 }).map((_, i) => (
+                        <TouchableOpacity
+                          key={`min-${i}`}
+                          style={[s.ageChip, form.minAge === String(i) && s.ageChipActive]}
+                          onPress={() => setField('minAge', String(i))}
+                        >
+                          <Text style={[s.ageChipText, form.minAge === String(i) && s.ageChipTextActive]}>{i}+</Text>
+                        </TouchableOpacity>
+                      ))}
+                    </ScrollView>
+                  </View>
 
-              <TouchableOpacity style={[s.btnPrimary, saving && { opacity: 0.6 }]} activeOpacity={0.82} onPress={handleAddBook} disabled={saving}>
-                {saving
-                  ? <ActivityIndicator color={Colors.buttonPrimaryText} />
-                  : <Text style={s.btnPrimaryText}>Add Book to Library</Text>
-                }
-              </TouchableOpacity>
+                  <View style={{ flexDirection: 'row', gap: Spacing.sm, marginTop: Spacing.sm }}>
+                    <TouchableOpacity style={[s.btnPrimary, { flex: 1, backgroundColor: Colors.card, borderWidth: 1.5, borderColor: Colors.cardBorder }]} onPress={() => { setHasFetched(false); setForm({ title: '', author: '', isbn: '', minAge: '0', summary: '', coverImage: '' }); setSelectedGenres([]); }}>
+                      <Text style={[s.btnPrimaryText, { color: Colors.textSecondary }]}>Cancel</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={[s.btnPrimary, saving && { opacity: 0.6 }, { flex: 2 }]} activeOpacity={0.82} onPress={handleAddBook} disabled={saving}>
+                      {saving
+                        ? <ActivityIndicator color={Colors.buttonPrimaryText} />
+                        : <Text style={s.btnPrimaryText}>Confirm & Add</Text>
+                      }
+                    </TouchableOpacity>
+                  </View>
+                </>
+              )}
 
               {/* Delete books — admin only */}
               <View style={{ marginTop: Spacing.lg, backgroundColor: Colors.browseSurface, borderRadius: Radius.lg, padding: Spacing.md, borderWidth: 1, borderColor: Colors.cardBorder }}>

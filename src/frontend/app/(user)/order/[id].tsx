@@ -44,8 +44,8 @@ function mapBook(b: any): Book {
     isPhysical: true,
     availableCopies: parseInt(b.availableCopies ?? 0),
     nearestLibrary: "Local Library",
-    ageMin: parseInt(b.ageRating?.split("-")[0]) || 0,
-    ageMax: parseInt(b.ageRating?.split("-")[1]) || 99,
+    ageMin: b.minAge ?? (parseInt(String(b.ageRating || '').split("-")[0]) || 0),
+    ageMax: 99,
     keyWords: [],
     coverImage: b.coverImage,
   };

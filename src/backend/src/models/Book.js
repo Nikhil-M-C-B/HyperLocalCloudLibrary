@@ -28,15 +28,11 @@ const bookSchema = new mongoose.Schema({
     type: String,
     default: 'English'
   },
-  ageRating: {
-    type: String,
+  minAge: {
+    type: Number,
     required: true,
-    validate: {
-      validator: function (v) {
-        return /^\d+-\d+$/.test(v); // Ensures format like "2-10"
-      },
-      message: props => `${props.value} is not a valid age rating format. Use "min-max" (e.g., "4-6").`
-    }
+    min: 0,
+    default: 0
   },
   collectionName: {
     type: String,
@@ -69,6 +65,6 @@ const bookSchema = new mongoose.Schema({
 // Indexes for search
 bookSchema.index({ title: 'text', author: 'text' }, { language_override: 'textSearchLang' });
 bookSchema.index({ genre: 1 });
-bookSchema.index({ ageRating: 1 });
+bookSchema.index({ minAge: 1 });
 
 module.exports = mongoose.model('Book', bookSchema);

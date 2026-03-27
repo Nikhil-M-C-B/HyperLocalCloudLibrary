@@ -1,4 +1,5 @@
 import bookService from '@/api/services/bookService';
+import axiosInstance from '@/api/axiosInstance';
 import { BookCover } from '@/components/BookCover';
 import { NavBar, NAV_BOTTOM_PAD } from '@/components/NavBar';
 import type { Book } from '@/constants/mockData';
@@ -35,8 +36,8 @@ function mapBook(b: any): Book {
     isPhysical: true,
     availableCopies: parseInt(b?.availableCopies ?? 0),
     nearestLibrary: 'Local Library',
-    ageMin: parseInt(b.ageRating?.split('-')[0]) || 0,
-    ageMax: parseInt(b.ageRating?.split('-')[1]) || 99,
+    ageMin: b.minAge ?? (parseInt(String(b.ageRating || '').split("-")[0]) || 0),
+    ageMax: 99,
     keyWords: [],
     coverImage: b.coverImage,
     isbn: b.isbn != null ? String(b.isbn) : undefined,
@@ -84,6 +85,9 @@ export default function UserBookDetail() {
   const router = useRouter();
   const [book, setBook] = useState<Book | null>(null);
   const [loading, setLoading] = useState(true);
+  const [reviews, setReviews] = useState<{ source: string, text: string }[]>([]);
+  const [showAllReviews, setShowAllReviews] = useState(false);
+  const [expandedReviews, setExpandedReviews] = useState<{[key: number]: boolean}>({});
   const [similarBooks, setSimilarBooks] = useState<Book[]>([]);
   const [similarGenre, setSimilarGenre] = useState<string>('');
 
@@ -155,6 +159,14 @@ export default function UserBookDetail() {
           const response = await bookService.getBookById(id as string);
           if (active && response?.data?.book) {
             setBook(mapBook(response.data.book));
+            
+            // Background fetch live reviews from aggregator
+            axiosInstance.get(`/books/${id}/reviews`).then(revRes => {
+              if (active && revRes.data?.data?.reviews) {
+                setReviews(revRes.data.data.reviews);
+              }
+            }).catch(e => console.warn('Reviews fetch failed', e));
+
           } else if (active) {
             setBook(null);
           }
@@ -289,27 +301,45 @@ export default function UserBookDetail() {
 
         {/* Reviews & Comments */}
         <View style={s.reviewsSection}>
-          <Text style={s.reviewsTitle}>Reviews & Comments</Text>
-          {[
-            { name: 'Ananya S.', rating: 5, comment: 'My kids absolutely loved this book! They couldn\'t put it down and kept asking to read it again.' },
-            { name: 'Rahul M.', rating: 4, comment: 'A wonderful story with great illustrations. Perfect for bedtime reading with the little ones.' },
-            { name: 'Priya K.', rating: 5, comment: 'Beautifully written and engaging. My daughter finished it in one sitting and immediately wanted more!' },
-          ].map((review, idx) => (
-            <View key={idx} style={s.reviewCard}>
-              <View style={s.reviewHeader}>
-                <View style={s.reviewAvatar}>
-                  <Text style={s.reviewAvatarText}>{review.name[0]}</Text>
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={s.reviewName}>{review.name}</Text>
-                  <Text style={s.reviewStars}>
-                    {'★'.repeat(review.rating)}{'☆'.repeat(5 - review.rating)}
-                  </Text>
-                </View>
-              </View>
-              <Text style={s.reviewComment}>{review.comment}</Text>
-            </View>
-          ))}
+          <Text style={s.reviewsTitle}>Real User Reviews</Text>
+          {reviews.length === 0 ? (
+            <Text style={s.reviewComment}>No reviews available yet.</Text>
+          ) : (
+            <>
+              {reviews.slice(0, showAllReviews ? reviews.length : 2).map((review, idx) => {
+                const isExpanded = expandedReviews[idx];
+                const isLong = review.text.length > 150;
+                return (
+                  <View key={idx} style={s.reviewCard}>
+                    <View style={s.reviewHeader}>
+                      <View style={s.reviewAvatar}>
+                        <Text style={s.reviewAvatarText}>{review.source[0]}</Text>
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={s.reviewName}>{review.source} Reader</Text>
+                      </View>
+                    </View>
+                    <Text 
+                      style={s.reviewComment} 
+                      numberOfLines={isExpanded ? undefined : 3}
+                    >
+                      {review.text}
+                    </Text>
+                    {isLong && !isExpanded && (
+                      <TouchableOpacity onPress={() => setExpandedReviews(prev => ({ ...prev, [idx]: true }))}>
+                        <Text style={{ color: Colors.accentSage, fontSize: 13, fontWeight: '700', marginTop: 4 }}>Read more</Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                );
+              })}
+              {!showAllReviews && reviews.length > 2 && (
+                <TouchableOpacity onPress={() => setShowAllReviews(true)} style={{ alignItems: 'center', paddingVertical: 10 }}>
+                  <Text style={{ color: Colors.accentSage, fontSize: 13, fontWeight: '700' }}>Read all {reviews.length} reviews →</Text>
+                </TouchableOpacity>
+              )}
+            </>
+          )}
         </View>
 
         {/* Actions */}

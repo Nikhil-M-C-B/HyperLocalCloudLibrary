@@ -26,75 +26,34 @@ const config = require('../config');
  *   categories     — Google Books volumeInfo.categories  OR  Open Library subject names
  *   maturityRating — Google Books volumeInfo.maturityRating (NOT_MATURE | MATURE)
  *
- * Always returns a "min-max" string (e.g. "0-3", "8-12") or null.
- * null means the caller should fall back to a default (handled in bookService).
- */
 /**
- * Map book categories / maturity rating to our "min-max" age range format.
- *
- * Strategy (most-specific wins):
- *   1. Explicit numeric range in category text ("Ages 4-8", "8 and up")
- *   2. Well-known audience keywords (board book → juvenile)
- *   3. Explicit Google Books maturityRating signal
- *   4. Any non-empty categories without a children/teen label → '14-99' (adult)
- *   5. Completely empty input → null  (caller uses '16-99' as the safe fallback)
- *
- * SAFETY: when in doubt we always err adult-only so child profiles are protected.
+ * Map book categories / maturity rating to a minimum age integer.
  */
-function _mapAgeRating(categories = [], maturityRating = '') {
+function _mapMinAge(categories = [], maturityRating = '') {
   const joined = categories.join(' ').toLowerCase();
 
-  // ── 1. Explicit numeric ranges ───────────────────────────────────────────
   const rangeMatch = joined.match(/ages?\s+(\d+)\s*[-–to]+\s*(\d+)/i);
-  if (rangeMatch) return `${rangeMatch[1]}-${rangeMatch[2]}`;
+  if (rangeMatch) return parseInt(rangeMatch[1], 10);
 
   const upMatch = joined.match(/(\d+)\s*(?:years?|yr)?\s*(?:(?:and|&)\s*(?:up|over|older)|\+)/);
-  if (upMatch) {
-    const min = parseInt(upMatch[1], 10);
-    return `${min}-99`;
-  }
+  if (upMatch) return parseInt(upMatch[1], 10);
 
-  // ── 2. Audience keywords (most-specific → least) ─────────────────────────
-
-  // School reading-level annotations ("Reading Level-Grade 7") override generic
-  // "Children's stories" subject tags that OL sometimes applies to YA/teen books.
-  // Grade N ≈ age N+5 (Grade 7 → 12 years old).
   const gradeMatch = joined.match(/reading\s*level[- ]+grade\s*(\d+)/i);
-  if (gradeMatch) {
-    const minAge = parseInt(gradeMatch[1], 10) + 5;
-    return `${minAge}-99`;
-  }
+  if (gradeMatch) return parseInt(gradeMatch[1], 10) + 5;
 
-  if (joined.includes('board book'))                                             return '0-3';
-  if (joined.includes('baby') || joined.includes('toddler'))                    return '0-3';
-  if (joined.includes('preschool'))                                              return '3-5';
-  if (joined.includes('kindergarten'))                                           return '4-6';
-  if (joined.includes('picture book'))                                           return '4-8';
-  if (joined.includes('easy reader') || joined.includes('easy-to-read'))        return '4-8';
-  if (joined.includes('beginning reader') || joined.includes('beginner reader')
-      || joined.includes('early reader'))                                        return '5-8';
-  if (joined.includes('middle grade') || joined.includes('middle-grade'))       return '8-12';
-  if (joined.includes('chapter book'))                                           return '6-10';
-  // young adult is more specific than generic "juvenile"
-  if (joined.includes('young adult') || joined.includes('ya fiction')
-      || joined.includes('ya literature') || joined.includes('teen fiction'))    return '12-18';
-  if (joined.includes('teen') && joined.includes('fiction'))                    return '13-18';
-  if (joined.includes('juvenile fiction') || joined.includes('juvenile nonfiction')) return '8-12';
-  if (joined.includes('juvenile'))                                               return '6-12';
-  if (joined.includes("children's fiction") || joined.includes("children's nonfiction")
-      || joined.includes("children's stories") || joined.includes("children's books")) return '4-10';
-  if (joined.includes('children'))                                               return '4-10';
+  if (joined.includes('board book') || joined.includes('baby') || joined.includes('toddler')) return 0;
+  if (joined.includes('preschool')) return 3;
+  if (joined.includes('kindergarten') || joined.includes('picture book') || joined.includes('easy reader') || joined.includes('easy-to-read') || joined.includes("children's books") || joined.includes("children's stories") || joined.includes("children's fiction") || joined.includes("children's nonfiction") || joined.includes('children')) return 4;
+  if (joined.includes('beginning reader') || joined.includes('beginner reader') || joined.includes('early reader')) return 5;
+  if (joined.includes('chapter book') || joined.includes('juvenile')) return 6;
+  if (joined.includes('middle grade') || joined.includes('middle-grade') || joined.includes('juvenile fiction') || joined.includes('juvenile nonfiction')) return 8;
+  if (joined.includes('young adult') || joined.includes('ya fiction') || joined.includes('ya literature') || joined.includes('teen fiction') || joined.includes('teen')) return 12;
 
-  // ── 3. Explicit maturity signals from Google Books ────────────────────────
-  if (maturityRating === 'MATURE')     return '16-99'; // restricted 18+
-  if (maturityRating === 'NOT_MATURE') return '8-99';  // explicitly cleared as safe
+  if (maturityRating === 'MATURE') return 16;
+  if (maturityRating === 'NOT_MATURE') return 8;
 
-  // ── 4. Non-empty categories that never matched a children/teen label ──────
-  //    Anything here is academic, adult fiction, biography, etc.
-  //    Default adult to protect children — better to under-serve than over-expose.
-  if (categories.length > 0) return '14-99';
+  if (categories.length > 0) return 14;
 
-  // ── 5. Truly empty — caller will apply '16-99' safe fallback ─────────────
   return null;
 }
 
@@ -131,7 +90,6 @@ async function _fetchFromGoogleBooks(isbn) {
   if (config.googleBooks?.apiKey) {
     params.key = config.googleBooks.apiKey;
   }
-
   const response = await axios.get(
     'https://www.googleapis.com/books/v1/volumes',
     { params, timeout: 8000 }
@@ -172,8 +130,8 @@ async function _fetchFromGoogleBooks(isbn) {
     pageCount:   info.pageCount   || null,
     publisher:   info.publisher   || null,
     publishedDate: info.publishedDate || null,
-    ageRating:       _mapAgeRating(info.categories || [], info.maturityRating || ''),
-    _maturityRating: info.maturityRating || '', // passed through for merge
+    minAge: _mapMinAge(info.categories || [], info.maturityRating || ''),
+    _maturityRating: info.maturityRating || '',
     source:          'google_books',
   };
 }
@@ -263,7 +221,7 @@ async function _fetchFromOpenLibrary(isbn) {
     pageCount:   entry.number_of_pages || null,
     publisher:   entry.publishers?.[0]?.name || null,
     publishedDate: entry.publish_date || null,
-    ageRating:   _mapAgeRating(entry.subjects?.map(s => s.name) || [], ''),
+    minAge: _mapMinAge(entry.subjects?.map(s => s.name) || [], ''),
     source:      'open_library',
   };
 }
@@ -301,7 +259,7 @@ async function _fetchFromOpenLibrarySearch(isbn) {
     pageCount:     null,
     publisher:     doc.publisher?.[0] || null,
     publishedDate: doc.first_publish_year ? String(doc.first_publish_year) : null,
-    ageRating:     _mapAgeRating(allSubjects, ''),
+    minAge:        _mapMinAge(allSubjects, ''),
     source:        'open_library_search',
   };
 }
@@ -348,7 +306,7 @@ async function _fetchFromLibraryOfCongress(isbn) {
     pageCount:     null,
     publisher:     null,
     publishedDate: null,
-    ageRating:     _mapAgeRating(subjects, ''),
+    minAge:        _mapMinAge(subjects, ''),
     source:        'loc',
   };
 }
@@ -392,8 +350,8 @@ exports.fetchByISBN = async (isbn) => {
     console.warn(`[BookMetadata] Open Library THREW for ISBN ${cleanISBN}: ${err.message}`);
   }
 
-  // 3. OL Search — fetch when either primary is missing age or genre
-  const needMoreAge   = !google?.ageRating   && !openLib?.ageRating;
+  // 3. OL Search — fetch when primary is missing minAge or genre
+  const needMoreAge   = google?.minAge === null && openLib?.minAge === null;
   const needMoreGenre = !google?.genre?.length && !openLib?.genre?.length;
   if (needMoreAge || needMoreGenre) {
     try {
@@ -403,9 +361,10 @@ exports.fetchByISBN = async (isbn) => {
     }
   }
 
-  // 4. Library of Congress — only if still no age rating resolved
-  const haveAge = google?.ageRating || openLib?.ageRating || olSearch?.ageRating;
-  if (!haveAge) {
+  // 4. Library of Congress — fallback to gather more genres or age if still empty
+  const haveAge = google?.minAge !== null || openLib?.minAge !== null || olSearch?.minAge !== null;
+  const haveGenre = google?.genre?.length || openLib?.genre?.length || olSearch?.genre?.length;
+  if (!haveAge || !haveGenre) {
     try {
       loc = await _fetchFromLibraryOfCongress(cleanISBN);
     } catch (err) {
@@ -427,31 +386,27 @@ exports.fetchByISBN = async (isbn) => {
     ? openLib.title
     : primary.title;
 
-  // Gather all non-null age ratings from every source
-  const allRatings = [
-    google?.ageRating,
-    openLib?.ageRating,
-    olSearch?.ageRating,
-    loc?.ageRating,
-  ].filter(Boolean);
+  // Gather all non-null minAges from every source
+  const allAges = [
+    google?.minAge,
+    openLib?.minAge,
+    olSearch?.minAge,
+    loc?.minAge,
+  ].filter(a => a !== null && a !== undefined);
 
   // Last-chance: derive from Google's raw maturityRating if no subject-based rating exists
   const maturityRating = google?._maturityRating || '';
-  if (!allRatings.length && maturityRating) {
-    const derived = _mapAgeRating([], maturityRating);
-    if (derived) allRatings.push(derived);
+  if (!allAges.length && maturityRating) {
+    const derived = _mapMinAge([], maturityRating);
+    if (derived !== null) allAges.push(derived);
   }
 
-  let bestAgeRating = allRatings[0] || null;
-  if (allRatings.length > 1) {
-    const parsed = allRatings.map(r => {
-      const [mn, mx] = r.split('-').map(Number);
-      return { r, mn, mx };
-    });
-    const hasChildRating = parsed.some(p => p.mn < 12);
-    bestAgeRating = hasChildRating
-      ? parsed.reduce((a, b) => a.mn <= b.mn ? a : b).r   // widest child window
-      : parsed.reduce((a, b) => a.mn >= b.mn ? a : b).r;  // safest adult
+  let bestMinAge = allAges[0] || null;
+  if (allAges.length > 1) {
+    const hasChildRating = allAges.some(a => a < 12);
+    bestMinAge = hasChildRating
+      ? Math.min(...allAges) // widest child window
+      : Math.max(...allAges); // safest adult
   }
 
   return {
@@ -462,7 +417,7 @@ exports.fetchByISBN = async (isbn) => {
     coverImage:    primary.coverImage  || openLib?.coverImage || null,
     publisher:     primary.publisher   || openLib?.publisher  || null,
     pageCount:     primary.pageCount   || openLib?.pageCount  || null,
-    ageRating:     bestAgeRating,
+    minAge:        bestMinAge,
     publishedDate: primary.publishedDate || openLib?.publishedDate || olSearch?.publishedDate || loc?.publishedDate || null,
     source:        [google && 'google', openLib && 'open_library', olSearch && 'ol_search', loc && 'loc'].filter(Boolean).join('+'),
   };

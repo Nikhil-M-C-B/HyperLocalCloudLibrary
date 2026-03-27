@@ -67,9 +67,10 @@ export default function InventoryScreen() {
   const hdrs = { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` };
 
   useEffect(() => {
+    if (!token) return;
     fetchBooks();
     fetchBranches();
-  }, []);
+  }, [token]);
 
   const fetchBooks = async () => {
     try {
@@ -197,19 +198,27 @@ export default function InventoryScreen() {
     String(b.isbn).includes(search)
   );
 
-  // Group branchInventory copies by distinct book
+  // Group branchInventory copies by distinct book, initializing with ALL global books
   const branchBookMap: Record<string, { bookId: string; title: string; available: number; issued: number; damaged: number; total: number }> = {};
+  
+  // Initialize map with every global book so we can always search and add copies even if count is 0
+  for (const bk of books) {
+    if (bk._id) {
+      branchBookMap[bk._id] = { bookId: bk._id, title: bk.title ?? 'Unknown', available: 0, issued: 0, damaged: 0, total: 0 };
+    }
+  }
+
+  // Populate counts from actual branch inventory
   for (const copy of branchInventory) {
     const bk = copy.bookId;
     if (!bk) continue;
     const id = bk._id;
-    if (!branchBookMap[id]) {
-      branchBookMap[id] = { bookId: id, title: bk.title ?? 'Unknown', available: 0, issued: 0, damaged: 0, total: 0 };
+    if (branchBookMap[id]) {
+      branchBookMap[id].total++;
+      if (copy.status === 'AVAILABLE')             branchBookMap[id].available++;
+      else if (copy.status === 'ISSUED')           branchBookMap[id].issued++;
+      else if (copy.status === 'DAMAGED' || copy.status === 'LOST') branchBookMap[id].damaged++;
     }
-    branchBookMap[id].total++;
-    if (copy.status === 'AVAILABLE')             branchBookMap[id].available++;
-    else if (copy.status === 'ISSUED')           branchBookMap[id].issued++;
-    else if (copy.status === 'DAMAGED' || copy.status === 'LOST') branchBookMap[id].damaged++;
   }
   const branchBooks = Object.values(branchBookMap);
 
@@ -347,7 +356,7 @@ export default function InventoryScreen() {
                       <Text style={s.cardTitle} numberOfLines={1}>{book.title}</Text>
                       <Text style={s.cardSub}>{book.author}</Text>
                       <Text style={s.cardMeta}>
-                        Age {book.ageRating} · ISBN {book.isbn}
+                        Age {book.minAge !== undefined ? `${book.minAge}+` : 'Unknown'} · ISBN {book.isbn}
                       </Text>
                     </View>
                     <Text style={s.chevron}>{selectedBookId === book._id ? '▲' : '▼'}</Text>

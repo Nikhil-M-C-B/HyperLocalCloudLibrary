@@ -10,40 +10,15 @@ const s3Service = require("./s3Service");
 exports.getAllBooks = async (filters = {}) => {
   const query = {};
 
-  // Age-appropriate content filter.
-  // maxAge = the child profile's upper age bound (e.g. 10 for ageGroup "8-10").
-  //   → Only show books whose ageRating minimum ≤ maxAge (hides adult books from children).
-  // minAge = adult users' lower bound (e.g. 13).
-  //   → Only show books whose ageRating minimum ≥ minAge (hides picture books from adults).
-  // Uses MongoDB $expr to compare the numeric part of the "min-max" string field.
   if (filters.maxAge !== undefined || filters.minAge !== undefined) {
-    const exprs = [];
+    query.minAge = {};
     if (filters.maxAge !== undefined) {
       const maxAge = parseInt(filters.maxAge, 10);
-      if (!isNaN(maxAge)) {
-        exprs.push({
-          $lte: [
-            { $toInt: { $arrayElemAt: [{ $split: ['$ageRating', '-'] }, 0] } },
-            maxAge,
-          ],
-        });
-      }
+      if (!isNaN(maxAge)) query.minAge.$lte = maxAge;
     }
     if (filters.minAge !== undefined) {
       const minAge = parseInt(filters.minAge, 10);
-      if (!isNaN(minAge)) {
-        exprs.push({
-          $gte: [
-            { $toInt: { $arrayElemAt: [{ $split: ['$ageRating', '-'] }, 0] } },
-            minAge,
-          ],
-        });
-      }
-    }
-    if (exprs.length === 1) {
-      query.$expr = exprs[0];
-    } else if (exprs.length > 1) {
-      query.$expr = { $and: exprs };
+      if (!isNaN(minAge)) query.minAge.$gte = minAge;
     }
   }
 
@@ -143,7 +118,7 @@ exports.createBook = async (bookData) => {
         data.language = data.language || metadata.language;
         data.summary = data.summary || metadata.summary;
         data.coverImage = data.coverImage || metadata.coverImage;
-        data.ageRating = data.ageRating || metadata.ageRating;
+        data.minAge = data.minAge !== undefined ? data.minAge : metadata.minAge;
         data.publishedDate = data.publishedDate || metadata.publishedDate;
         // Store extra metadata not in the form
         data._metadataSource = metadata.source;
@@ -177,9 +152,8 @@ exports.createBook = async (bookData) => {
     );
   }
 
-  // Safe fallback: unknown age rating → adult-only (protects child profiles)
-  if (!data.ageRating) {
-    data.ageRating = '16-99';
+  if (data.minAge === undefined) {
+    data.minAge = 0;
   }
 
   // Remove internal tracking field before saving
@@ -326,7 +300,7 @@ exports.checkAvailability = async (bookId, userLocation) => {
 /**
  * Get books by age rating
  */
-exports.getBooksByAge = async (ageGroup) => {
-  const books = await Book.find({ ageRating: ageGroup }).sort("-createdAt");
+exports.getBooksByAge = async (minAge) => {
+  const books = await Book.find({ minAge: { $lte: minAge } }).sort("-createdAt");
   return books;
 };
