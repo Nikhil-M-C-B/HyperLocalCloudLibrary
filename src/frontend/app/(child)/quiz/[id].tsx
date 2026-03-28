@@ -563,7 +563,7 @@ export default function QuizScreen() {
 
         {/* Options */}
         <View style={s.optionsGrid}>
-          {q.options.map((opt, i) => {
+          {q.options.map((opt: string, i: number) => {
             const isSelected = selected === i;
             const isCorrect = selected !== null && i === q.answer;
             const isWrong = isSelected && i !== q.answer;

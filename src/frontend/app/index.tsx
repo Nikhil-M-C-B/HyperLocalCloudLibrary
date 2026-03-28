@@ -4,17 +4,9 @@ import { Redirect } from "expo-router";
 import { useEffect } from "react";
 import { ActivityIndicator, View } from "react-native";
 
-/** Root entry — hydrates auth state then routes. */
+/** Root entry — routes based on hydrated auth state. */
 export default function RootIndex() {
-  const { hydrate, isAuthenticated, role, isLoading, activeProfileId, profiles } = useAppStore();
-
-  useEffect(() => {
-    const init = async () => {
-      // Hydrate auth from storage
-      await hydrate();
-    };
-    init();
-  }, []);
+  const { isAuthenticated, role, isLoading, activeProfileId, profiles } = useAppStore();
 
   if (isLoading) {
     return (

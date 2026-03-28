@@ -1,18 +1,22 @@
 import { Colors } from "@/constants/theme";
 import useChildTrackingStore from "@/store/useChildTrackingStore";
+import useAppStore from "@/store/useAppStore";
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { useEffect } from "react";
+import { ActivityIndicator, View, StyleSheet } from "react-native";
 
 export const unstable_settings = {
   anchor: "(auth)",
 };
 
 export default function RootLayout() {
-  const { hydrate } = useChildTrackingStore();
+  const { hydrate: hydrateTracking } = useChildTrackingStore();
+  const { hydrate: hydrateApp, isLoading } = useAppStore();
 
   useEffect(() => {
-    hydrate();
+    hydrateTracking();
+    hydrateApp();
   }, []);
 
   return (
@@ -29,6 +33,11 @@ export default function RootLayout() {
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="modal" options={{ presentation: "modal" }} />
       </Stack>
+      {isLoading && (
+        <View style={{ ...StyleSheet.absoluteFillObject, backgroundColor: Colors.background, justifyContent: 'center', alignItems: 'center' }}>
+          <ActivityIndicator color={Colors.accentSage} size="large" />
+        </View>
+      )}
       <StatusBar style="dark" backgroundColor={Colors.background} />
     </>
   );

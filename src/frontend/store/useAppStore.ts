@@ -39,10 +39,13 @@ interface AppStore {
   isLoading: boolean;
   topBooksPrefetched: boolean;
   hasDeliveryAddress: boolean;
+  selectedBranchId: string | null;
+  selectedBranchName: string | null;
 
   hydrate: () => Promise<void>;
   setAuth: (data: SetAuthPayload) => Promise<void>;
   setHasDeliveryAddress: (val: boolean) => void;
+  setSelectedBranch: (id: string, name: string) => void;
   addProfile: (
     profile: Omit<AppProfile, "age"> & { age?: number },
   ) => Promise<void>;
@@ -83,6 +86,8 @@ const useAppStore = create<AppStore>((set, get) => ({
   isLoading: true,
   topBooksPrefetched: false,
   hasDeliveryAddress: false,
+  selectedBranchId: null,
+  selectedBranchName: null,
 
   // ── Hydrate from AsyncStorage (call on app launch) ──────────────────────────
   hydrate: async () => {
@@ -102,6 +107,23 @@ const useAppStore = create<AppStore>((set, get) => ({
 
   // ── Track whether the user has set a delivery address ───────────────────────
   setHasDeliveryAddress: (val) => set({ hasDeliveryAddress: val }),
+
+  // ── Handle Global Library Selection ───────────────────────
+  setSelectedBranch: async (id, name) => {
+    set({ selectedBranchId: id, selectedBranchName: name });
+    try {
+      const json = await AsyncStorage.getItem(STORAGE_KEY);
+      if (json) {
+        const data = JSON.parse(json);
+        await AsyncStorage.setItem(
+          STORAGE_KEY,
+          JSON.stringify({ ...data, selectedBranchId: id, selectedBranchName: name }),
+        );
+      }
+    } catch {
+      /* non-critical */
+    }
+  },
 
   // ── Store auth + profiles after login / register ────────────────────────────
   setAuth: async ({ userId, email, token, role, profiles }) => {
@@ -201,6 +223,8 @@ const useAppStore = create<AppStore>((set, get) => ({
       isAuthenticated: false,
       topBooksPrefetched: false,
       hasDeliveryAddress: false,
+      selectedBranchId: null,
+      selectedBranchName: null,
     });
   },
 

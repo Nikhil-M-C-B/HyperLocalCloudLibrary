@@ -1,13 +1,7 @@
-import { Stack, Redirect } from 'expo-router';
+import { Stack } from 'expo-router';
 import { Colors } from '@/constants/theme';
-import useAppStore from '@/store/useAppStore';
 
 export default function AuthLayout() {
-  const { isAuthenticated, isLoading } = useAppStore();
-
-  if (!isLoading && isAuthenticated) {
-    return <Redirect href="/" />;
-  }
 
   return (
     <Stack

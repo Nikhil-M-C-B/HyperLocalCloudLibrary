@@ -4,6 +4,7 @@ import { BookCover } from '@/components/BookCover';
 import { NavBar, NAV_BOTTOM_PAD } from '@/components/NavBar';
 import type { Book } from '@/constants/mockData';
 import { Colors, Radius, Spacing, Typography } from '@/constants/theme';
+import useAppStore from '@/store/useAppStore';
 import { useFocusEffect } from '@react-navigation/native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
@@ -82,6 +83,7 @@ function StarRow({ rating }: { rating: number }) {
 
 export default function UserBookDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
+  const { userId, activeProfileId } = useAppStore();
   const router = useRouter();
   const [book, setBook] = useState<Book | null>(null);
   const [loading, setLoading] = useState(true);
@@ -157,6 +159,12 @@ export default function UserBookDetail() {
       const fetchBook = async () => {
         try {
           const response = await bookService.getBookById(id as string);
+          
+          // Telemetry: Log view activity for the Smart Recommendation AI
+          if (userId && activeProfileId) {
+             axiosInstance.post(`/users/${userId}/profiles/${activeProfileId}/activity`, { bookId: id, action: 'VIEW' }).catch(() => {});
+          }
+
           if (active && response?.data?.book) {
             setBook(mapBook(response.data.book));
             
@@ -198,7 +206,7 @@ export default function UserBookDetail() {
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={s.scroll}>
 
         {/* Back */}
-        <TouchableOpacity style={s.backBtn} onPress={() => router.back()}>
+        <TouchableOpacity style={s.backBtn} onPress={() => { if (router.canGoBack()) { router.back(); } else { router.replace('/(user)'); } }}>
           <Text style={s.backText}>← Back</Text>
         </TouchableOpacity>
 

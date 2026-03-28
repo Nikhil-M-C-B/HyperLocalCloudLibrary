@@ -1,4 +1,5 @@
 import bookService from "@/api/services/bookService";
+import axiosInstance from "@/api/axiosInstance";
 import issueService from "@/api/services/issueService";
 import { BookCover } from "@/components/BookCover";
 import { API_BASE_URL } from "@/constants/config";
@@ -89,8 +90,9 @@ const hc = StyleSheet.create({
 
 // ─── Search result row ────────────────────────────────────────────────────────
 function SearchRow({ book, onPress }: { book: Book; onPress: () => void }) {
+  const isTrans = book.availableAtSelectedBranch === false;
   return (
-    <TouchableOpacity style={sr.row} onPress={onPress} activeOpacity={0.82}>
+    <TouchableOpacity style={[sr.row, isTrans && { opacity: 0.45 }]} onPress={onPress} activeOpacity={0.82}>
       <BookCover book={book} width={56} height={76} fontSize={9} />
       <View style={{ flex: 1, gap: 3 }}>
         <Text style={sr.title}>{book.title}</Text>
@@ -105,9 +107,16 @@ function SearchRow({ book, onPress }: { book: Book; onPress: () => void }) {
           ))}
         </View>
       </View>
-      <Text style={sr.avail}>
-        {book.availableCopies > 0 ? `${book.availableCopies} left` : "Waitlist"}
-      </Text>
+      <View style={{ alignItems: 'flex-end', justifyContent: 'center' }}>
+        <Text style={[sr.avail, isTrans && { color: Colors.error }]}>
+          {isTrans ? "Not here" : (book.availableCopies > 0 ? `${book.availableCopies} left` : "Waitlist")}
+        </Text>
+        {isTrans && book.otherBranchNames && book.otherBranchNames.length > 0 && (
+          <Text style={{ fontSize: 9, color: Colors.textSecondary, marginTop: 4, maxWidth: 85, textAlign: 'right' }}>
+            At {book.otherBranchNames[0]} {book.otherBranchNames.length > 1 ? `(+${book.otherBranchNames.length - 1} more)` : ''}
+          </Text>
+        )}
+      </View>
     </TouchableOpacity>
   );
 }
@@ -197,7 +206,7 @@ export default function UserHome() {
   const [mode, setMode] = useState<'forYou' | 'forChild'>('forYou');
   const [selectedChildId, setSelectedChildId] = useState<string | null>(null);
 
-  const { userId, profiles, activeProfileId, clearAuth, token, removeProfile } = useAppStore();
+  const { userId, profiles, activeProfileId, clearAuth, token, removeProfile, selectedBranchId, selectedBranchName, setSelectedBranch } = useAppStore();
   const activeProfile = profiles.find((p) => p.profileId === activeProfileId);
   const preferredGenres = activeProfile?.preferredGenres?.length
     ? activeProfile.preferredGenres
@@ -247,9 +256,25 @@ export default function UserHome() {
   const [recommended, setRecommended] = useState<Book[]>([]);
   const [newArrivals, setNewArrivals] = useState<Book[]>([]);
   const [allBooks, setAllBooks] = useState<Book[]>([]);
+  const [smartRecommendations, setSmartRecommendations] = useState<Book[]>([]);
   const [searchResults, setSearchResults] = useState<Book[]>([]);
   const [activeIssues, setActiveIssues] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [branches, setBranches] = useState<any[]>([]);
+
+  // Fetch branches and auto-select
+  useEffect(() => {
+    let active = true;
+    axiosInstance.get('/libraries').then(res => {
+      if (active && res.data?.data?.libraries) {
+        setBranches(res.data.data.libraries);
+        if (!selectedBranchId && res.data.data.libraries.length > 0) {
+          setSelectedBranch(res.data.data.libraries[0]._id, res.data.data.libraries[0].name);
+        }
+      }
+    }).catch(console.error);
+    return () => { active = false; };
+  }, [selectedBranchId]);
 
   // Fetch initial sections
   useEffect(() => {
@@ -260,6 +285,7 @@ export default function UserHome() {
         const recRes = await bookService.getBooks({
           genre: preferredGenres,
           limit: 10,
+          branchId: selectedBranchId || undefined,
           ...ageFilter,
         });
         if (active) setRecommended((recRes?.data?.books || []).map(mapBook));
@@ -267,9 +293,22 @@ export default function UserHome() {
         const newRes = await bookService.getBooks({
           daysAgo: 10,
           limit: 10,
+          branchId: selectedBranchId || undefined,
           ...ageFilter,
         });
         if (active) setNewArrivals((newRes?.data?.books || []).map(mapBook));
+
+        // ── Owl's LangChain Smart Picks ──
+        try {
+          if (selectedBranchId && userId && activeProfileId) {
+            const smartRes = await axiosInstance.get(`/books/smart-recommendations?branchId=${selectedBranchId}&userId=${userId}&profileId=${activeProfileId}`);
+            if (active && smartRes?.data?.data?.books) {
+              setSmartRecommendations(smartRes.data.data.books.map(mapBook));
+            }
+          }
+        } catch (e) {
+          console.warn("Smart picks err", e);
+        }
 
         if (activeProfile?.profileId && userId) {
           const issuesRes = await issueService.getUserIssues(
@@ -301,6 +340,7 @@ export default function UserHome() {
       try {
         const res = await bookService.getBooks({
           limit: 100,
+          branchId: selectedBranchId || undefined,
           ...ageFilter,
         });
         if (active) setAllBooks((res?.data?.books || []).map(mapBook));
@@ -326,6 +366,7 @@ export default function UserHome() {
         const res = await bookService.getBooks({
           search: query,
           limit: 20,
+          branchId: selectedBranchId || undefined,
           ...ageFilter,
         });
         if (active) setSearchResults((res?.data?.books || []).map(mapBook));
@@ -566,7 +607,26 @@ export default function UserHome() {
             <Text style={s.greeting}>
               Hello, {activeProfile?.name || "Priya"}
             </Text>
-            <Text style={s.subGreeting}>What are you looking for today?</Text>
+            {branches.length > 0 ? (
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 4 }}>
+                {branches.map(b => (
+                  <TouchableOpacity 
+                    key={b._id} 
+                    onPress={() => setSelectedBranch(b._id, b.name)}
+                    style={{
+                      paddingHorizontal: 8, paddingVertical: 4, borderRadius: 12, marginRight: 6,
+                      backgroundColor: selectedBranchId === b._id ? Colors.accentSage : 'transparent',
+                      borderWidth: 1, borderColor: selectedBranchId === b._id ? Colors.accentSage : Colors.cardBorder
+                    }}>
+                    <Text style={{fontSize: 11, fontWeight: '600', color: selectedBranchId === b._id ? '#fff' : Colors.textMuted}}>
+                      📍 {b.name}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            ) : (
+              <Text style={s.subGreeting}>What are you looking for today?</Text>
+            )}
           </View>
           <TouchableOpacity
             style={s.profileBtn}
@@ -813,6 +873,26 @@ export default function UserHome() {
               </TouchableOpacity>
             )}
 
+            {/* ── Owl's LangChain Smart Picks ── */}
+            {smartRecommendations.length > 0 && (
+              <View style={s.section}>
+                <SectionHeader title="🦉 Owl's Smart Picks" />
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={{ gap: Spacing.md }}
+                >
+                  {smartRecommendations.map((b) => (
+                    <HorizBookCard
+                      key={b.id}
+                      book={b}
+                      onPress={() => router.push(`/(user)/book/${b.id}`)}
+                    />
+                  ))}
+                </ScrollView>
+              </View>
+            )}
+
             {/* ── Based on Your Preferences ── */}
             {recommended.length > 0 && (
               <View style={s.section}>
@@ -896,6 +976,23 @@ export default function UserHome() {
       </ScrollView>
 
       {Platform.OS !== 'web' && <NavBar role="user" active="home" />}
+
+      {/* ── Chatbot FAB ── */}
+      <TouchableOpacity 
+        style={{
+          position: 'absolute', bottom: Platform.OS !== 'web' ? 100 : 28, right: 24,
+          backgroundColor: Colors.accentSage,
+          borderRadius: Radius.full,
+          paddingVertical: 12, paddingHorizontal: 18,
+          flexDirection: 'row', alignItems: 'center', gap: 6,
+          boxShadow: '0px 4px 12px rgba(74, 124, 89, 0.4)', elevation: 8
+        }} 
+        activeOpacity={0.85}
+        onPress={() => router.push('/(user)/owl')}
+      >
+        <Text style={{ fontSize: 22 }}>🦉</Text>
+        <Text style={{ fontSize: Typography.label + 1, fontWeight: '800', color: Colors.textOnDark }}>Ask Owl</Text>
+      </TouchableOpacity>
     </SafeAreaView>
   );
 }

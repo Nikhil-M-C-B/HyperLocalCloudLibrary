@@ -303,7 +303,7 @@ export default function ChildHome() {
       {Platform.OS !== 'web' && <NavBar role="child" active="home" />}
 
       {/* ── Chatbot FAB ── */}
-      <TouchableOpacity style={s.fab} activeOpacity={0.85}>
+      <TouchableOpacity style={s.fab} activeOpacity={0.85} onPress={() => router.push('/(child)/owl')}>
         <Text style={s.fabEmoji}>🦉</Text>
         <Text style={s.fabLabel}>Ask Owl</Text>
       </TouchableOpacity>

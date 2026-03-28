@@ -76,7 +76,7 @@ const sc = StyleSheet.create({
 export default function ChildBookDetail() {
   const { id, viewingChildId } = useLocalSearchParams<{ id: string; viewingChildId?: string }>();
   const router = useRouter();
-  const { profiles, activeProfileId } = useAppStore();
+  const { profiles, activeProfileId, userId } = useAppStore();
 
   // Derive the same age cap used in ChildHome so similar-books respect the child's age.
   const activeProfile = profiles.find(p => p.profileId === activeProfileId);
@@ -162,6 +162,10 @@ export default function ChildBookDetail() {
       try {
         const response = await bookService.getBookById(id as string);
         if (active && response.data?.book) {
+          // Telemetry: Log view activity for the Smart Recommendation AI
+          if (userId && activeProfileId) {
+             axiosInstance.post(`/users/${userId}/profiles/${activeProfileId}/activity`, { bookId: id, action: 'VIEW' }).catch(() => {});
+          }
           setBook(mapBook(response.data.book));
 
           axiosInstance.get(`/books/${id}/reviews`).then(revRes => {
@@ -198,7 +202,7 @@ export default function ChildBookDetail() {
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={s.scroll}>
 
         {/* Back */}
-        <TouchableOpacity style={s.backBtn} onPress={() => router.back()}>
+        <TouchableOpacity style={s.backBtn} onPress={() => { if (router.canGoBack()) { router.back(); } else { router.replace('/(child)'); } }}>
           <Text style={s.backText}>← Back</Text>
         </TouchableOpacity>
 

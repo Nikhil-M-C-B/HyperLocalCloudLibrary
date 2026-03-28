@@ -21,6 +21,8 @@ export interface Book {
   keyWords: string[];
   coverImage?: string;
   isbn?: string;
+  availableAtSelectedBranch?: boolean;
+  otherBranchNames?: string[];
 }
 
 export const MOCK_BOOKS: Book[] = [

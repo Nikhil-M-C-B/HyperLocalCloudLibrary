@@ -18,7 +18,7 @@ const BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:5000/api/v
 
 const axiosInstance = axios.create({
     baseURL: BASE_URL,
-    timeout: 5000, // 5 seconds — fail fast on slow networks
+    timeout: 120000, // 2 minutes — accommodate LangChain generative delays
     headers: {
         'Content-Type': 'application/json',
     },
