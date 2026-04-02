@@ -18,6 +18,7 @@ exports.getAllBooks = catchAsync(async (req, res) => {
     sort:     req.query.sort,
     limit:    req.query.limit,
     daysAgo:  req.query.daysAgo,
+    branchId: req.query.branchId,
   };
 
   const books = await bookService.getAllBooks(filters);
@@ -27,6 +28,61 @@ exports.getAllBooks = catchAsync(async (req, res) => {
     results: books.length,
     data: { books },
   });
+});
+
+/**
+ * Get Smart AI Recommendations
+ * GET /books/smart-recommendations
+ */
+exports.getSmartRecommendations = catchAsync(async (req, res) => {
+  const { branchId, profileId, userId } = req.query;
+  const aiService = require('../services/aiService');
+  const recommendations = await aiService.getSmartRecommendations(userId, profileId, branchId);
+  res.status(200).json({
+    status: "success",
+    results: recommendations.length,
+    data: { books: recommendations },
+  });
+});
+
+/**
+ * Chat with Owl AI
+ * POST /books/chat
+ */
+exports.chatWithOwl = catchAsync(async (req, res) => {
+  const { messages, branchId, profileId, userId } = req.body;
+  const aiService = require('../services/aiService');
+  const reply = await aiService.chatWithOwl(userId, profileId, branchId, messages);
+  res.status(200).json({
+    status: "success",
+    data: { reply },
+  });
+});
+
+/**
+ * Chat with Owl AI (Streaming SSE)
+ * POST /books/chat/stream
+ */
+exports.streamChatWithOwl = catchAsync(async (req, res) => {
+  const { messages, branchId, profileId, userId } = req.body;
+  const aiService = require('../services/aiService');
+  
+  // Establish Server-Sent Events Connection
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.flushHeaders();
+
+  const stream = await aiService.streamChatWithOwl(userId, profileId, branchId, messages);
+
+  for await (const chunk of stream) {
+    if (chunk) {
+      res.write(`data: ${JSON.stringify({ text: chunk })}\n\n`);
+    }
+  }
+
+  res.write('data: [DONE]\n\n');
+  res.end();
 });
 
 /**

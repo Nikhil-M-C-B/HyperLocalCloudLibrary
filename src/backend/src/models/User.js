@@ -45,6 +45,23 @@ const profileSchema = new mongoose.Schema(
         },
       },
     ],
+    recentActivity: [
+      {
+        bookId: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "Book",
+        },
+        action: {
+          type: String,
+          enum: ["VIEW", "SEARCH"],
+          default: "VIEW"
+        },
+        timestamp: {
+          type: Date,
+          default: Date.now,
+        },
+      },
+    ],
     screenTime: {
       type: Number,
       default: 0, // in minutes

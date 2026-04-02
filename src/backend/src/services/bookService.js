@@ -43,6 +43,13 @@ exports.getAllBooks = async (filters = {}) => {
     ];
   }
 
+  // Contextual Library Pre-filter (only if NOT searching globally)
+  if (filters.branchId && !filters.search) {
+    // Restrict query to books physically available at this exact branch strictly before MongoDB pagination executes
+    const validBookIds = await BookCopy.find({ branchId: filters.branchId, status: "AVAILABLE" }).distinct("bookId");
+    query._id = { $in: validBookIds };
+  }
+
   if (filters.daysAgo) {
     const date = new Date();
     date.setDate(date.getDate() - parseInt(filters.daysAgo));
@@ -54,18 +61,39 @@ exports.getAllBooks = async (filters = {}) => {
     .limit(parseInt(filters.limit) || 50)
     .lean();
 
-  // Attach available copies count from BookCopy collection
+  // Attach available copies count from BookCopy collection and annotate branches for frontend Contextual UI
   const bookIds = books.map((b) => b._id);
   const copiesAgg = await BookCopy.aggregate([
     { $match: { bookId: { $in: bookIds }, status: "AVAILABLE" } },
-    { $group: { _id: "$bookId", count: { $sum: 1 } } },
+    { $group: { _id: "$bookId", count: { $sum: 1 }, branchIds: { $addToSet: "$branchId" } } },
   ]);
+  
+  const LibraryBranch = require("../models/LibraryBranch");
+  const branches = await LibraryBranch.find({ status: "ACTIVE" }).lean();
+  const branchMap = {};
+  branches.forEach(b => branchMap[b._id.toString()] = b.name);
+
   const copiesMap = {};
   copiesAgg.forEach((c) => {
-    copiesMap[c._id.toString()] = c.count;
+    copiesMap[c._id.toString()] = {
+      count: c.count,
+      branches: c.branchIds.map(id => id.toString()),
+      branchNames: c.branchIds.map(id => branchMap[id.toString()]).filter(Boolean)
+    };
   });
+
   books.forEach((b) => {
-    b.availableCopies = copiesMap[b._id.toString()] || 0;
+    const stats = copiesMap[b._id.toString()] || { count: 0, branches: [], branchNames: [] };
+    b.availableCopies = stats.count;
+    
+    // Inject dynamic contextual rendering flags for the frontend
+    if (filters.branchId) {
+      b.availableAtSelectedBranch = stats.branches.includes(filters.branchId);
+      b.otherBranchNames = stats.branchNames.filter(name => name !== branchMap[filters.branchId]);
+    } else {
+      b.availableAtSelectedBranch = true;
+      b.otherBranchNames = stats.branchNames;
+    }
   });
 
   return books;

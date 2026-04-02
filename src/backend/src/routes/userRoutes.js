@@ -102,5 +102,9 @@ router.get(
   "/:userId/profiles/:profileId/history",
   userController.getReadingHistory,
 );
+router.post(
+  "/:userId/profiles/:profileId/activity",
+  userController.logActivity,
+);
 
 module.exports = router;

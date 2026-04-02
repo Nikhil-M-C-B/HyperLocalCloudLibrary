@@ -216,3 +216,30 @@ exports.checkDeliveryEligibility = catchAsync(async (req, res) => {
     },
   });
 });
+
+/**
+ * Log user activity (views, searches)
+ * POST /users/:userId/profiles/:profileId/activity
+ */
+exports.logActivity = catchAsync(async (req, res) => {
+  const { bookId, action } = req.body;
+  const user = await require('../models/User').findOne({ 
+    _id: req.params.userId,
+    "profiles.profileId": req.params.profileId 
+  });
+  if (!user) {
+    return res.status(404).json({ status: "fail", message: "User or profile not found" });
+  }
+  
+  const profile = user.profiles.find(p => p.profileId.toString() === req.params.profileId);
+  if (profile) {
+    profile.recentActivity.push({ bookId, action: action || 'VIEW' });
+    if (profile.recentActivity.length > 20) {
+      profile.recentActivity = profile.recentActivity.slice(-20);
+    }
+    await user.save();
+  }
+  
+  res.status(200).json({ status: "success", data: null });
+});
+
