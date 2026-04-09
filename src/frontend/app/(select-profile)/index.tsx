@@ -1,20 +1,14 @@
-import GenreSelector from "@/components/GenreSelector";
-import LanguageSelector from "@/components/LanguageSelector";
+import PersonalizedQuestionnaire from "@/components/PersonalizedQuestionnaire";
 import { API_BASE_URL } from "@/constants/config";
 import { Colors, Radius, Spacing, Typography } from "@/constants/theme";
 import useAppStore, { AppProfile, numToAgeGroup } from "@/store/useAppStore";
 import { useRouter } from "expo-router";
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
-    ActivityIndicator,
     Dimensions,
     FlatList,
-    KeyboardAvoidingView,
-    Modal,
-    Platform,
     StyleSheet,
     Text,
-    TextInput,
     TouchableOpacity,
     View,
 } from "react-native";
@@ -107,20 +101,44 @@ function AddProfileCard({ onPress }: { onPress: () => void }) {
 
 export default function SelectProfileScreen() {
   const router = useRouter();
-  const { profiles, clearAuth, addProfile, userId, token, setActiveProfile } =
+  const {
+    profiles,
+    clearAuth,
+    addProfile,
+    updateProfile,
+    userId,
+    token,
+    setActiveProfile,
+  } =
     useAppStore();
 
-  // Modal State
-  const [modalVisible, setModalVisible] = useState(false);
-  const [step, setStep] = useState<0 | 1 | 2>(0); // 0 = details, 1 = language, 2 = genres
-  const [name, setName] = useState("");
-  const [age, setAge] = useState("");
-  const [languages, setLanguages] = useState<string[]>([]);
-  const [genres, setGenres] = useState<string[]>([]);
-  const [error, setError] = useState("");
-  const [saving, setSaving] = useState(false);
+  const [questionnaireContext, setQuestionnaireContext] = useState<
+    { mode: "create" } | { mode: "complete"; profile: AppProfile } | null
+  >(null);
+
+  const isProfileIncomplete = (profile: AppProfile) => {
+    const hasGenres = (profile.preferredGenres?.length || 0) > 0;
+    const hasLanguages = (profile.preferredLanguages?.length || 0) > 0;
+    return !hasGenres || !hasLanguages;
+  };
+
+  const firstIncompleteProfile = useMemo(
+    () => profiles.find((profile) => isProfileIncomplete(profile)),
+    [profiles],
+  );
+
+  useEffect(() => {
+    if (!questionnaireContext && firstIncompleteProfile) {
+      setQuestionnaireContext({ mode: "complete", profile: firstIncompleteProfile });
+    }
+  }, [questionnaireContext, firstIncompleteProfile]);
 
   const handleSelectProfile = async (profile: AppProfile) => {
+    if (isProfileIncomplete(profile)) {
+      setQuestionnaireContext({ mode: "complete", profile });
+      return;
+    }
+
     await setActiveProfile(profile.profileId);
     if (profile.accountType === "CHILD") {
       router.replace("/(child)");
@@ -135,47 +153,61 @@ export default function SelectProfileScreen() {
     router.replace("/(auth)/welcome");
   };
 
-  const handleNextStep = () => {
-    if (step === 0) {
-      if (!name.trim()) {
-        setError("Please enter a name.");
-        return;
-      }
-      const ageNum = parseInt(age, 10);
-      if (!age || isNaN(ageNum) || ageNum < 1 || ageNum > 120) {
-        setError("Please enter a valid age.");
-        return;
-      }
-      setError("");
-      setStep(1);
-      return;
-    }
-    if (step === 1) {
-      if (languages.length < 1) {
-        setError("Please select at least 1 language.");
-        return;
-      }
-      setError("");
-      setStep(2);
-      return;
-    }
-    // Step 2 -> Save
-    if (genres.length < 1) {
-      setError("Please select at least 1 genre.");
-      return;
-    }
-    handleSaveProfile();
-  };
+  const handleQuestionnaireComplete = async (
+    responses: Record<string, any>,
+    profileData: any,
+  ) => {
+    const age = parseInt(String(responses.age || ""), 10);
+    const safeAge = Number.isNaN(age) ? 18 : age;
+    const ageGroup = numToAgeGroup(safeAge);
+    const accountType = ageGroup === "15+" ? "PARENT" : "CHILD";
 
-  const handleSaveProfile = async () => {
-    setError("");
-    setSaving(true);
-    const ageNum = parseInt(age, 10);
-    const ageGroup = numToAgeGroup(ageNum);
+    if (questionnaireContext?.mode === "complete") {
+      const profileToUpdate = questionnaireContext.profile;
+
+      try {
+        const res = await fetch(
+          `${API_BASE_URL}/users/${userId}/profiles/${profileToUpdate.profileId}`,
+          {
+            method: "PUT",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({
+              name: profileData.name || profileToUpdate.name,
+              ageGroup,
+              preferredGenres: profileData.preferredGenres || [],
+              preferredLanguages: profileData.preferredLanguages || [],
+            }),
+          },
+        );
+
+        if (!res.ok) throw new Error("Profile update failed");
+      } catch (err) {
+        console.error("Profile questionnaire update failed:", err);
+      }
+
+      await updateProfile(profileToUpdate.profileId, {
+        name: profileData.name || profileToUpdate.name,
+        age: safeAge,
+        ageGroup,
+        preferredGenres: profileData.preferredGenres || [],
+        preferredLanguages: profileData.preferredLanguages || [],
+      });
+
+      setQuestionnaireContext(null);
+      await setActiveProfile(profileToUpdate.profileId);
+      if (profileToUpdate.accountType === "CHILD") {
+        router.replace("/(child)");
+      } else {
+        router.replace("/(user)");
+      }
+      return;
+    }
 
     try {
-      // "15+" profiles get the adult view but with a content filter for 16+/18+ books.
-      const accountType = ageGroup === '15+' ? 'PARENT' : 'CHILD';
+      // Save to backend
       const res = await fetch(`${API_BASE_URL}/users/${userId}/children`, {
         method: "POST",
         headers: {
@@ -183,53 +215,85 @@ export default function SelectProfileScreen() {
           Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
-          name: name.trim(),
+          name: profileData.name,
           ageGroup,
-          preferredGenres: genres,
-          preferredLanguages: languages,
+          preferredGenres: profileData.preferredGenres || [],
+          preferredLanguages: profileData.preferredLanguages || [],
         }),
       });
+
+      if (!res.ok) throw new Error('Backend save failed');
+
       const json = await res.json();
       const backendProfile = json?.data?.profile;
+
+      // Update local store
       await addProfile({
-        profileId:
-          backendProfile?.profileId ?? String(Date.now() + Math.random()),
-        name: name.trim(),
+        profileId: backendProfile?.profileId ?? String(Date.now() + Math.random()),
+        name: profileData.name,
         accountType: backendProfile?.accountType ?? accountType,
         ageGroup,
-        age: ageNum,
-        preferredGenres: genres,
-        preferredLanguages: languages,
+        age: safeAge,
+        preferredGenres: profileData.preferredGenres || [],
+        preferredLanguages: profileData.preferredLanguages || [],
       });
-    } catch {
+
+      handleCloseModal();
+    } catch (err) {
+      console.error('Profile save error:', err);
+      // Fallback: save locally
+      const age = parseInt(responses.age, 10);
+      const ageGroup = numToAgeGroup(age);
       const accountType = ageGroup === '15+' ? 'PARENT' : 'CHILD';
+      
       await addProfile({
         profileId: String(Date.now() + Math.random()),
-        name: name.trim(),
+        name: profileData.name,
         accountType,
         ageGroup,
-        age: ageNum,
-        preferredGenres: genres,
-        preferredLanguages: languages,
+        age: safeAge,
+        preferredGenres: profileData.preferredGenres || [],
+        preferredLanguages: profileData.preferredLanguages || [],
       });
-    } finally {
-      setSaving(false);
+
       handleCloseModal();
     }
   };
-
+  
   const handleCloseModal = () => {
-    setModalVisible(false);
-    setStep(0);
-    setName("");
-    setAge("");
-    setLanguages([]);
-    setGenres([]);
-    setError("");
+    setQuestionnaireContext(null);
   };
 
   type ListItem = AppProfile | { id: "__add__" };
   const data: ListItem[] = [...profiles, { id: "__add__" } as any];
+
+  if (questionnaireContext) {
+    const isCompleteMode = questionnaireContext.mode === "complete";
+    const currentProfile = isCompleteMode
+      ? (questionnaireContext as { mode: "complete"; profile: AppProfile }).profile
+      : null;
+
+    const forcedAccountType = currentProfile
+      ? currentProfile.age >= 15
+        ? "PARENT"
+        : "CHILD"
+      : undefined;
+
+    return (
+      <SafeAreaView style={s.safe}>
+        <PersonalizedQuestionnaire
+          forcedAccountType={forcedAccountType}
+          initialResponses={
+            currentProfile
+              ? { name: currentProfile.name, age: String(currentProfile.age || "") }
+              : undefined
+          }
+          onComplete={handleQuestionnaireComplete}
+          onCancel={handleCloseModal}
+        />
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={s.safe}>
@@ -250,8 +314,7 @@ export default function SelectProfileScreen() {
           (item as any).id === "__add__" ? (
             <AddProfileCard
               onPress={() => {
-                setError("");
-                setModalVisible(true);
+                setQuestionnaireContext({ mode: "create" });
               }}
             />
           ) : (
@@ -267,111 +330,6 @@ export default function SelectProfileScreen() {
       <TouchableOpacity style={s.signOutBtn} onPress={handleSignOut}>
         <Text style={s.signOutText}>← Sign out</Text>
       </TouchableOpacity>
-
-      {/* ── Add Profile Modal ── */}
-      <Modal
-        transparent
-        visible={modalVisible}
-        animationType="fade"
-        onRequestClose={handleCloseModal}
-      >
-        <View style={s.modalOverlay}>
-          <KeyboardAvoidingView
-            behavior={Platform.OS === "ios" ? "padding" : "height"}
-            style={s.modalCenter}
-          >
-            <View style={s.modalCard}>
-              {step === 0 && (
-                <>
-                  <Text style={s.modalTitle}>Add a profile</Text>
-                  <Text style={s.modalSubtitle}>
-                    For a child or another family member
-                  </Text>
-
-                  <View style={{ gap: Spacing.xs }}>
-                    <Text style={s.label}>Name</Text>
-                    <TextInput
-                      style={s.input}
-                      placeholder="e.g. Aarav"
-                      placeholderTextColor={Colors.textMuted}
-                      autoCapitalize="words"
-                      value={name}
-                      onChangeText={setName}
-                    />
-                  </View>
-
-                  <View style={{ gap: Spacing.xs }}>
-                    <Text style={s.label}>Age</Text>
-                    <TextInput
-                      style={s.input}
-                      placeholder="e.g. 8"
-                      placeholderTextColor={Colors.textMuted}
-                      keyboardType="number-pad"
-                      maxLength={3}
-                      value={age}
-                      onChangeText={(text) => setAge(text.replace(/[^0-9]/g, ''))}
-                    />
-                  </View>
-                </>
-              )}
-
-              {step === 1 && (
-                <View style={{ paddingVertical: Spacing.md }}>
-                  <LanguageSelector
-                    selectedLanguages={languages}
-                    onLanguagesChange={setLanguages}
-                  />
-                </View>
-              )}
-
-              {step === 2 && (
-                <View style={{ paddingVertical: Spacing.md }}>
-                  <GenreSelector
-                    selectedGenres={genres}
-                    onGenresChange={setGenres}
-                    isChild={parseInt(age, 10) <= 12}
-                  />
-                </View>
-              )}
-
-              {error ? <Text style={s.errorText}>{error}</Text> : null}
-
-              <View style={{ flexDirection: "row", gap: Spacing.sm }}>
-                <TouchableOpacity
-                  style={[
-                    s.btnPrimary,
-                    { flex: 1 },
-                    saving && { opacity: 0.7 },
-                  ]}
-                  activeOpacity={0.82}
-                  onPress={handleNextStep}
-                  disabled={saving}
-                >
-                  {saving ? (
-                    <ActivityIndicator color={Colors.buttonPrimaryText} />
-                  ) : (
-                    <Text style={s.btnPrimaryText}>
-                      {step === 2 ? "Add Profile" : "Next →"}
-                    </Text>
-                  )}
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[s.btnCancel, { flex: 1 }]}
-                  onPress={() =>
-                    step > 0
-                      ? setStep((s) => (s - 1) as any)
-                      : handleCloseModal()
-                  }
-                >
-                  <Text style={s.btnCancelText}>
-                    {step > 0 ? "Back" : "Cancel"}
-                  </Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          </KeyboardAvoidingView>
-        </View>
-      </Modal>
     </SafeAreaView>
   );
 }

@@ -49,6 +49,10 @@ interface AppStore {
   addProfile: (
     profile: Omit<AppProfile, "age"> & { age?: number },
   ) => Promise<void>;
+  updateProfile: (
+    profileId: string,
+    updates: Partial<Omit<AppProfile, "profileId">>,
+  ) => Promise<void>;
   removeProfile: (profileId: string) => Promise<void>;
   setActiveProfile: (profileId: string) => Promise<void>;
   clearAuth: () => Promise<void>;
@@ -160,6 +164,29 @@ const useAppStore = create<AppStore>((set, get) => ({
       preferredLanguages: profile.preferredLanguages ?? [],
     };
     const profiles = [...get().profiles, p];
+    set({ profiles });
+    try {
+      const json = await AsyncStorage.getItem(STORAGE_KEY);
+      if (json) {
+        const data = JSON.parse(json);
+        await AsyncStorage.setItem(
+          STORAGE_KEY,
+          JSON.stringify({ ...data, profiles }),
+        );
+      }
+    } catch {
+      /* non-critical */
+    }
+  },
+
+  updateProfile: async (profileId, updates) => {
+    const profiles = get().profiles.map((profile) => {
+      if (profile.profileId !== profileId) return profile;
+      return {
+        ...profile,
+        ...updates,
+      };
+    });
     set({ profiles });
     try {
       const json = await AsyncStorage.getItem(STORAGE_KEY);
