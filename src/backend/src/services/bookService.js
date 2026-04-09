@@ -4,11 +4,45 @@ const AppError = require("../utils/AppError");
 const bookMetadataService = require("./bookMetadataService");
 const s3Service = require("./s3Service");
 
+async function getBranchScope(filters = {}) {
+  const mongoose = require("mongoose");
+  let branchIds = Array.isArray(filters.branchIds) && filters.branchIds.length > 0
+    ? filters.branchIds
+    : filters.branchId
+      ? [filters.branchId]
+      : [];
+
+  // Radial filtering: If no specific branch is selected but user coords are provided,
+  // limit scope to branches within 8km.
+  if (branchIds.length === 0 && filters.lat && filters.lng) {
+    const LibraryBranch = require("../models/LibraryBranch");
+    const { calculateDistance } = require("../utils/haversine");
+    const lat = parseFloat(filters.lat);
+    const lng = parseFloat(filters.lng);
+
+    const allBranches = await LibraryBranch.find({ status: "ACTIVE" }).lean();
+    const nearby = allBranches.filter((b) => {
+      if (!b.location || !b.location.coordinates) return false;
+      const dist = calculateDistance(
+        lat,
+        lng,
+        b.location.coordinates[1],
+        b.location.coordinates[0],
+      );
+      return dist <= 8;
+    });
+    branchIds = nearby.map((b) => b._id.toString());
+  }
+
+  return branchIds.filter(Boolean).map(id => new mongoose.Types.ObjectId(id));
+}
+
 /**
  * Get all books with filters
  */
 exports.getAllBooks = async (filters = {}) => {
   const query = {};
+  const branchScopeIds = await getBranchScope(filters);
 
   if (filters.maxAge !== undefined || filters.minAge !== undefined) {
     query.minAge = {};
@@ -43,10 +77,12 @@ exports.getAllBooks = async (filters = {}) => {
     ];
   }
 
-  // Contextual Library Pre-filter (only if NOT searching globally)
-  if (filters.branchId && !filters.search) {
-    // Restrict query to books physically available at this exact branch strictly before MongoDB pagination executes
-    const validBookIds = await BookCopy.find({ branchId: filters.branchId, status: "AVAILABLE" }).distinct("bookId");
+  // Contextual Library Pre-filter: derive book IDs from filtered copies first.
+  if (branchScopeIds.length > 0) {
+    const validBookIds = await BookCopy.find({
+      branchId: { $in: branchScopeIds },
+      status: "AVAILABLE",
+    }).distinct("bookId");
     query._id = { $in: validBookIds };
   }
 
@@ -63,8 +99,13 @@ exports.getAllBooks = async (filters = {}) => {
 
   // Attach available copies count from BookCopy collection and annotate branches for frontend Contextual UI
   const bookIds = books.map((b) => b._id);
+  const copyMatch = { bookId: { $in: bookIds }, status: "AVAILABLE" };
+  if (branchScopeIds.length > 0) {
+    copyMatch.branchId = { $in: branchScopeIds };
+  }
+
   const copiesAgg = await BookCopy.aggregate([
-    { $match: { bookId: { $in: bookIds }, status: "AVAILABLE" } },
+    { $match: copyMatch },
     { $group: { _id: "$bookId", count: { $sum: 1 }, branchIds: { $addToSet: "$branchId" } } },
   ]);
   
@@ -87,9 +128,9 @@ exports.getAllBooks = async (filters = {}) => {
     b.availableCopies = stats.count;
     
     // Inject dynamic contextual rendering flags for the frontend
-    if (filters.branchId) {
-      b.availableAtSelectedBranch = stats.branches.includes(filters.branchId);
-      b.otherBranchNames = stats.branchNames.filter(name => name !== branchMap[filters.branchId]);
+    if (branchScopeIds.length > 0) {
+      b.availableAtSelectedBranch = stats.count > 0;
+      b.otherBranchNames = [];
     } else {
       b.availableAtSelectedBranch = true;
       b.otherBranchNames = stats.branchNames;
@@ -100,9 +141,95 @@ exports.getAllBooks = async (filters = {}) => {
 };
 
 /**
+ * Get books for a specific branch by first filtering BookCopy records.
+ */
+exports.getBooksForBranch = async (branchId, filters = {}) => {
+  const mongoose = require("mongoose");
+  // Cast to ObjectId so aggregate $match works (aggregate does NOT auto-cast like find)
+  const branchOid = new mongoose.Types.ObjectId(branchId);
+
+  const query = {};
+
+  if (filters.maxAge !== undefined || filters.minAge !== undefined) {
+    query.minAge = {};
+    if (filters.maxAge !== undefined) {
+      const maxAge = parseInt(filters.maxAge, 10);
+      if (!isNaN(maxAge)) query.minAge.$lte = maxAge;
+    }
+    if (filters.minAge !== undefined) {
+      const minAge = parseInt(filters.minAge, 10);
+      if (!isNaN(minAge)) query.minAge.$gte = minAge;
+    }
+  }
+
+  if (filters.genre) {
+    query.genre = {
+      $in: Array.isArray(filters.genre) ? filters.genre : [filters.genre],
+    };
+  }
+
+  if (filters.language) {
+    query.language = filters.language;
+  }
+
+  if (filters.search) {
+    const escapedSearch = filters.search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const searchRegex = new RegExp(escapedSearch, 'i');
+    query.$or = [
+      { title: searchRegex },
+      { author: searchRegex },
+      { summary: searchRegex },
+    ];
+  }
+
+  if (filters.daysAgo) {
+    const date = new Date();
+    date.setDate(date.getDate() - parseInt(filters.daysAgo));
+    query.createdAt = { $gte: date };
+  }
+
+  const validBookIds = await BookCopy.find({
+    branchId: branchOid,
+    status: "AVAILABLE",
+  }).distinct("bookId");
+
+  query._id = { $in: validBookIds };
+
+  const books = await Book.find(query)
+    .sort(filters.sort || "-createdAt")
+    .limit(parseInt(filters.limit) || 50)
+    .lean();
+
+  const bookIds = books.map((b) => b._id);
+  const copiesAgg = await BookCopy.aggregate([
+    {
+      $match: {
+        bookId: { $in: bookIds },
+        branchId: branchOid,
+        status: "AVAILABLE",
+      },
+    },
+    { $group: { _id: "$bookId", count: { $sum: 1 } } },
+  ]);
+
+  const copiesMap = {};
+  copiesAgg.forEach((c) => {
+    copiesMap[c._id.toString()] = c.count;
+  });
+
+  books.forEach((b) => {
+    b.availableCopies = copiesMap[b._id.toString()] || 0;
+    b.availableAtSelectedBranch = b.availableCopies > 0;
+    b.otherBranchNames = [];
+  });
+
+  return books;
+};
+
+/**
  * Get book by ID
  */
-exports.getBookById = async (bookId) => {
+exports.getBookById = async (bookId, lat, lng) => {
   const book = await Book.findById(bookId).lean();
 
   if (!book) {
@@ -110,11 +237,35 @@ exports.getBookById = async (bookId) => {
   }
 
   // Load actual available copies count
-  const availableCopiesCount = await BookCopy.countDocuments({
+  const copies = await BookCopy.find({
     bookId,
     status: "AVAILABLE",
-  });
-  book.availableCopies = availableCopiesCount;
+  }).populate("branchId");
+
+  if (lat !== undefined && lng !== undefined) {
+    const { calculateDistance } = require("../utils/haversine");
+    const userLat = parseFloat(lat);
+    const userLng = parseFloat(lng);
+
+    const localCopies = copies.filter((copy) => {
+      if (!copy.branchId || copy.branchId.status !== "ACTIVE") return false;
+      if (!copy.branchId.location || !copy.branchId.location.coordinates) return false;
+
+      const distance = calculateDistance(
+        userLat,
+        userLng,
+        copy.branchId.location.coordinates[1], // latitude
+        copy.branchId.location.coordinates[0], // longitude
+      );
+      return distance <= 8;
+    });
+
+    book.availableCopies = localCopies.length;
+    book.totalAvailable = copies.length;
+  } else {
+    book.availableCopies = copies.length;
+    book.totalAvailable = copies.length;
+  }
 
   return book;
 };

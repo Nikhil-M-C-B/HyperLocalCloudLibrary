@@ -11,6 +11,13 @@ const bookService = {
      * The response is cached in AsyncStorage by the bookStore.
      */
     getBooks: async (params = {}) => {
+        if (params?.branchId && !params?.branchIds) {
+            const branchId = params.branchId;
+            const { branchId: _branchId, ...rest } = params;
+            const response = await api.get(`/books/branch/${branchId}`, { params: rest });
+            return response.data;
+        }
+
         const response = await api.get('/books', { params });
         return response.data;
     },
@@ -27,9 +34,10 @@ const bookService = {
     /**
      * Get a single book by ID
      * @param {string} bookId 
+     * @param {object} params - Optional { lat, lng }
      */
-    getBookById: async (bookId) => {
-        const response = await api.get(`/books/${bookId}`);
+    getBookById: async (bookId, params = {}) => {
+        const response = await api.get(`/books/${bookId}`, { params });
         return response.data;
     },
 

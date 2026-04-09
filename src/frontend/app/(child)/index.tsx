@@ -79,7 +79,16 @@ function ChildBookCard({ book, onPress }: { book: Book; onPress: () => void }) {
   const stars = '★'.repeat(Math.round(book.rating)) + '☆'.repeat(5 - Math.round(book.rating));
   return (
     <TouchableOpacity style={card.wrap} activeOpacity={0.82} onPress={onPress}>
-      <BookCover book={book} width={CARD_W} height={CARD_H} fontSize={12} />
+      <View>
+        <BookCover book={book} width={CARD_W} height={CARD_H} fontSize={12} />
+        {book.availableCopies != null && (
+          <View style={card.badge}>
+            <Text style={card.badgeText}>
+              {book.availableCopies} {book.availableCopies === 1 ? 'copy' : 'copies'}
+            </Text>
+          </View>
+        )}
+      </View>
       <Text style={card.title} numberOfLines={2}>{book.title}</Text>
       <Text style={card.stars}>{stars}</Text>
     </TouchableOpacity>
@@ -89,6 +98,12 @@ const card = StyleSheet.create({
   wrap: { width: CARD_W, gap: 6 },
   title: { fontSize: Typography.label + 1, fontWeight: '700', color: Colors.textPrimary, lineHeight: 18 },
   stars: { fontSize: 12, color: Colors.accentPeach, letterSpacing: 1 },
+  badge: {
+    position: 'absolute', top: 6, right: 6,
+    backgroundColor: Colors.accentSage, borderRadius: Radius.full,
+    paddingHorizontal: 8, paddingVertical: 3,
+  },
+  badgeText: { fontSize: 10, fontWeight: '700', color: Colors.textOnDark },
 });
 
 // ─── Page dots ────────────────────────────────────────────────────────────────
@@ -124,7 +139,7 @@ function ageGroupToMaxAge(ageGroup: string | undefined): number {
 export default function ChildHome() {
   const router = useRouter();
   const { viewingChildId } = useLocalSearchParams<{ viewingChildId?: string }>();
-  const { profiles, activeProfileId, prefetchTopBooks } = useAppStore();
+  const { profiles, activeProfileId, prefetchTopBooks, selectedBranchId } = useAppStore();
   const [genre, setGenre] = useState('All');
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(0);
@@ -152,7 +167,9 @@ export default function ChildHome() {
 
     const fetchBooks = async () => {
       try {
-        const response = await bookService.getBooks({ limit: 50, maxAge: childMaxAge });
+        const params: Record<string, any> = { limit: 50, maxAge: childMaxAge };
+        if (selectedBranchId) params.branchId = selectedBranchId;
+        const response = await bookService.getBooks(params);
         if (active && response.data?.books) {
           setBooks(response.data.books.map(mapBook));
         }
@@ -162,7 +179,7 @@ export default function ChildHome() {
     };
     fetchBooks();
     return () => { active = false; };
-  }, [prefetchTopBooks, childMaxAge]);
+  }, [prefetchTopBooks, childMaxAge, selectedBranchId]);
 
   const preferredGenres = activeProfile?.preferredGenres || [];
   const firstName = (childProfile?.name ?? activeProfile?.name)?.split(' ')[0] || 'Friend';

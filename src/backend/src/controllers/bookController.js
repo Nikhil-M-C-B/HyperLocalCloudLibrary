@@ -6,6 +6,10 @@ const catchAsync = require("../utils/catchAsync");
  * GET /books
  */
 exports.getAllBooks = catchAsync(async (req, res) => {
+  const branchIds = typeof req.query.branchIds === 'string' && req.query.branchIds.trim()
+    ? req.query.branchIds.split(',').map((id) => id.trim()).filter(Boolean)
+    : undefined;
+
   const filters = {
     // Range-based age filter: show books where ageRating minimum ≤ maxAge.
     // maxAge is the child profile's upper age bound (e.g. 10 for ageGroup "8-10").
@@ -19,9 +23,37 @@ exports.getAllBooks = catchAsync(async (req, res) => {
     limit:    req.query.limit,
     daysAgo:  req.query.daysAgo,
     branchId: req.query.branchId,
+    branchIds,
+    lat:      req.query.lat,
+    lng:      req.query.lng,
   };
 
   const books = await bookService.getAllBooks(filters);
+
+  res.status(200).json({
+    status: "success",
+    results: books.length,
+    data: { books },
+  });
+});
+
+/**
+ * Get books for a specific branch
+ * GET /books/branch/:branchId
+ */
+exports.getBranchBooks = catchAsync(async (req, res) => {
+  const filters = {
+    maxAge: req.query.maxAge !== undefined ? parseInt(req.query.maxAge, 10) : undefined,
+    minAge: req.query.minAge !== undefined ? parseInt(req.query.minAge, 10) : undefined,
+    genre: req.query.genre,
+    language: req.query.language,
+    search: req.query.search,
+    sort: req.query.sort,
+    limit: req.query.limit,
+    daysAgo: req.query.daysAgo,
+  };
+
+  const books = await bookService.getBooksForBranch(req.params.branchId, filters);
 
   res.status(200).json({
     status: "success",
@@ -90,7 +122,8 @@ exports.streamChatWithOwl = catchAsync(async (req, res) => {
  * GET /books/:bookId
  */
 exports.getBook = catchAsync(async (req, res) => {
-  const book = await bookService.getBookById(req.params.bookId);
+  const { lat, lng } = req.query;
+  const book = await bookService.getBookById(req.params.bookId, lat, lng);
 
   res.status(200).json({
     status: "success",

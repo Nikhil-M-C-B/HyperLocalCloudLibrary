@@ -39,6 +39,7 @@ const updateBookSchema = Joi.object({
 
 // Public routes (anyone can browse books)
 router.get('/', bookController.getAllBooks);
+router.get('/branch/:branchId', bookController.getBranchBooks);
 router.post('/chat', protect, bookController.chatWithOwl);
 router.post('/chat/stream', protect, bookController.streamChatWithOwl);
 router.get('/smart-recommendations', protect, bookController.getSmartRecommendations);

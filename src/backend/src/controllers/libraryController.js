@@ -8,7 +8,9 @@ const catchAsync = require('../utils/catchAsync');
 exports.getAllLibraries = catchAsync(async (req, res) => {
   const filters = {
     organizationId: req.query.organizationId,
-    includeInactive: req.query.includeInactive === 'true'
+    includeInactive: req.query.includeInactive === 'true',
+    latitude: req.query.lat !== undefined ? parseFloat(req.query.lat) : undefined,
+    longitude: req.query.lng !== undefined ? parseFloat(req.query.lng) : undefined,
   };
   
   const libraries = await libraryService.getAllLibraries(filters);

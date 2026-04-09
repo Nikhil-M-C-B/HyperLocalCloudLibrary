@@ -1,6 +1,7 @@
 import bookService from "@/api/services/bookService";
 import axiosInstance from "@/api/axiosInstance";
 import issueService from "@/api/services/issueService";
+import locationService from "@/api/services/locationService";
 import { BookCover } from "@/components/BookCover";
 import { API_BASE_URL } from "@/constants/config";
 import { GENRES, type Book } from "@/constants/mockData";
@@ -9,6 +10,7 @@ import useAppStore from "@/store/useAppStore";
 import useChildTrackingStore from "@/store/useChildTrackingStore";
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 import { NavBar, NAV_BOTTOM_PAD } from "@/components/NavBar";
+import * as Location from "expo-location";
 import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import {
@@ -50,8 +52,22 @@ function mapBook(b: any): Book {
     keyWords: [],
     coverImage: b.coverImage,
     isbn: b.isbn != null ? String(b.isbn) : undefined,
+    availableAtSelectedBranch: b.availableAtSelectedBranch,
+    otherBranchNames: Array.isArray(b.otherBranchNames) ? b.otherBranchNames : [],
   };
 }
+
+function toAvailableBooks(books: any[]) {
+  return books
+    .map(mapBook)
+    .filter((book) => (book.availableCopies ?? 0) > 0);
+}
+
+type Branch = {
+  _id: string;
+  name: string;
+  distanceKm?: number | null;
+};
 
 const { width } = Dimensions.get("window");
 const HRCARD_W = 130;
@@ -260,55 +276,154 @@ export default function UserHome() {
   const [searchResults, setSearchResults] = useState<Book[]>([]);
   const [activeIssues, setActiveIssues] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [branches, setBranches] = useState<any[]>([]);
+  const [smartLoading, setSmartLoading] = useState(false);
+  const [branches, setBranches] = useState<Branch[]>([]);
+  const [branchesResolved, setBranchesResolved] = useState(false);
+  const [userCoords, setUserCoords] = useState<{ latitude: number; longitude: number } | null>(null);
 
-  // Fetch branches and auto-select
+  // Resolve reference location once so branch distances match ordering logic.
+  // Order flow uses saved delivery address (default -> first), so we mirror that.
   useEffect(() => {
     let active = true;
-    axiosInstance.get('/libraries').then(res => {
-      if (active && res.data?.data?.libraries) {
-        setBranches(res.data.data.libraries);
-        if (!selectedBranchId && res.data.data.libraries.length > 0) {
-          setSelectedBranch(res.data.data.libraries[0]._id, res.data.data.libraries[0].name);
+
+    const setCoords = (latitude: number, longitude: number) => {
+      if (!active) return;
+      setUserCoords({ latitude, longitude });
+    };
+
+    const resolveFromSavedDeliveryAddress = async (): Promise<boolean> => {
+      if (!userId) return false;
+      try {
+        const addrRes = await locationService.getDeliveryAddresses(userId);
+        const addresses = Array.isArray((addrRes as any)?.data?.addresses)
+          ? (addrRes as any).data.addresses
+          : Array.isArray((addrRes as any)?.addresses)
+            ? (addrRes as any).addresses
+          : [];
+        const selected = addresses.find((a: any) => a?.isDefault) || addresses[0];
+        const coords = selected?.location?.coordinates;
+        if (Array.isArray(coords) && coords.length === 2) {
+          setCoords(coords[1], coords[0]);
+          return true;
         }
+      } catch {
+        // Fall through to legacy field and then device GPS.
       }
-    }).catch(console.error);
+
+      try {
+        const userRes = await axiosInstance.get(`/users/${userId}`);
+        const legacyCoords = userRes?.data?.data?.user?.deliveryAddress?.location?.coordinates;
+        if (Array.isArray(legacyCoords) && legacyCoords.length === 2) {
+          setCoords(legacyCoords[1], legacyCoords[0]);
+          return true;
+        }
+      } catch {
+        // Fall back to runtime GPS.
+      }
+
+      return false;
+    };
+
+    const requestLocation = async () => {
+      try {
+        const hasSavedAddressLocation = await resolveFromSavedDeliveryAddress();
+        if (hasSavedAddressLocation) return;
+
+        const webNavigator: any = typeof globalThis !== "undefined" ? (globalThis as any).navigator : undefined;
+        if (Platform.OS === "web" && webNavigator?.geolocation) {
+          webNavigator.geolocation.getCurrentPosition(
+            (pos: any) => setCoords(pos.coords.latitude, pos.coords.longitude),
+            () => setUserCoords(null),
+            { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 },
+          );
+          return;
+        }
+
+        const { status } = await Location.requestForegroundPermissionsAsync();
+        if (status !== "granted") {
+          setUserCoords(null);
+          return;
+        }
+
+        const pos = await Location.getCurrentPositionAsync({
+          accuracy: Location.Accuracy.Balanced,
+        });
+        setCoords(pos.coords.latitude, pos.coords.longitude);
+      } catch {
+        if (active) setUserCoords(null);
+      }
+    };
+
+    requestLocation();
+    return () => {
+      active = false;
+    };
+  }, [userId]);
+
+  // Fetch branches sorted by distance when location is available.
+  useEffect(() => {
+    let active = true;
+
+    const fetchBranches = async () => {
+      try {
+        const params = userCoords
+          ? { lat: userCoords.latitude, lng: userCoords.longitude }
+          : undefined;
+        const res = await axiosInstance.get('/libraries', { params });
+        if (!active || !res.data?.data?.libraries) return;
+
+        const nextBranches = (res.data.data.libraries as Branch[]).slice();
+        setBranches(nextBranches);
+
+        if (nextBranches.length === 0) return;
+
+        const selectedExists = !!selectedBranchId && nextBranches.some((b) => b._id === selectedBranchId);
+        if (!selectedExists) {
+          setSelectedBranch(nextBranches[0]._id, nextBranches[0].name);
+        }
+      } catch (error) {
+        console.warn("Failed to fetch branches:", error);
+      } finally {
+        if (active) setBranchesResolved(true);
+      }
+    };
+
+    fetchBranches();
     return () => { active = false; };
-  }, [selectedBranchId]);
+  }, [userCoords?.latitude, userCoords?.longitude]);
 
   // Fetch initial sections
   useEffect(() => {
     let active = true;
+
+    if (!branchesResolved || (branches.length > 0 && !selectedBranchId)) {
+      setLoading(true);
+      return () => {
+        active = false;
+      };
+    }
+
     const fetchSections = async () => {
       setLoading(true);
       try {
-        const recRes = await bookService.getBooks({
-          genre: preferredGenres,
-          limit: 10,
-          branchId: selectedBranchId || undefined,
-          ...ageFilter,
-        });
-        if (active) setRecommended((recRes?.data?.books || []).map(mapBook));
+        const [recRes, newRes] = await Promise.all([
+          bookService.getBooks({
+            genre: preferredGenres,
+            limit: 10,
+            branchId: selectedBranchId || undefined,
+            ...ageFilter,
+          }),
+          bookService.getBooks({
+            limit: 10,
+            branchId: selectedBranchId || undefined,
+            ...ageFilter,
+          }),
+        ]);
 
-        const newRes = await bookService.getBooks({
-          daysAgo: 10,
-          limit: 10,
-          branchId: selectedBranchId || undefined,
-          ...ageFilter,
-        });
-        if (active) setNewArrivals((newRes?.data?.books || []).map(mapBook));
+        if (active) setRecommended(toAvailableBooks(recRes?.data?.books || []));
+        if (active) setNewArrivals(toAvailableBooks(newRes?.data?.books || []));
 
-        // ── Owl's LangChain Smart Picks ──
-        try {
-          if (selectedBranchId && userId && activeProfileId) {
-            const smartRes = await axiosInstance.get(`/books/smart-recommendations?branchId=${selectedBranchId}&userId=${userId}&profileId=${activeProfileId}`);
-            if (active && smartRes?.data?.data?.books) {
-              setSmartRecommendations(smartRes.data.data.books.map(mapBook));
-            }
-          }
-        } catch (e) {
-          console.warn("Smart picks err", e);
-        }
+        if (active) setLoading(false);
 
         if (activeProfile?.profileId && userId) {
           const issuesRes = await issueService.getUserIssues(
@@ -325,17 +440,61 @@ export default function UserHome() {
         console.warn("Failed to fetch sections:", error);
       } finally {
         if (active) setLoading(false);
+        if (active) setSmartLoading(false);
       }
     };
     fetchSections();
     return () => {
       active = false;
     };
-  }, [preferredGenres, childMaxAge, mode, selectedChildId]);
+  }, [preferredGenres, childMaxAge, mode, selectedChildId, selectedBranchId, branchesResolved, branches.length]);
+
+  // Fetch smart picks separately so they never block the main branch books.
+  useEffect(() => {
+    let active = true;
+
+    if (!branchesResolved || !selectedBranchId || !userId || !activeProfileId) {
+      setSmartRecommendations([]);
+      setSmartLoading(false);
+      return () => {
+        active = false;
+      };
+    }
+
+    const fetchSmartRecommendations = async () => {
+      try {
+        setSmartLoading(true);
+        const smartRes = await axiosInstance.get(
+          `/books/smart-recommendations?branchId=${selectedBranchId}&userId=${userId}&profileId=${activeProfileId}`,
+        );
+        if (active && smartRes?.data?.data?.books) {
+          setSmartRecommendations(toAvailableBooks(smartRes.data.data.books || []));
+        }
+      } catch (error) {
+        console.warn("Smart picks err", error);
+        if (active) setSmartRecommendations([]);
+      } finally {
+        if (active) setSmartLoading(false);
+      }
+    };
+
+    fetchSmartRecommendations();
+    return () => {
+      active = false;
+    };
+  }, [branchesResolved, selectedBranchId, userId, activeProfileId]);
 
   // Fetch all books for genre carousels
   useEffect(() => {
     let active = true;
+
+    if (!branchesResolved || (branches.length > 0 && !selectedBranchId)) {
+      setAllBooks([]);
+      return () => {
+        active = false;
+      };
+    }
+
     const fetchAllBooks = async () => {
       try {
         const res = await bookService.getBooks({
@@ -343,7 +502,7 @@ export default function UserHome() {
           branchId: selectedBranchId || undefined,
           ...ageFilter,
         });
-        if (active) setAllBooks((res?.data?.books || []).map(mapBook));
+        if (active) setAllBooks(toAvailableBooks(res?.data?.books || []));
       } catch (error) {
         console.warn("Failed to fetch books for genre browse:", error);
       }
@@ -352,11 +511,18 @@ export default function UserHome() {
     return () => {
       active = false;
     };
-  }, [childMaxAge, mode, selectedChildId]);
+  }, [childMaxAge, mode, selectedChildId, selectedBranchId, branchesResolved, branches.length]);
 
   // Fetch search results
   useEffect(() => {
     let active = true;
+    if (!branchesResolved || (branches.length > 0 && !selectedBranchId)) {
+      setSearchResults([]);
+      return () => {
+        active = false;
+      };
+    }
+
     if (!query.trim()) {
       setSearchResults([]);
       return;
@@ -369,7 +535,7 @@ export default function UserHome() {
           branchId: selectedBranchId || undefined,
           ...ageFilter,
         });
-        if (active) setSearchResults((res?.data?.books || []).map(mapBook));
+        if (active) setSearchResults(toAvailableBooks(res?.data?.books || []));
       } catch (error) {
         console.warn("Failed to fetch search results:", error);
       }
@@ -378,7 +544,7 @@ export default function UserHome() {
       active = false;
       clearTimeout(timer);
     };
-  }, [query]);
+  }, [query, childMaxAge, mode, selectedChildId, selectedBranchId, branchesResolved, branches.length]);
 
   const searching = query.trim().length > 0;
 
@@ -608,19 +774,29 @@ export default function UserHome() {
               Hello, {activeProfile?.name || "Priya"}
             </Text>
             {branches.length > 0 ? (
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 4 }}>
-                {branches.map(b => (
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                style={{ marginTop: 4 }}
+                contentContainerStyle={{ paddingRight: 6 }}
+              >
+                {branches.filter(b => (b.distanceKm ?? 0) < 8).map(b => (
                   <TouchableOpacity 
                     key={b._id} 
                     onPress={() => setSelectedBranch(b._id, b.name)}
-                    style={{
-                      paddingHorizontal: 8, paddingVertical: 4, borderRadius: 12, marginRight: 6,
-                      backgroundColor: selectedBranchId === b._id ? Colors.accentSage : 'transparent',
-                      borderWidth: 1, borderColor: selectedBranchId === b._id ? Colors.accentSage : Colors.cardBorder
-                    }}>
-                    <Text style={{fontSize: 11, fontWeight: '600', color: selectedBranchId === b._id ? '#fff' : Colors.textMuted}}>
+                    style={[
+                      s.branchPill,
+                      selectedBranchId === b._id ? s.branchPillActive : undefined,
+                    ]}
+                  >
+                    <Text style={[s.branchPillName, selectedBranchId === b._id ? s.branchPillNameActive : undefined]}>
                       📍 {b.name}
                     </Text>
+                    {typeof b.distanceKm === 'number' && (
+                      <Text style={[s.branchPillDistance, selectedBranchId === b._id ? s.branchPillDistanceActive : undefined]}>
+                        {b.distanceKm.toFixed(1)} km
+                      </Text>
+                    )}
                   </TouchableOpacity>
                 ))}
               </ScrollView>
@@ -776,7 +952,7 @@ export default function UserHome() {
                         showsHorizontalScrollIndicator={false}
                         contentContainerStyle={{ gap: Spacing.md, paddingBottom: Spacing.sm }}
                       >
-                        {childBooks.map(b => (
+                        {childBooks.slice(0, 10).map(b => (
                           <HorizBookCard
                             key={b.id}
                             book={b}
@@ -874,22 +1050,26 @@ export default function UserHome() {
             )}
 
             {/* ── Owl's LangChain Smart Picks ── */}
-            {smartRecommendations.length > 0 && (
+            {(smartRecommendations.length > 0 || smartLoading) && (
               <View style={s.section}>
                 <SectionHeader title="🦉 Owl's Smart Picks" />
-                <ScrollView
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  contentContainerStyle={{ gap: Spacing.md }}
-                >
-                  {smartRecommendations.map((b) => (
-                    <HorizBookCard
-                      key={b.id}
-                      book={b}
-                      onPress={() => router.push(`/(user)/book/${b.id}`)}
-                    />
-                  ))}
-                </ScrollView>
+                    {smartRecommendations.length === 0 && smartLoading ? (
+                      <ActivityIndicator size="small" color={Colors.accentSage} />
+                    ) : (
+                      <ScrollView
+                        horizontal
+                        showsHorizontalScrollIndicator={false}
+                        contentContainerStyle={{ gap: Spacing.md }}
+                      >
+                        {smartRecommendations.slice(0, 10).map((b) => (
+                          <HorizBookCard
+                            key={b.id}
+                            book={b}
+                            onPress={() => router.push(`/(user)/book/${b.id}`)}
+                          />
+                        ))}
+                      </ScrollView>
+                    )}
               </View>
             )}
 
@@ -902,7 +1082,7 @@ export default function UserHome() {
                   showsHorizontalScrollIndicator={false}
                   contentContainerStyle={{ gap: Spacing.md }}
                 >
-                  {recommended.map((b) => (
+                  {recommended.slice(0, 10).map((b) => (
                     <HorizBookCard
                       key={b.id}
                       book={b}
@@ -922,7 +1102,7 @@ export default function UserHome() {
                   showsHorizontalScrollIndicator={false}
                   contentContainerStyle={{ gap: Spacing.md }}
                 >
-                  {newArrivals.map((b) => (
+                  {newArrivals.slice(0, 10).map((b) => (
                     <HorizBookCard
                       key={b.id}
                       book={b}
@@ -945,7 +1125,7 @@ export default function UserHome() {
                     showsHorizontalScrollIndicator={false}
                     contentContainerStyle={{ gap: Spacing.md }}
                   >
-                    {books.map((b) => (
+                    {books.slice(0, 10).map((b) => (
                       <HorizBookCard
                         key={b.id}
                         book={b}
@@ -1030,6 +1210,39 @@ const s = StyleSheet.create({
     borderColor: Colors.cardBorder,
   },
   profileEmoji: { fontSize: 22 },
+
+  branchPill: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: Radius.full,
+    marginRight: 6,
+    backgroundColor: 'transparent',
+    borderWidth: 1,
+    borderColor: Colors.cardBorder,
+    minWidth: 88,
+  },
+  branchPillActive: {
+    backgroundColor: Colors.accentSage,
+    borderColor: Colors.accentSage,
+  },
+  branchPillName: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: Colors.textMuted,
+  },
+  branchPillNameActive: {
+    color: Colors.textOnDark,
+  },
+  branchPillDistance: {
+    fontSize: 10,
+    marginTop: 1,
+    color: Colors.textMuted,
+    opacity: 0.6,
+  },
+  branchPillDistanceActive: {
+    color: Colors.textOnDark,
+    opacity: 0.75,
+  },
 
   searchWrap: {
     flexDirection: "row",

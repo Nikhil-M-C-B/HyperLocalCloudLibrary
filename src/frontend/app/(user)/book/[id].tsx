@@ -7,6 +7,7 @@ import { Colors, Radius, Spacing, Typography } from '@/constants/theme';
 import useAppStore from '@/store/useAppStore';
 import { useFocusEffect } from '@react-navigation/native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import * as Location from 'expo-location';
 import { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
@@ -92,6 +93,64 @@ export default function UserBookDetail() {
   const [expandedReviews, setExpandedReviews] = useState<{[key: number]: boolean}>({});
   const [similarBooks, setSimilarBooks] = useState<Book[]>([]);
   const [similarGenre, setSimilarGenre] = useState<string>('');
+  const [userCoords, setUserCoords] = useState<{ latitude: number; longitude: number } | null>(null);
+
+  // ─── Resolve User Location ──────────────────────────────────────────────────
+  useEffect(() => {
+    let active = true;
+    if (!userId) {
+      setUserCoords(null);
+      return;
+    }
+
+    const resolveFromSavedDeliveryAddress = async () => {
+      try {
+        const addrRes = await axiosInstance.get(`/users/${userId}/addresses`);
+        const addresses = Array.isArray(addrRes?.data?.data?.addresses)
+          ? addrRes.data.data.addresses
+          : Array.isArray((addrRes as any)?.addresses)
+            ? (addrRes as any).addresses
+          : [];
+        const selected = addresses.find((a: any) => a?.isDefault) || addresses[0];
+        const coords = selected?.location?.coordinates;
+        if (Array.isArray(coords) && coords.length === 2 && active) {
+          setUserCoords({ latitude: coords[1], longitude: coords[0] });
+          return true;
+        }
+      } catch { /* Fall back to GPS */ }
+      return false;
+    };
+
+    const requestLocation = async () => {
+      try {
+        const hasSaved = await resolveFromSavedDeliveryAddress();
+        if (hasSaved) return;
+
+        const webNavigator: any = typeof globalThis !== "undefined" ? (globalThis as any).navigator : undefined;
+        if (Platform.OS === "web" && webNavigator?.geolocation) {
+          webNavigator.geolocation.getCurrentPosition(
+            (pos: any) => active && setUserCoords({ latitude: pos.coords.latitude, longitude: pos.coords.longitude }),
+            () => active && setUserCoords(null),
+            { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 },
+          );
+          return;
+        }
+
+        const { status } = await Location.requestForegroundPermissionsAsync();
+        if (status !== "granted") {
+          if (active) setUserCoords(null);
+          return;
+        }
+        const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+        if (active) setUserCoords({ latitude: pos.coords.latitude, longitude: pos.coords.longitude });
+      } catch {
+        if (active) setUserCoords(null);
+      }
+    };
+
+    requestLocation();
+    return () => { active = false; };
+  }, [userId]);
 
   useEffect(() => {
     if (!book || book.genres.length === 0) return;
@@ -121,15 +180,16 @@ export default function UserBookDetail() {
     const fetchSimilar = async () => {
       try {
         const genre1 = book.genres[0];
-        const res1 = await bookService.getBooks({ genre: genre1, limit: 12 });
+        const params = userCoords ? { lat: userCoords.latitude, lng: userCoords.longitude, genre: genre1, limit: 12 } : { genre: genre1, limit: 12 };
+        const res1 = await bookService.getBooks(params);
         let results: Book[] = (res1?.data?.books || [])
           .filter((b: any) => (b._id || b.id) !== book.id)
           .map(toCard);
 
-        // If first genre gives fewer than 3 results, supplement with second genre
         if (results.length < 3 && book.genres.length > 1) {
           const genre2 = book.genres[1];
-          const res2 = await bookService.getBooks({ genre: genre2, limit: 12 });
+          const params2 = userCoords ? { lat: userCoords.latitude, lng: userCoords.longitude, genre: genre2, limit: 12 } : { genre: genre2, limit: 12 };
+          const res2 = await bookService.getBooks(params2);
           const extra: Book[] = (res2?.data?.books || [])
             .filter((b: any) => (b._id || b.id) !== book.id && !results.find(r => r.id === (b._id || b.id)))
             .map(toCard);
@@ -148,7 +208,7 @@ export default function UserBookDetail() {
 
     fetchSimilar();
     return () => { active = false; };
-  }, [book?.id]);
+  }, [book?.id, userCoords]);
 
   // Re-fetch every time this screen comes into focus so availableCopies
   // reflects the latest inventory after an order is placed.
@@ -158,7 +218,8 @@ export default function UserBookDetail() {
       setLoading(true);
       const fetchBook = async () => {
         try {
-          const response = await bookService.getBookById(id as string);
+          const params = userCoords ? { lat: userCoords.latitude, lng: userCoords.longitude } : {};
+          const response = await bookService.getBookById(id as string, params);
           
           // Telemetry: Log view activity for the Smart Recommendation AI
           if (userId && activeProfileId) {
@@ -187,7 +248,7 @@ export default function UserBookDetail() {
       };
       fetchBook();
       return () => { active = false; };
-    }, [id])
+    }, [id, userCoords])
   );
 
   if (loading) {
