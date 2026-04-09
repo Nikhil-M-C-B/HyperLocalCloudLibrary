@@ -22,6 +22,8 @@ const createBookSchema = Joi.object({
   coverImage: Joi.string().optional(),
   pageCount: Joi.number().integer().optional(),
   publisher: Joi.string().optional(),
+  generatedTags: Joi.array().items(Joi.string()).optional(),
+  chatbotTags: Joi.array().items(Joi.string()).optional(),
 });
 
 const updateBookSchema = Joi.object({
@@ -34,7 +36,9 @@ const updateBookSchema = Joi.object({
   collectionName: Joi.string(),
   bookURL: Joi.string().uri().optional(),
   summary: Joi.string().max(1000).required(),
-  coverImage: Joi.string()
+  coverImage: Joi.string(),
+  generatedTags: Joi.array().items(Joi.string()).optional(),
+  chatbotTags: Joi.array().items(Joi.string()).optional(),
 });
 
 // Public routes (anyone can browse books)

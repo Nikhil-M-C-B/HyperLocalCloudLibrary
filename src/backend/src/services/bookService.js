@@ -4,6 +4,35 @@ const AppError = require("../utils/AppError");
 const bookMetadataService = require("./bookMetadataService");
 const s3Service = require("./s3Service");
 
+const tokenize = (value) =>
+  String(value || "")
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .map((token) => token.trim())
+    .filter((token) => token.length > 2);
+
+const buildGeneratedTags = (bookData = {}) => {
+  const tags = new Set();
+
+  tokenize(bookData.title).forEach((tag) => tags.add(tag));
+  tokenize(bookData.author).forEach((tag) => tags.add(tag));
+  tokenize(bookData.language).forEach((tag) => tags.add(tag));
+
+  if (Array.isArray(bookData.genre)) {
+    bookData.genre.forEach((genre) => {
+      tokenize(genre).forEach((tag) => tags.add(tag));
+      const normalizedGenre = String(genre || "").trim().toLowerCase();
+      if (normalizedGenre) tags.add(normalizedGenre);
+    });
+  }
+
+  tokenize(bookData.summary)
+    .slice(0, 20)
+    .forEach((tag) => tags.add(tag));
+
+  return Array.from(tags).slice(0, 50);
+};
+
 async function getBranchScope(filters = {}) {
   const mongoose = require("mongoose");
   let branchIds = Array.isArray(filters.branchIds) && filters.branchIds.length > 0
@@ -74,6 +103,8 @@ exports.getAllBooks = async (filters = {}) => {
       { title: searchRegex },
       { author: searchRegex },
       { summary: searchRegex },
+      { generatedTags: searchRegex },
+      { chatbotTags: searchRegex },
     ];
   }
 
@@ -179,6 +210,8 @@ exports.getBooksForBranch = async (branchId, filters = {}) => {
       { title: searchRegex },
       { author: searchRegex },
       { summary: searchRegex },
+      { generatedTags: searchRegex },
+      { chatbotTags: searchRegex },
     ];
   }
 
@@ -335,6 +368,14 @@ exports.createBook = async (bookData) => {
     data.minAge = 0;
   }
 
+  if (!data.generatedTags || data.generatedTags.length === 0) {
+    data.generatedTags = buildGeneratedTags(data);
+  }
+
+  if (!data.chatbotTags || data.chatbotTags.length === 0) {
+    data.chatbotTags = [...data.generatedTags];
+  }
+
   // Remove internal tracking field before saving
   delete data._metadataSource;
 
@@ -346,6 +387,21 @@ exports.createBook = async (bookData) => {
  * Update book (Librarian/Admin only)
  */
 exports.updateBook = async (bookId, updateData) => {
+  const shouldRegenerateTags = ["title", "author", "genre", "language", "summary"].some(
+    (field) => updateData[field] !== undefined,
+  );
+
+  if (shouldRegenerateTags && !updateData.generatedTags) {
+    const existing = await Book.findById(bookId).lean();
+    if (!existing) throw new AppError("Book not found", 404);
+    const merged = { ...existing, ...updateData };
+    updateData.generatedTags = buildGeneratedTags(merged);
+  }
+
+  if (shouldRegenerateTags && !updateData.chatbotTags) {
+    updateData.chatbotTags = [...(updateData.generatedTags || [])];
+  }
+
   const book = await Book.findByIdAndUpdate(bookId, updateData, {
     new: true,
     runValidators: true,

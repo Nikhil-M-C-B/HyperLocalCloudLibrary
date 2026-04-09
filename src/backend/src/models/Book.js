@@ -57,6 +57,22 @@ const bookSchema = new mongoose.Schema({
   publishedDate: {
     type: String,
     trim: true
+  },
+  generatedTags: {
+    type: [{
+      type: String,
+      trim: true,
+      lowercase: true
+    }],
+    default: []
+  },
+  chatbotTags: {
+    type: [{
+      type: String,
+      trim: true,
+      lowercase: true
+    }],
+    default: []
   }
 }, {
   timestamps: true
@@ -66,5 +82,7 @@ const bookSchema = new mongoose.Schema({
 bookSchema.index({ title: 'text', author: 'text' }, { language_override: 'textSearchLang' });
 bookSchema.index({ genre: 1 });
 bookSchema.index({ minAge: 1 });
+bookSchema.index({ generatedTags: 1 });
+bookSchema.index({ chatbotTags: 1 });
 
 module.exports = mongoose.model('Book', bookSchema);

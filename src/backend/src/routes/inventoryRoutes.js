@@ -11,12 +11,17 @@ const addCopiesSchema = Joi.object({
   bookId: Joi.string().required(),
   branchId: Joi.string().required(),
   quantity: Joi.number().integer().min(1).required(),
-  condition: Joi.string().valid('GOOD', 'FAIR', 'POOR').default('GOOD')
+  condition: Joi.string().valid('GOOD', 'FAIR', 'POOR').default('GOOD'),
+  shelf: Joi.string().max(100).optional(),
+  rack: Joi.string().max(100).optional(),
 });
 
 const updateStatusSchema = Joi.object({
-  status: Joi.string().valid('AVAILABLE', 'ISSUED', 'LOST', 'DAMAGED').required()
-});
+  status: Joi.string().valid('AVAILABLE', 'ISSUED', 'LOST', 'DAMAGED').optional(),
+  condition: Joi.string().valid('GOOD', 'FAIR', 'POOR').optional(),
+  shelf: Joi.string().max(100).optional(),
+  rack: Joi.string().max(100).optional(),
+}).min(1);
 
 // All routes require authentication and LIBRARIAN/ADMIN role
 router.use(protect);

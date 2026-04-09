@@ -64,6 +64,7 @@ exports.createChildProfile = async (parentId, profileData) => {
     ageGroup: profileData.ageGroup,
     preferredGenres: profileData.preferredGenres || [],
     preferredLanguages: profileData.preferredLanguages || [],
+    questionnaireResponses: profileData.questionnaireResponses || {},
     userprofileURL: profileData.userprofileURL || undefined,
   };
 
@@ -111,11 +112,20 @@ exports.updateProfile = async (userId, profileId, updateData) => {
     "ageGroup",
     "preferredGenres",
     "preferredLanguages",
+    "questionnaireResponses",
     "userprofileURL",
   ];
   Object.keys(updateData).forEach((key) => {
     if (allowedUpdates.includes(key)) {
-      profile[key] = updateData[key];
+      if (key === "questionnaireResponses") {
+        const existingResponses = profile.questionnaireResponses || {};
+        profile.questionnaireResponses = {
+          ...existingResponses,
+          ...updateData.questionnaireResponses,
+        };
+      } else {
+        profile[key] = updateData[key];
+      }
     }
   });
 

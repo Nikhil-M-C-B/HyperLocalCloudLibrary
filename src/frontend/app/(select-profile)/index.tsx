@@ -179,6 +179,10 @@ export default function SelectProfileScreen() {
               ageGroup,
               preferredGenres: profileData.preferredGenres || [],
               preferredLanguages: profileData.preferredLanguages || [],
+              questionnaireResponses: {
+                age: safeAge,
+                ...(profileData.metadata || {}),
+              },
             }),
           },
         );
@@ -219,6 +223,10 @@ export default function SelectProfileScreen() {
           ageGroup,
           preferredGenres: profileData.preferredGenres || [],
           preferredLanguages: profileData.preferredLanguages || [],
+          questionnaireResponses: {
+            age: safeAge,
+            ...(profileData.metadata || {}),
+          },
         }),
       });
 

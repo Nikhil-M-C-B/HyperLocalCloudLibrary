@@ -109,10 +109,15 @@ exports.getSmartRecommendations = async (userId, profileId, branchId) => {
   const validBookIds = await BookCopy.find({ branchId, status: "AVAILABLE" }).distinct("bookId");
   if (validBookIds.length === 0) return []; // Nothing available
   
-  const availableBooks = await Book.find({ _id: { $in: validBookIds } }, 'title author summary genre minAge').lean();
+  const availableBooks = await Book.find({ _id: { $in: validBookIds } }, 'title author summary genre minAge generatedTags chatbotTags').lean();
   if (availableBooks.length === 0) return [];
 
-  const catalogStr = availableBooks.map(b => `ID:${b._id} | Title:${b.title} | Genre:${b.genre.join(',')} | Details:${b.summary.substring(0, 100)}...`).join('\n');
+  const catalogStr = availableBooks
+    .map((b) => {
+      const tagLine = (b.chatbotTags?.length ? b.chatbotTags : b.generatedTags || []).slice(0, 10).join(', ');
+      return `ID:${b._id} | Title:${b.title} | Genre:${b.genre.join(',')} | Tags:${tagLine || 'none'} | Details:${b.summary.substring(0, 100)}...`;
+    })
+    .join('\n');
 
   // 3. Prompt Gemini AI (The 'Owl' backend)
   const prompt = `You are "Owl", a brilliant AI librarian.

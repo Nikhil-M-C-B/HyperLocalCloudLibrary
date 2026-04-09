@@ -26,6 +26,16 @@ const bookCopySchema = new mongoose.Schema({
     enum: ['GOOD', 'FAIR', 'POOR'],
     default: 'GOOD'
   },
+  shelf: {
+    type: String,
+    trim: true,
+    default: 'UNASSIGNED'
+  },
+  rack: {
+    type: String,
+    trim: true,
+    default: 'UNASSIGNED'
+  },
   lastIssuedAt: {
     type: Date
   },
@@ -38,6 +48,7 @@ const bookCopySchema = new mongoose.Schema({
 
 // Indexes for efficient queries
 bookCopySchema.index({ bookId: 1, branchId: 1 });
+bookCopySchema.index({ branchId: 1, shelf: 1, rack: 1 });
 bookCopySchema.index({ status: 1 });
 // Note: barcode index is automatically created by unique: true
 

@@ -244,7 +244,7 @@ exports.getBookReviews = catchAsync(async (req, res) => {
   }
 
   const reviewService = require('../services/reviewService');
-  const reviews = await reviewService.fetchAggregatedReviews(book.isbn);
+  const reviews = await reviewService.fetchAggregatedReviews(book.isbn, book._id);
 
   res.status(200).json({
     status: "success",
