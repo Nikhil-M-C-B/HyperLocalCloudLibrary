@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { View, Text, Platform, TextInput, TouchableOpacity, ScrollView, StyleSheet, KeyboardAvoidingView, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { NavBar, NAV_BOTTOM_PAD } from '@/components/NavBar';
+import { ChatMessageText } from '@/components/ChatMessageText';
 import { API_BASE_URL } from '@/constants/config';
 import { Colors, Radius, Spacing, Typography } from '@/constants/theme';
 import useAppStore from '@/store/useAppStore';
@@ -107,6 +108,14 @@ export default function OwlChildTab() {
             <View key={m.id} style={[s.bubble, m.role === 'user' ? s.userBubble : s.modelBubble]}>
               {m.text === "" && m.role === 'model' ? (
                 <BouncingDots />
+              ) : m.role === 'model' ? (
+                <ChatMessageText
+                  text={m.text}
+                  textStyle={s.msgText}
+                  linkStyle={s.linkText}
+                  boldStyle={s.boldText}
+                  bookRouteBase="/(child)/book/"
+                />
               ) : (
                 <Text style={[s.msgText, m.role === 'user' ? s.userMsgText : undefined]}>{m.text}</Text>
               )}
@@ -152,6 +161,8 @@ const s = StyleSheet.create({
   modelBubble: { backgroundColor: Colors.card, alignSelf: 'flex-start', borderWidth: 1, borderColor: Colors.cardBorder },
   userBubble: { backgroundColor: Colors.accentSage, alignSelf: 'flex-end', borderBottomRightRadius: 4 },
   msgText: { fontSize: Typography.bodyChild, color: Colors.textPrimary, lineHeight: 24, fontWeight: '600' },
+  linkText: { color: Colors.accentSage, textDecorationLine: 'underline', fontWeight: '800' },
+  boldText: { fontWeight: '800' },
   userMsgText: { color: Colors.textOnDark },
   inputRow: { 
     flexDirection: 'row', 

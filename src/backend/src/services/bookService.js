@@ -4,6 +4,74 @@ const AppError = require("../utils/AppError");
 const bookMetadataService = require("./bookMetadataService");
 const s3Service = require("./s3Service");
 
+const parseAgeRatingMin = (ageRating) => {
+  if (!ageRating) return null;
+  const value = String(ageRating).trim();
+  const rangeMatch = value.match(/^(\d+)\s*-\s*(\d+)$/);
+  if (rangeMatch) return parseInt(rangeMatch[1], 10);
+  const plusMatch = value.match(/^(\d+)\+$/);
+  if (plusMatch) return parseInt(plusMatch[1], 10);
+  return null;
+};
+
+const toAgeRating = (minAge) => {
+  const age = Number(minAge);
+  if (!Number.isFinite(age) || age < 0) return '0-99';
+  if (age <= 3) return '0-3';
+  if (age <= 6) return '4-6';
+  if (age <= 8) return '6-8';
+  if (age <= 10) return '8-10';
+  if (age <= 12) return '10-12';
+  if (age <= 15) return '12-15';
+  return `${Math.floor(age)}-99`;
+};
+
+const addAgeFilterToQuery = (query, filters = {}) => {
+  if (filters.maxAge === undefined && filters.minAge === undefined) {
+    return;
+  }
+
+  const exprParts = [];
+  const ageExpr = {
+    $ifNull: [
+      '$minAge',
+      {
+        $convert: {
+          input: {
+            $arrayElemAt: [
+              { $split: [{ $ifNull: ['$ageRating', '0-99'] }, '-'] },
+              0,
+            ],
+          },
+          to: 'int',
+          onError: 0,
+          onNull: 0,
+        },
+      },
+    ],
+  };
+
+  if (filters.maxAge !== undefined) {
+    const maxAge = parseInt(filters.maxAge, 10);
+    if (!isNaN(maxAge)) {
+      exprParts.push({ $lte: [ageExpr, maxAge] });
+    }
+  }
+
+  if (filters.minAge !== undefined) {
+    const minAge = parseInt(filters.minAge, 10);
+    if (!isNaN(minAge)) {
+      exprParts.push({ $gte: [ageExpr, minAge] });
+    }
+  }
+
+  if (exprParts.length === 1) {
+    query.$expr = exprParts[0];
+  } else if (exprParts.length > 1) {
+    query.$expr = { $and: exprParts };
+  }
+};
+
 const tokenize = (value) =>
   String(value || "")
     .toLowerCase()
@@ -73,17 +141,7 @@ exports.getAllBooks = async (filters = {}) => {
   const query = {};
   const branchScopeIds = await getBranchScope(filters);
 
-  if (filters.maxAge !== undefined || filters.minAge !== undefined) {
-    query.minAge = {};
-    if (filters.maxAge !== undefined) {
-      const maxAge = parseInt(filters.maxAge, 10);
-      if (!isNaN(maxAge)) query.minAge.$lte = maxAge;
-    }
-    if (filters.minAge !== undefined) {
-      const minAge = parseInt(filters.minAge, 10);
-      if (!isNaN(minAge)) query.minAge.$gte = minAge;
-    }
-  }
+  addAgeFilterToQuery(query, filters);
 
   if (filters.genre) {
     query.genre = {
@@ -181,17 +239,7 @@ exports.getBooksForBranch = async (branchId, filters = {}) => {
 
   const query = {};
 
-  if (filters.maxAge !== undefined || filters.minAge !== undefined) {
-    query.minAge = {};
-    if (filters.maxAge !== undefined) {
-      const maxAge = parseInt(filters.maxAge, 10);
-      if (!isNaN(maxAge)) query.minAge.$lte = maxAge;
-    }
-    if (filters.minAge !== undefined) {
-      const minAge = parseInt(filters.minAge, 10);
-      if (!isNaN(minAge)) query.minAge.$gte = minAge;
-    }
-  }
+  addAgeFilterToQuery(query, filters);
 
   if (filters.genre) {
     query.genre = {
@@ -331,6 +379,7 @@ exports.createBook = async (bookData) => {
         data.summary = data.summary || metadata.summary;
         data.coverImage = data.coverImage || metadata.coverImage;
         data.minAge = data.minAge !== undefined ? data.minAge : metadata.minAge;
+        data.ageRating = data.ageRating || metadata.ageRating || toAgeRating(data.minAge);
         data.publishedDate = data.publishedDate || metadata.publishedDate;
         // Store extra metadata not in the form
         data._metadataSource = metadata.source;
@@ -364,8 +413,13 @@ exports.createBook = async (bookData) => {
     );
   }
 
-  if (data.minAge === undefined) {
-    data.minAge = 0;
+  if (data.minAge === undefined || data.minAge === null) {
+    const parsedMin = parseAgeRatingMin(data.ageRating);
+    data.minAge = parsedMin !== null ? parsedMin : 0;
+  }
+
+  if (!data.ageRating) {
+    data.ageRating = toAgeRating(data.minAge);
   }
 
   if (!data.generatedTags || data.generatedTags.length === 0) {
@@ -387,6 +441,17 @@ exports.createBook = async (bookData) => {
  * Update book (Librarian/Admin only)
  */
 exports.updateBook = async (bookId, updateData) => {
+  if (updateData.ageRating && (updateData.minAge === undefined || updateData.minAge === null)) {
+    const parsedMin = parseAgeRatingMin(updateData.ageRating);
+    if (parsedMin !== null) {
+      updateData.minAge = parsedMin;
+    }
+  }
+
+  if (updateData.minAge !== undefined && !updateData.ageRating) {
+    updateData.ageRating = toAgeRating(updateData.minAge);
+  }
+
   const shouldRegenerateTags = ["title", "author", "genre", "language", "summary"].some(
     (field) => updateData[field] !== undefined,
   );
@@ -536,6 +601,30 @@ exports.checkAvailability = async (bookId, userLocation) => {
  * Get books by age rating
  */
 exports.getBooksByAge = async (minAge) => {
-  const books = await Book.find({ minAge: { $lte: minAge } }).sort("-createdAt");
+  const books = await Book.find({
+    $expr: {
+      $lte: [
+        {
+          $ifNull: [
+            '$minAge',
+            {
+              $convert: {
+                input: {
+                  $arrayElemAt: [
+                    { $split: [{ $ifNull: ['$ageRating', '0-99'] }, '-'] },
+                    0,
+                  ],
+                },
+                to: 'int',
+                onError: 0,
+                onNull: 0,
+              },
+            },
+          ],
+        },
+        minAge,
+      ],
+    },
+  }).sort("-createdAt");
   return books;
 };
