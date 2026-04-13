@@ -6,9 +6,20 @@ import { ChatMessageText } from '@/components/ChatMessageText';
 import { API_BASE_URL } from '@/constants/config';
 import { Colors, Radius, Spacing, Typography } from '@/constants/theme';
 import useAppStore from '@/store/useAppStore';
+import {
+  createInitialOwlConversation,
+  getLatestOwlConversation,
+  saveOwlConversation,
+  OwlMessage,
+} from '@/store/owlChatStore';
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 
 type Message = { id: string; role: 'model'|'user'; text: string };
+const INITIAL_MESSAGE: Message = {
+  id: '1',
+  role: 'model',
+  text: "Hoot Hoot! 🦉 I'm Owl! Do you want to find a magical story, or ask me a fun question?",
+};
 
 function BouncingDots() {
   const [dots, setDots] = useState('');
@@ -23,12 +34,53 @@ function BouncingDots() {
 
 export default function OwlChildTab() {
   const { userId, activeProfileId, selectedBranchId, token } = useAppStore();
-  const [messages, setMessages] = useState<Message[]>([
-    { id: '1', role: 'model', text: "Hoot Hoot! 🦉 I'm Owl! Do you want to find a magical story, or ask me a fun question?" }
-  ]);
+  const [messages, setMessages] = useState<Message[]>([INITIAL_MESSAGE]);
+  const [conversationId, setConversationId] = useState<string>(`conv_${Date.now()}`);
+  const [conversationCreatedAt, setConversationCreatedAt] = useState<string>(new Date().toISOString());
+  const [historyReady, setHistoryReady] = useState(false);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const scrollRef = useRef<ScrollView>(null);
+  const bottomInset = Platform.OS === 'web' ? 0 : NAV_BOTTOM_PAD + 14;
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadHistory = async () => {
+      const latest = await getLatestOwlConversation('child', userId, activeProfileId);
+      if (cancelled) return;
+
+      if (latest?.messages?.length) {
+        setConversationId(latest.id);
+        setConversationCreatedAt(latest.createdAt || new Date().toISOString());
+        setMessages(latest.messages as Message[]);
+      } else {
+        const initialConversation = createInitialOwlConversation(INITIAL_MESSAGE as OwlMessage);
+        setConversationId(initialConversation.id);
+        setConversationCreatedAt(initialConversation.createdAt);
+        setMessages(initialConversation.messages as Message[]);
+      }
+
+      setHistoryReady(true);
+    };
+
+    setHistoryReady(false);
+    loadHistory();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [userId, activeProfileId]);
+
+  useEffect(() => {
+    if (!historyReady || !messages.length) return;
+    saveOwlConversation('child', userId, activeProfileId, {
+      id: conversationId,
+      createdAt: conversationCreatedAt,
+      updatedAt: new Date().toISOString(),
+      messages: messages as OwlMessage[],
+    });
+  }, [messages, conversationId, conversationCreatedAt, historyReady, userId, activeProfileId]);
 
   const sendMessage = async () => {
     if (!input.trim() || loading) return;
@@ -46,8 +98,6 @@ export default function OwlChildTab() {
     xhr.open('POST', `${API_BASE_URL}/books/chat/stream`, true);
     xhr.setRequestHeader('Content-Type', 'application/json');
     if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`);
-
-    let accumulatedText = "";
 
     xhr.onprogress = () => {
       const lines = xhr.responseText.split('\n');
@@ -92,7 +142,7 @@ export default function OwlChildTab() {
   return (
     <SafeAreaView style={s.safe}>
       {Platform.OS === 'web' && <NavBar role="child" active="owl" />}
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1, paddingBottom: Platform.OS !== 'web' ? NAV_BOTTOM_PAD : 0 }}>
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1, paddingBottom: bottomInset }}>
         
         <View style={s.header}>
           <Text style={s.headerTitle}>🦉 Talk to Owl!</Text>
@@ -171,7 +221,8 @@ const s = StyleSheet.create({
     borderTopWidth: 1, 
     borderTopColor: Colors.cardBorder,
     alignItems: 'center',
-    gap: Spacing.sm
+    gap: Spacing.sm,
+    marginBottom: 8,
   },
   input: {
     flex: 1,

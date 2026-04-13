@@ -450,6 +450,13 @@ async function getQueryEmbedding(text) {
   return embedding;
 }
 
+exports.generateProfileEmbedding = async (text) => {
+  if (!String(text || '').trim()) {
+    return [];
+  }
+  return getQueryEmbedding(String(text));
+};
+
 async function getAvailableBookIds(branchId) {
   if (!branchId) {
     return [];

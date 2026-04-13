@@ -1,5 +1,4 @@
-import GenreSelector from "@/components/GenreSelector";
-import LanguageSelector from "@/components/LanguageSelector";
+import PersonalizedQuestionnaire from "@/components/PersonalizedQuestionnaire";
 import StepEmailVerification from "@/components/StepEmailVerification";
 import { API_BASE_URL } from "@/constants/config";
 import { Colors, Radius, Spacing, Typography } from "@/constants/theme";
@@ -25,6 +24,12 @@ interface ProfileForm {
   age: string;
   genres: string[];
   languages: string[];
+  questionnaireResponses?: Record<string, any>;
+  profilePreferences?: {
+    questionId: string;
+    question: string;
+    answer: string | string[];
+  }[];
 }
 
 function StepIndicator({ total, current }: { total: number; current: number }) {
@@ -157,81 +162,17 @@ function StepDetails({
 
 function StepAddProfile({
   profiles,
-  onAddProfile,
+  onStartAddProfile,
   onNext,
   onBack,
-  isChildStep,
   loading,
 }: {
   profiles: ProfileForm[];
-  onAddProfile: (p: ProfileForm) => void;
+  onStartAddProfile: () => void;
   onNext: () => void;
   onBack: () => void;
-  isChildStep?: boolean;
   loading?: boolean;
 }) {
-  const [adding, setAdding] = useState(false);
-  const [name, setName] = useState("");
-  const [age, setAge] = useState("");
-  const [genres, setGenres] = useState<string[]>([]);
-  const [languages, setLanguages] = useState<string[]>([]);
-  const [err, setErr] = useState("");
-  const [prefStep, setPrefStep] = useState<0 | 1 | 2>(0); // 0 = details, 1 = languages, 2 = genres
-
-  const handleNextPref = () => {
-    if (prefStep === 0) {
-      if (!name.trim()) {
-        setErr("Please enter a name.");
-        return;
-      }
-      const n = parseInt(age, 10);
-      if (!age || isNaN(n) || n < 1 || n > 120) {
-        setErr("Please enter a valid age.");
-        return;
-      }
-      setErr("");
-      setPrefStep(1); // go to languages
-      return;
-    }
-    if (prefStep === 1) {
-      if (languages.length < 1) {
-        setErr("Please select at least 1 language.");
-        return;
-      }
-      setErr("");
-      setPrefStep(2); // go to genres
-      return;
-    }
-    // prefStep === 2
-    if (genres.length < 1) {
-      setErr("Please select at least 1 genre.");
-      return;
-    }
-    setErr("");
-    onAddProfile({ name: name.trim(), age, genres, languages });
-    setName("");
-    setAge("");
-    setGenres([]);
-    setLanguages([]);
-    setAdding(false);
-    setPrefStep(0);
-  };
-
-  const handleCancel = () => {
-    if (prefStep > 0) {
-      setPrefStep((p) => (p - 1) as 0 | 1 | 2);
-      setErr("");
-      return;
-    }
-    setAdding(false);
-    setErr("");
-    setName("");
-    setAge("");
-    setGenres([]);
-    setLanguages([]);
-    setPrefStep(0);
-  };
-
   return (
     <View style={{ gap: Spacing.md }}>
       <Text style={st.stepTitle}>Add a profile</Text>
@@ -258,73 +199,9 @@ function StepAddProfile({
           </View>
         </View>
       ))}
-      {adding ? (
-        <View style={st.addForm}>
-          {prefStep === 0 && (
-            <>
-              <TextInput
-                style={st.input}
-                placeholder="Profile name (e.g. Aarav)"
-                placeholderTextColor={Colors.textMuted}
-                autoCapitalize="words"
-                value={name}
-                onChangeText={setName}
-              />
-              <TextInput
-                style={st.input}
-                placeholder="Age"
-                placeholderTextColor={Colors.textMuted}
-                keyboardType="number-pad"
-                maxLength={3}
-                value={age}
-                onChangeText={(text) => setAge(text.replace(/[^0-9]/g, ''))}
-              />
-            </>
-          )}
-          {prefStep === 1 && (
-            <LanguageSelector
-              selectedLanguages={languages}
-              onLanguagesChange={setLanguages}
-            />
-          )}
-          {prefStep === 2 && (
-            <GenreSelector
-              selectedGenres={genres}
-              onGenresChange={setGenres}
-              isChild={parseInt(age, 10) <= 12}
-            />
-          )}
-
-          {err ? <Text style={st.errorText}>{err}</Text> : null}
-          <View style={{ flexDirection: "row", gap: Spacing.sm }}>
-            <TouchableOpacity
-              style={[st.btnPrimary, { flex: 1 }]}
-              onPress={handleNextPref}
-              activeOpacity={0.82}
-            >
-              <Text style={st.btnPrimaryText}>
-                {prefStep === 2 ? "Add Profile" : "Next →"}
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[st.btnBack, { flex: 1 }]}
-              onPress={handleCancel}
-            >
-              <Text style={st.btnBackText}>
-                {prefStep === 0 ? "Cancel" : "Back"}
-              </Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      ) : (
-        <TouchableOpacity
-          style={st.addAnotherBtn}
-          onPress={() => setAdding(true)}
-        >
+        <TouchableOpacity style={st.addAnotherBtn} onPress={onStartAddProfile}>
           <Text style={st.addAnotherText}>＋ Add a profile</Text>
         </TouchableOpacity>
-      )}
-      {!adding && (
         <TouchableOpacity
           style={[st.btnPrimary, loading && { opacity: 0.7 }]}
           activeOpacity={0.82}
@@ -339,87 +216,6 @@ function StepAddProfile({
             </Text>
           )}
         </TouchableOpacity>
-      )}
-    </View>
-  );
-}
-
-function StepParentPreferences({
-  parentName,
-  onFinish,
-  onBack,
-  loading,
-}: {
-  parentName: string;
-  onFinish: (genres: string[], languages: string[]) => void;
-  onBack: () => void;
-  loading: boolean;
-}) {
-  const [genres, setGenres] = useState<string[]>([]);
-  const [languages, setLanguages] = useState<string[]>([]);
-  const [err, setErr] = useState("");
-  const [step, setStep] = useState<0 | 1>(0); // 0 = languages, 1 = genres
-
-  const handleNext = () => {
-    if (step === 0) {
-      if (languages.length < 1) {
-        setErr("Please select at least 1 language.");
-        return;
-      }
-      setErr("");
-      setStep(1);
-    } else {
-      if (genres.length < 1) {
-        setErr("Please select at least 1 genre.");
-        return;
-      }
-      setErr("");
-      onFinish(genres, languages);
-    }
-  };
-
-  return (
-    <View style={{ gap: Spacing.md }}>
-      <Text style={st.stepTitle}>Your reading taste</Text>
-      <Text style={st.stepSubtitle}>
-        Hey {parentName}! Pick what you enjoy so we can personalise your
-        experience.
-      </Text>
-
-      {step === 0 ? (
-        <LanguageSelector
-          selectedLanguages={languages}
-          onLanguagesChange={setLanguages}
-        />
-      ) : (
-        <GenreSelector
-          selectedGenres={genres}
-          onGenresChange={setGenres}
-          isChild={false}
-        />
-      )}
-
-      {err ? <Text style={st.errorText}>{err}</Text> : null}
-
-      <TouchableOpacity
-        style={[st.btnPrimary, loading && { opacity: 0.7 }]}
-        activeOpacity={0.82}
-        onPress={handleNext}
-        disabled={loading}
-      >
-        {loading ? (
-          <ActivityIndicator color={Colors.buttonPrimaryText} />
-        ) : (
-          <Text style={st.btnPrimaryText}>
-            {step === 0 ? "Next →" : "Done — Let's go!"}
-          </Text>
-        )}
-      </TouchableOpacity>
-      {step === 1 && (
-        <TouchableOpacity style={st.btnBack} onPress={() => setStep(0)}>
-          <Text style={st.btnBackText}>← Back</Text>
-        </TouchableOpacity>
-      )}
     </View>
   );
 }
@@ -443,6 +239,9 @@ export default function SignupScreen() {
   const [profiles, setProfiles] = useState<ProfileForm[]>([]);
   const [parentGenres, setParentGenres] = useState<string[]>([]);
   const [parentLanguages, setParentLanguages] = useState<string[]>([]);
+  const [parentQuestionnaireResponses, setParentQuestionnaireResponses] = useState<Record<string, any>>({});
+  const [parentProfilePreferences, setParentProfilePreferences] = useState<ProfileForm["profilePreferences"]>([]);
+  const [showAddProfileQuestionnaire, setShowAddProfileQuestionnaire] = useState(false);
   const [detailsError, setDetailsError] = useState("");
   const [loading, setLoading] = useState(false);
   const [globalError, setGlobalError] = useState("");
@@ -510,10 +309,42 @@ export default function SignupScreen() {
     setStep(2);
   };
 
-  const handlePreferencesDone = (genres: string[], languages: string[]) => {
-    setParentGenres(genres);
-    setParentLanguages(languages);
+  const handleParentQuestionnaireComplete = async (
+    responses: Record<string, any>,
+    profileData: any,
+  ) => {
+    setParentGenres(profileData.preferredGenres || []);
+    setParentLanguages(profileData.preferredLanguages || []);
+    setParentQuestionnaireResponses({
+      ...(responses || {}),
+      ...(profileData.metadata || {}),
+    });
+    setParentProfilePreferences(profileData.profilePreferences || []);
     setStep(3);
+  };
+
+  const handleAdditionalProfileQuestionnaireComplete = async (
+    responses: Record<string, any>,
+    profileData: any,
+  ) => {
+    const parsedAge = parseInt(String(responses.age || ""), 10);
+    const safeAge = Number.isNaN(parsedAge) ? 10 : parsedAge;
+
+    setProfiles((prev) => [
+      ...prev,
+      {
+        name: profileData.name || "",
+        age: String(safeAge),
+        genres: profileData.preferredGenres || [],
+        languages: profileData.preferredLanguages || [],
+        questionnaireResponses: {
+          ...(responses || {}),
+          ...(profileData.metadata || {}),
+        },
+        profilePreferences: profileData.profilePreferences || [],
+      },
+    ]);
+    setShowAddProfileQuestionnaire(false);
   };
 
   const handleFinish = async (
@@ -534,6 +365,8 @@ export default function SignupScreen() {
           role: "USER",
           preferredGenres: parentGenres,
           preferredLanguages: parentLanguages,
+          questionnaireResponses: parentQuestionnaireResponses,
+          profilePreferences: parentProfilePreferences,
           emailVerified: true,
         }),
       });
@@ -548,6 +381,47 @@ export default function SignupScreen() {
         role: "USER",
         profiles: user.profiles ?? [],
       });
+
+      const parentProfileId = user?.profiles?.[0]?.profileId;
+      if (parentProfileId) {
+        try {
+          await fetch(
+            `${API_BASE_URL}/users/${user.id}/profiles/${parentProfileId}`,
+            {
+              method: "PUT",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${token}`,
+              },
+              body: JSON.stringify({
+                name: details.name.trim(),
+                ageGroup: "15+",
+                preferredGenres: parentGenres,
+                preferredLanguages: parentLanguages,
+                questionnaireResponses: parentQuestionnaireResponses,
+                profilePreferences: parentProfilePreferences || [],
+              }),
+            },
+          );
+
+          const refreshedUserRes = await fetch(`${API_BASE_URL}/users/${user.id}`, {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          const refreshedUserJson = await refreshedUserRes.json();
+          const refreshedUser = refreshedUserJson?.data?.user;
+          if (refreshedUser) {
+            await setAuth({
+              userId: refreshedUser._id,
+              email: refreshedUser.email,
+              token,
+              role: "USER",
+              profiles: refreshedUser.profiles ?? [],
+            });
+          }
+        } catch {
+          // Non-blocking: child profile creation and onboarding should continue
+        }
+      }
 
       for (const cp of profiles) {
         const ageNum = parseInt(cp.age, 10);
@@ -568,6 +442,8 @@ export default function SignupScreen() {
                 ageGroup,
                 preferredGenres: cp.genres,
                 preferredLanguages: cp.languages,
+                questionnaireResponses: cp.questionnaireResponses || {},
+                profilePreferences: cp.profilePreferences || [],
               }),
             },
           );
@@ -582,6 +458,8 @@ export default function SignupScreen() {
             age: ageNum,
             preferredGenres: cp.genres,
             preferredLanguages: cp.languages,
+            questionnaireResponses: cp.questionnaireResponses || {},
+            profilePreferences: cp.profilePreferences || [],
           });
         } catch {
           await addProfile({
@@ -592,6 +470,8 @@ export default function SignupScreen() {
             age: ageNum,
             preferredGenres: cp.genres,
             preferredLanguages: cp.languages,
+            questionnaireResponses: cp.questionnaireResponses || {},
+            profilePreferences: cp.profilePreferences || [],
           });
         }
       }
@@ -604,6 +484,32 @@ export default function SignupScreen() {
 
   return (
     <SafeAreaView style={st.safe}>
+      {(step === 2 || showAddProfileQuestionnaire) && (
+        <PersonalizedQuestionnaire
+          forcedAccountType={step === 2 ? "PARENT" : undefined}
+          initialResponses={
+            step === 2
+              ? {
+                  name: details.name,
+                  age: "25",
+                }
+              : undefined
+          }
+          onComplete={
+            step === 2
+              ? handleParentQuestionnaireComplete
+              : handleAdditionalProfileQuestionnaireComplete
+          }
+          onCancel={() => {
+            if (step === 2) {
+              setStep(1);
+            } else {
+              setShowAddProfileQuestionnaire(false);
+            }
+          }}
+        />
+      )}
+      {step !== 2 && !showAddProfileQuestionnaire && (
       <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : "height"}
         style={{ flex: 1 }}
@@ -650,19 +556,10 @@ export default function SignupScreen() {
             />
           )}
 
-          {step === 2 && (
-            <StepParentPreferences
-              parentName={details.name.trim().split(" ")[0]}
-              onFinish={handlePreferencesDone}
-              onBack={() => setStep(1)}
-              loading={false}
-            />
-          )}
-
           {step === 3 && (
             <StepAddProfile
               profiles={profiles}
-              onAddProfile={(p) => setProfiles((prev) => [...prev, p])}
+              onStartAddProfile={() => setShowAddProfileQuestionnaire(true)}
               onNext={() => handleFinish(parentGenres, parentLanguages)}
               onBack={() => setStep(2)}
               loading={loading}
@@ -679,6 +576,7 @@ export default function SignupScreen() {
           )}
         </ScrollView>
       </KeyboardAvoidingView>
+      )}
     </SafeAreaView>
   );
 }

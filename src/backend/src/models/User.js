@@ -61,6 +61,36 @@ const profileSchema = new mongoose.Schema(
         enum: ["PARENT", "CHILD"],
       },
     },
+    profilePreferences: [
+      {
+        questionId: {
+          type: String,
+          trim: true,
+        },
+        question: {
+          type: String,
+          trim: true,
+        },
+        answer: {
+          type: mongoose.Schema.Types.Mixed,
+        },
+      },
+    ],
+    profilePreferencesEmbedding: {
+      type: [Number],
+      default: undefined,
+    },
+    profilePreferencesEmbeddingDim: {
+      type: Number,
+      default: 0,
+    },
+    profilePreferencesEmbeddedAt: {
+      type: Date,
+    },
+    profilePreferencesEmbeddingProvider: {
+      type: String,
+      trim: true,
+    },
     userprofileURL: {
       type: String,
     },

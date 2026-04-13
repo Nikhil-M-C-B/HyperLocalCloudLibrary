@@ -18,6 +18,19 @@ const registerSchema = Joi.object({
   role: Joi.string().valid("USER", "LIBRARIAN", "ADMIN").default("USER"),
   preferredGenres: Joi.array().items(Joi.string()),
   preferredLanguages: Joi.array().items(Joi.string()),
+  questionnaireResponses: Joi.object().unknown(true).optional(),
+  profilePreferences: Joi.array()
+    .items(
+      Joi.object({
+        questionId: Joi.string().required(),
+        question: Joi.string().allow("", null),
+        answer: Joi.alternatives().try(
+          Joi.string().allow(""),
+          Joi.array().items(Joi.string().allow("")),
+        ),
+      }),
+    )
+    .optional(),
   emailVerified: Joi.boolean(),
 });
 
