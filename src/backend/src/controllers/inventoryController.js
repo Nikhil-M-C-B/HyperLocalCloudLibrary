@@ -6,9 +6,9 @@ const catchAsync = require('../utils/catchAsync');
  * POST /inventory
  */
 exports.addBookCopies = catchAsync(async (req, res) => {
-  const { bookId, branchId, quantity, condition } = req.body;
+  const { bookId, branchId, quantity, condition, shelf, rack } = req.body;
   
-  const copies = await inventoryService.addBookCopies(bookId, branchId, quantity, condition);
+  const copies = await inventoryService.addBookCopies(bookId, branchId, quantity, condition, shelf, rack);
   
   res.status(201).json({
     status: 'success',
@@ -21,8 +21,7 @@ exports.addBookCopies = catchAsync(async (req, res) => {
  * PUT /inventory/:copyId
  */
 exports.updateCopyStatus = catchAsync(async (req, res) => {
-  const { status } = req.body;
-  const copy = await inventoryService.updateCopyStatus(req.params.copyId, status);
+  const copy = await inventoryService.updateCopyStatus(req.params.copyId, req.body);
   
   res.status(200).json({
     status: 'success',

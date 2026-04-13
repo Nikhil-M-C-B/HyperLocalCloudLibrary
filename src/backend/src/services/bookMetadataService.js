@@ -62,6 +62,18 @@ function _truncate(str, max) {
   return str.length > max ? str.slice(0, max - 3) + '...' : str;
 }
 
+function _toAgeRating(minAge) {
+  const age = Number(minAge);
+  if (!Number.isFinite(age) || age < 0) return '0-99';
+  if (age <= 3) return '0-3';
+  if (age <= 6) return '4-6';
+  if (age <= 8) return '6-8';
+  if (age <= 10) return '8-10';
+  if (age <= 12) return '10-12';
+  if (age <= 15) return '12-15';
+  return `${Math.floor(age)}-99`;
+}
+
 /**
  * Clean raw Google Books / Open Library category tags into human-readable genres.
  * Removes structured tags (Serie:..., nyt:...), list-like marketing strings,
@@ -131,6 +143,7 @@ async function _fetchFromGoogleBooks(isbn) {
     publisher:   info.publisher   || null,
     publishedDate: info.publishedDate || null,
     minAge: _mapMinAge(info.categories || [], info.maturityRating || ''),
+    ageRating: _toAgeRating(_mapMinAge(info.categories || [], info.maturityRating || '')),
     _maturityRating: info.maturityRating || '',
     source:          'google_books',
   };
@@ -222,6 +235,7 @@ async function _fetchFromOpenLibrary(isbn) {
     publisher:   entry.publishers?.[0]?.name || null,
     publishedDate: entry.publish_date || null,
     minAge: _mapMinAge(entry.subjects?.map(s => s.name) || [], ''),
+    ageRating: _toAgeRating(_mapMinAge(entry.subjects?.map(s => s.name) || [], '')),
     source:      'open_library',
   };
 }
@@ -260,6 +274,7 @@ async function _fetchFromOpenLibrarySearch(isbn) {
     publisher:     doc.publisher?.[0] || null,
     publishedDate: doc.first_publish_year ? String(doc.first_publish_year) : null,
     minAge:        _mapMinAge(allSubjects, ''),
+    ageRating:     _toAgeRating(_mapMinAge(allSubjects, '')),
     source:        'open_library_search',
   };
 }
@@ -307,6 +322,7 @@ async function _fetchFromLibraryOfCongress(isbn) {
     publisher:     null,
     publishedDate: null,
     minAge:        _mapMinAge(subjects, ''),
+    ageRating:     _toAgeRating(_mapMinAge(subjects, '')),
     source:        'loc',
   };
 }
@@ -418,6 +434,7 @@ exports.fetchByISBN = async (isbn) => {
     publisher:     primary.publisher   || openLib?.publisher  || null,
     pageCount:     primary.pageCount   || openLib?.pageCount  || null,
     minAge:        bestMinAge,
+    ageRating:     _toAgeRating(bestMinAge),
     publishedDate: primary.publishedDate || openLib?.publishedDate || olSearch?.publishedDate || loc?.publishedDate || null,
     source:        [google && 'google', openLib && 'open_library', olSearch && 'ol_search', loc && 'loc'].filter(Boolean).join('+'),
   };

@@ -49,6 +49,8 @@ exports.register = async (userData) => {
         accountType: "PARENT",
         preferredGenres: userData.preferredGenres || [],
         preferredLanguages: userData.preferredLanguages || [],
+        questionnaireResponses: userData.questionnaireResponses || {},
+        profilePreferences: userData.profilePreferences || [],
       },
     ],
   });

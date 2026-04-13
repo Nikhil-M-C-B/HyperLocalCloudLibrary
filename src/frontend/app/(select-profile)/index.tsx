@@ -179,6 +179,12 @@ export default function SelectProfileScreen() {
               ageGroup,
               preferredGenres: profileData.preferredGenres || [],
               preferredLanguages: profileData.preferredLanguages || [],
+              questionnaireResponses: {
+                age: safeAge,
+                ...(profileData.metadata || {}),
+                ...(responses || {}),
+              },
+              profilePreferences: profileData.profilePreferences || [],
             }),
           },
         );
@@ -194,6 +200,12 @@ export default function SelectProfileScreen() {
         ageGroup,
         preferredGenres: profileData.preferredGenres || [],
         preferredLanguages: profileData.preferredLanguages || [],
+        questionnaireResponses: {
+          age: safeAge,
+          ...(profileData.metadata || {}),
+          ...(responses || {}),
+        },
+        profilePreferences: profileData.profilePreferences || [],
       });
 
       setQuestionnaireContext(null);
@@ -219,6 +231,12 @@ export default function SelectProfileScreen() {
           ageGroup,
           preferredGenres: profileData.preferredGenres || [],
           preferredLanguages: profileData.preferredLanguages || [],
+          questionnaireResponses: {
+            age: safeAge,
+            ...(profileData.metadata || {}),
+            ...(responses || {}),
+          },
+          profilePreferences: profileData.profilePreferences || [],
         }),
       });
 
@@ -236,6 +254,12 @@ export default function SelectProfileScreen() {
         age: safeAge,
         preferredGenres: profileData.preferredGenres || [],
         preferredLanguages: profileData.preferredLanguages || [],
+        questionnaireResponses: {
+          age: safeAge,
+          ...(profileData.metadata || {}),
+          ...(responses || {}),
+        },
+        profilePreferences: profileData.profilePreferences || [],
       });
 
       handleCloseModal();
@@ -254,6 +278,12 @@ export default function SelectProfileScreen() {
         age: safeAge,
         preferredGenres: profileData.preferredGenres || [],
         preferredLanguages: profileData.preferredLanguages || [],
+        questionnaireResponses: {
+          age: safeAge,
+          ...(profileData.metadata || {}),
+          ...(responses || {}),
+        },
+        profilePreferences: profileData.profilePreferences || [],
       });
 
       handleCloseModal();

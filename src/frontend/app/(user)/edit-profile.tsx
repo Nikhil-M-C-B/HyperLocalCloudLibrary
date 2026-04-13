@@ -3,15 +3,19 @@ import GenreSelector from "@/components/GenreSelector";
 import LanguageSelector from "@/components/LanguageSelector";
 import { NavBar, NAV_BOTTOM_PAD } from "@/components/NavBar";
 import { API_BASE_URL } from "@/constants/config";
+import {
+  buildProfilePreferencesFromResponses,
+  getQuestionnaireQuestionMeta,
+  ProfilePreferenceItem,
+} from "@/constants/questionnaires";
 import { Colors, Radius, Spacing, Typography } from "@/constants/theme";
 import useAppStore, { AppProfile, ageGroupToNum } from "@/store/useAppStore";
 import issueService from "@/api/services/issueService";
 import { useRouter } from "expo-router";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
     ActivityIndicator,
     Alert,
-    Dimensions,
     KeyboardAvoidingView,
     Modal,
     Platform,
@@ -23,8 +27,6 @@ import {
     View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-
-const { width } = Dimensions.get("window");
 
 const AGE_GROUPS = [
   "0-3",
@@ -91,6 +93,12 @@ export default function EditProfileScreen() {
   const [languages, setLanguages] = useState<string[]>(
     editingProfile?.preferredLanguages || [],
   );
+  const [questionnaireResponses, setQuestionnaireResponses] = useState<Record<string, any>>(
+    editingProfile?.questionnaireResponses || {},
+  );
+  const [profilePreferences, setProfilePreferences] = useState<ProfilePreferenceItem[]>(
+    editingProfile?.profilePreferences || [],
+  );
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
   const [step, setStep] = useState<
@@ -138,6 +146,91 @@ export default function EditProfileScreen() {
   const [addrState, setAddrState] = useState("");
   const [addrPincode, setAddrPincode] = useState("");
 
+  const questionnaireType = isParent ? "PARENT" : "CHILD";
+
+  const getCompletePreferences = (
+    accountType: "PARENT" | "CHILD",
+    existingPreferences: ProfilePreferenceItem[],
+    responseMap: Record<string, any>,
+    profileContext?: Partial<AppProfile>,
+  ) => {
+    const enrichedResponses = {
+      ...(responseMap || {}),
+    };
+
+    if (!enrichedResponses.name && profileContext?.name) {
+      enrichedResponses.name = profileContext.name;
+    }
+    if (
+      (!Array.isArray(enrichedResponses.preferredLanguages) ||
+        enrichedResponses.preferredLanguages.length === 0) &&
+      Array.isArray(profileContext?.preferredLanguages) &&
+      profileContext!.preferredLanguages!.length > 0
+    ) {
+      enrichedResponses.preferredLanguages = profileContext.preferredLanguages;
+    }
+    if (
+      (!Array.isArray(enrichedResponses.preferredGenres) ||
+        enrichedResponses.preferredGenres.length === 0) &&
+      Array.isArray(profileContext?.preferredGenres) &&
+      profileContext!.preferredGenres!.length > 0
+    ) {
+      enrichedResponses.preferredGenres = profileContext.preferredGenres;
+    }
+    if (
+      (enrichedResponses.age == null || enrichedResponses.age === "") &&
+      typeof profileContext?.age === "number"
+    ) {
+      enrichedResponses.age = String(profileContext.age);
+    }
+
+    const defaults = buildProfilePreferencesFromResponses(
+      enrichedResponses,
+      accountType,
+    );
+    const existingById = new Map(
+      (existingPreferences || []).map((item) => [item.questionId, item]),
+    );
+
+    return defaults.map((item) => existingById.get(item.questionId) || item);
+  };
+
+  const updateProfilePreferenceAnswer = (questionId: string, rawValue: string) => {
+    const meta = getQuestionnaireQuestionMeta(questionnaireType);
+    const questionInfo = meta[questionId];
+    const normalizedValue = questionInfo?.type === "tags"
+      ? rawValue
+          .split(",")
+          .map((item) => item.trim())
+          .filter(Boolean)
+      : rawValue;
+
+    setQuestionnaireResponses((prev) => ({
+      ...prev,
+      [questionId]: normalizedValue,
+    }));
+
+    setProfilePreferences((prev) => {
+      const existing = prev.find((item) => item.questionId === questionId);
+      if (existing) {
+        return prev.map((item) =>
+          item.questionId === questionId
+            ? { ...item, answer: normalizedValue }
+            : item,
+        );
+      }
+
+      return [
+        ...prev,
+        {
+          questionId,
+          question: questionInfo?.question || questionId,
+          answer: normalizedValue,
+        },
+      ];
+    });
+  };
+
   // ── Fetch user core details (phone) ──
   useEffect(() => {
     const fetchUser = async () => {
@@ -156,10 +249,10 @@ export default function EditProfileScreen() {
       }
     };
     fetchUser();
-  }, []);
+  }, [token, userId]);
 
   // ── Fetch delivery addresses ──
-  const fetchAddresses = async () => {
+  const fetchAddresses = useCallback(async () => {
     if (!userId) return;
     setLoadingAddresses(true);
     try {
@@ -170,11 +263,11 @@ export default function EditProfileScreen() {
     } finally {
       setLoadingAddresses(false);
     }
-  };
+  }, [userId]);
 
   useEffect(() => {
     if (step === "addresses") fetchAddresses();
-  }, [step]);
+  }, [step, fetchAddresses]);
 
   const resetAddrForm = () => {
     setAddrLabel("");
@@ -230,19 +323,35 @@ export default function EditProfileScreen() {
   };
 
   const handleDeleteAddress = (addr: any) => {
+    const addressId = addr?._id || addr?.id;
+    if (!addressId) {
+      Alert.alert("Error", "Address ID not found.");
+      return;
+    }
+
+    const performDelete = async () => {
+      try {
+        await locationService.deleteDeliveryAddress(userId!, String(addressId));
+        fetchAddresses();
+      } catch {
+        Alert.alert("Error", "Failed to delete address.");
+      }
+    };
+
+    if (Platform.OS === "web") {
+      const confirmed = window.confirm(
+        `Remove "${addr.label || addr.street || "this address"}"?`,
+      );
+      if (confirmed) performDelete();
+      return;
+    }
+
     Alert.alert("Delete Address", `Remove "${addr.label || addr.street}"?`, [
       { text: "Cancel", style: "cancel" },
       {
         text: "Delete",
         style: "destructive",
-        onPress: async () => {
-          try {
-            await locationService.deleteDeliveryAddress(userId!, addr._id);
-            fetchAddresses();
-          } catch {
-            Alert.alert("Error", "Failed to delete address.");
-          }
-        },
+        onPress: performDelete,
       },
     ]);
   };
@@ -274,9 +383,33 @@ export default function EditProfileScreen() {
       setAgeGroup(p.ageGroup || "15+");
       setGenres(p.preferredGenres || []);
       setLanguages(p.preferredLanguages || []);
+      const responses = {
+        ...(p.questionnaireResponses || {}),
+        name: p.name || (p.questionnaireResponses as any)?.name || "",
+        age:
+          (p.questionnaireResponses as any)?.age ??
+          (typeof p.age === "number" ? String(p.age) : ""),
+        preferredLanguages:
+          (p.questionnaireResponses as any)?.preferredLanguages ||
+          p.preferredLanguages ||
+          [],
+        preferredGenres:
+          (p.questionnaireResponses as any)?.preferredGenres ||
+          p.preferredGenres ||
+          [],
+      };
+      setQuestionnaireResponses(responses);
+      setProfilePreferences(
+        getCompletePreferences(
+          p.accountType,
+          p.profilePreferences || [],
+          responses,
+          p,
+        ),
+      );
       setStep("details");
     }
-  }, [editingProfileId]);
+  }, [editingProfileId, profiles]);
 
   const handleSave = async () => {
     if (!name.trim()) {
@@ -285,12 +418,21 @@ export default function EditProfileScreen() {
     }
     setSaving(true);
     try {
+      const completePreferences = getCompletePreferences(
+        questionnaireType,
+        profilePreferences,
+        questionnaireResponses,
+        editingProfile,
+      );
+
       // 1. Update profile (name, ageGroup, genres, languages)
       const profileBody: Record<string, unknown> = {
         name: name.trim(),
         ageGroup,
         preferredGenres: genres,
         preferredLanguages: languages,
+        questionnaireResponses,
+        profilePreferences: completePreferences,
       };
       await fetch(
         `${API_BASE_URL}/users/${userId}/profiles/${editingProfileId}`,
@@ -335,6 +477,8 @@ export default function EditProfileScreen() {
             ageGroup: p.ageGroup,
             preferredGenres: p.preferredGenres,
             preferredLanguages: p.preferredLanguages,
+            questionnaireResponses: p.questionnaireResponses || {},
+            profilePreferences: p.profilePreferences || [],
           })),
         });
       }
@@ -346,6 +490,13 @@ export default function EditProfileScreen() {
       setSaving(false);
     }
   };
+
+  const editablePreferences = getCompletePreferences(
+    questionnaireType,
+    profilePreferences,
+    questionnaireResponses,
+    editingProfile,
+  );
 
   if (loading) {
     return (
@@ -605,6 +756,34 @@ export default function EditProfileScreen() {
                   ))}
                 </View>
               )}
+
+              <View style={s.fieldGroup}>
+                <Text style={s.sectionTitle}>Profile Preferences</Text>
+                <Text style={s.sectionSubtitle}>
+                  Personalized answers used by Owl recommendations.
+                </Text>
+                {editablePreferences.map((preference) => {
+                  const value = Array.isArray(preference.answer)
+                    ? preference.answer.join(", ")
+                    : String(preference.answer || "");
+
+                  return (
+                    <View key={preference.questionId} style={{ marginBottom: Spacing.sm }}>
+                      <Text style={s.fieldLabel}>{preference.question}</Text>
+                      <TextInput
+                        style={s.fieldInput}
+                        value={value}
+                        onChangeText={(text) =>
+                          updateProfilePreferenceAnswer(preference.questionId, text)
+                        }
+                        placeholder="Add your answer"
+                        placeholderTextColor={Colors.textMuted}
+                        multiline={preference.question.length > 36}
+                      />
+                    </View>
+                  );
+                })}
+              </View>
             </View>
           )}
 

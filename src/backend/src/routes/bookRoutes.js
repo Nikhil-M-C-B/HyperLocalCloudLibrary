@@ -15,6 +15,7 @@ const createBookSchema = Joi.object({
   author: Joi.string().optional(),
   genre: Joi.array().items(Joi.string()).min(1).optional(),
   language: Joi.string().optional(),
+  ageRating: Joi.string().pattern(/^(\d+\s*-\s*\d+|\d+\+)$/).optional(),
   minAge: Joi.number().integer().min(0).max(99).optional(),
   collectionName: Joi.string().optional(),
   bookURL: Joi.string().uri().optional(),
@@ -22,6 +23,14 @@ const createBookSchema = Joi.object({
   coverImage: Joi.string().optional(),
   pageCount: Joi.number().integer().optional(),
   publisher: Joi.string().optional(),
+  generatedTags: Joi.array().items(Joi.string()).optional(),
+  chatbotTags: Joi.array().items(Joi.string()).optional(),
+  plot_embeddings: Joi.array().items(Joi.number()).optional(),
+  plot_embeddings_dim: Joi.number().integer().min(1).optional(),
+  embedding_provider: Joi.string().optional(),
+  embedding_title: Joi.string().optional(),
+  embedding_author: Joi.string().optional(),
+  embedding_migrated_at: Joi.date().optional(),
 });
 
 const updateBookSchema = Joi.object({
@@ -30,11 +39,20 @@ const updateBookSchema = Joi.object({
   isbn: Joi.number().required(),
   genre: Joi.array().items(Joi.string()).min(1).required(),
   language: Joi.string(),
+  ageRating: Joi.string().pattern(/^(\d+\s*-\s*\d+|\d+\+)$/).optional(),
   minAge: Joi.number().integer().min(0).max(99).optional(),
   collectionName: Joi.string(),
   bookURL: Joi.string().uri().optional(),
   summary: Joi.string().max(1000).required(),
-  coverImage: Joi.string()
+  coverImage: Joi.string(),
+  generatedTags: Joi.array().items(Joi.string()).optional(),
+  chatbotTags: Joi.array().items(Joi.string()).optional(),
+  plot_embeddings: Joi.array().items(Joi.number()).optional(),
+  plot_embeddings_dim: Joi.number().integer().min(1).optional(),
+  embedding_provider: Joi.string().optional(),
+  embedding_title: Joi.string().optional(),
+  embedding_author: Joi.string().optional(),
+  embedding_migrated_at: Joi.date().optional(),
 });
 
 // Public routes (anyone can browse books)

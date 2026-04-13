@@ -4,6 +4,103 @@ const AppError = require("../utils/AppError");
 const bookMetadataService = require("./bookMetadataService");
 const s3Service = require("./s3Service");
 
+const parseAgeRatingMin = (ageRating) => {
+  if (!ageRating) return null;
+  const value = String(ageRating).trim();
+  const rangeMatch = value.match(/^(\d+)\s*-\s*(\d+)$/);
+  if (rangeMatch) return parseInt(rangeMatch[1], 10);
+  const plusMatch = value.match(/^(\d+)\+$/);
+  if (plusMatch) return parseInt(plusMatch[1], 10);
+  return null;
+};
+
+const toAgeRating = (minAge) => {
+  const age = Number(minAge);
+  if (!Number.isFinite(age) || age < 0) return '0-99';
+  if (age <= 3) return '0-3';
+  if (age <= 6) return '4-6';
+  if (age <= 8) return '6-8';
+  if (age <= 10) return '8-10';
+  if (age <= 12) return '10-12';
+  if (age <= 15) return '12-15';
+  return `${Math.floor(age)}-99`;
+};
+
+const addAgeFilterToQuery = (query, filters = {}) => {
+  if (filters.maxAge === undefined && filters.minAge === undefined) {
+    return;
+  }
+
+  const exprParts = [];
+  const ageExpr = {
+    $ifNull: [
+      '$minAge',
+      {
+        $convert: {
+          input: {
+            $arrayElemAt: [
+              { $split: [{ $ifNull: ['$ageRating', '0-99'] }, '-'] },
+              0,
+            ],
+          },
+          to: 'int',
+          onError: 0,
+          onNull: 0,
+        },
+      },
+    ],
+  };
+
+  if (filters.maxAge !== undefined) {
+    const maxAge = parseInt(filters.maxAge, 10);
+    if (!isNaN(maxAge)) {
+      exprParts.push({ $lte: [ageExpr, maxAge] });
+    }
+  }
+
+  if (filters.minAge !== undefined) {
+    const minAge = parseInt(filters.minAge, 10);
+    if (!isNaN(minAge)) {
+      exprParts.push({ $gte: [ageExpr, minAge] });
+    }
+  }
+
+  if (exprParts.length === 1) {
+    query.$expr = exprParts[0];
+  } else if (exprParts.length > 1) {
+    query.$expr = { $and: exprParts };
+  }
+};
+
+const tokenize = (value) =>
+  String(value || "")
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .map((token) => token.trim())
+    .filter((token) => token.length > 2);
+
+const buildGeneratedTags = (bookData = {}) => {
+  const tags = new Set();
+
+  tokenize(bookData.title).forEach((tag) => tags.add(tag));
+  tokenize(bookData.author).forEach((tag) => tags.add(tag));
+  tokenize(bookData.language).forEach((tag) => tags.add(tag));
+
+  if (Array.isArray(bookData.genre)) {
+    bookData.genre.forEach((genre) => {
+      tokenize(genre).forEach((tag) => tags.add(tag));
+      const normalizedGenre = String(genre || "").trim().toLowerCase();
+      if (normalizedGenre) tags.add(normalizedGenre);
+    });
+  }
+
+  tokenize(bookData.summary)
+    .slice(0, 20)
+    .forEach((tag) => tags.add(tag));
+
+  return Array.from(tags).slice(0, 50);
+};
+
 async function getBranchScope(filters = {}) {
   const mongoose = require("mongoose");
   let branchIds = Array.isArray(filters.branchIds) && filters.branchIds.length > 0
@@ -44,17 +141,7 @@ exports.getAllBooks = async (filters = {}) => {
   const query = {};
   const branchScopeIds = await getBranchScope(filters);
 
-  if (filters.maxAge !== undefined || filters.minAge !== undefined) {
-    query.minAge = {};
-    if (filters.maxAge !== undefined) {
-      const maxAge = parseInt(filters.maxAge, 10);
-      if (!isNaN(maxAge)) query.minAge.$lte = maxAge;
-    }
-    if (filters.minAge !== undefined) {
-      const minAge = parseInt(filters.minAge, 10);
-      if (!isNaN(minAge)) query.minAge.$gte = minAge;
-    }
-  }
+  addAgeFilterToQuery(query, filters);
 
   if (filters.genre) {
     query.genre = {
@@ -74,6 +161,8 @@ exports.getAllBooks = async (filters = {}) => {
       { title: searchRegex },
       { author: searchRegex },
       { summary: searchRegex },
+      { generatedTags: searchRegex },
+      { chatbotTags: searchRegex },
     ];
   }
 
@@ -150,17 +239,7 @@ exports.getBooksForBranch = async (branchId, filters = {}) => {
 
   const query = {};
 
-  if (filters.maxAge !== undefined || filters.minAge !== undefined) {
-    query.minAge = {};
-    if (filters.maxAge !== undefined) {
-      const maxAge = parseInt(filters.maxAge, 10);
-      if (!isNaN(maxAge)) query.minAge.$lte = maxAge;
-    }
-    if (filters.minAge !== undefined) {
-      const minAge = parseInt(filters.minAge, 10);
-      if (!isNaN(minAge)) query.minAge.$gte = minAge;
-    }
-  }
+  addAgeFilterToQuery(query, filters);
 
   if (filters.genre) {
     query.genre = {
@@ -179,6 +258,8 @@ exports.getBooksForBranch = async (branchId, filters = {}) => {
       { title: searchRegex },
       { author: searchRegex },
       { summary: searchRegex },
+      { generatedTags: searchRegex },
+      { chatbotTags: searchRegex },
     ];
   }
 
@@ -298,6 +379,7 @@ exports.createBook = async (bookData) => {
         data.summary = data.summary || metadata.summary;
         data.coverImage = data.coverImage || metadata.coverImage;
         data.minAge = data.minAge !== undefined ? data.minAge : metadata.minAge;
+        data.ageRating = data.ageRating || metadata.ageRating || toAgeRating(data.minAge);
         data.publishedDate = data.publishedDate || metadata.publishedDate;
         // Store extra metadata not in the form
         data._metadataSource = metadata.source;
@@ -331,8 +413,21 @@ exports.createBook = async (bookData) => {
     );
   }
 
-  if (data.minAge === undefined) {
-    data.minAge = 0;
+  if (data.minAge === undefined || data.minAge === null) {
+    const parsedMin = parseAgeRatingMin(data.ageRating);
+    data.minAge = parsedMin !== null ? parsedMin : 0;
+  }
+
+  if (!data.ageRating) {
+    data.ageRating = toAgeRating(data.minAge);
+  }
+
+  if (!data.generatedTags || data.generatedTags.length === 0) {
+    data.generatedTags = buildGeneratedTags(data);
+  }
+
+  if (!data.chatbotTags || data.chatbotTags.length === 0) {
+    data.chatbotTags = [...data.generatedTags];
   }
 
   // Remove internal tracking field before saving
@@ -346,6 +441,32 @@ exports.createBook = async (bookData) => {
  * Update book (Librarian/Admin only)
  */
 exports.updateBook = async (bookId, updateData) => {
+  if (updateData.ageRating && (updateData.minAge === undefined || updateData.minAge === null)) {
+    const parsedMin = parseAgeRatingMin(updateData.ageRating);
+    if (parsedMin !== null) {
+      updateData.minAge = parsedMin;
+    }
+  }
+
+  if (updateData.minAge !== undefined && !updateData.ageRating) {
+    updateData.ageRating = toAgeRating(updateData.minAge);
+  }
+
+  const shouldRegenerateTags = ["title", "author", "genre", "language", "summary"].some(
+    (field) => updateData[field] !== undefined,
+  );
+
+  if (shouldRegenerateTags && !updateData.generatedTags) {
+    const existing = await Book.findById(bookId).lean();
+    if (!existing) throw new AppError("Book not found", 404);
+    const merged = { ...existing, ...updateData };
+    updateData.generatedTags = buildGeneratedTags(merged);
+  }
+
+  if (shouldRegenerateTags && !updateData.chatbotTags) {
+    updateData.chatbotTags = [...(updateData.generatedTags || [])];
+  }
+
   const book = await Book.findByIdAndUpdate(bookId, updateData, {
     new: true,
     runValidators: true,
@@ -480,6 +601,30 @@ exports.checkAvailability = async (bookId, userLocation) => {
  * Get books by age rating
  */
 exports.getBooksByAge = async (minAge) => {
-  const books = await Book.find({ minAge: { $lte: minAge } }).sort("-createdAt");
+  const books = await Book.find({
+    $expr: {
+      $lte: [
+        {
+          $ifNull: [
+            '$minAge',
+            {
+              $convert: {
+                input: {
+                  $arrayElemAt: [
+                    { $split: [{ $ifNull: ['$ageRating', '0-99'] }, '-'] },
+                    0,
+                  ],
+                },
+                to: 'int',
+                onError: 0,
+                onNull: 0,
+              },
+            },
+          ],
+        },
+        minAge,
+      ],
+    },
+  }).sort("-createdAt");
   return books;
 };

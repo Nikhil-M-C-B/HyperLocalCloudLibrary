@@ -13,6 +13,8 @@ exports.addBookCopies = async (
   branchId,
   quantity,
   condition = "GOOD",
+  shelf = "UNASSIGNED",
+  rack = "UNASSIGNED",
 ) => {
   const branch = await LibraryBranch.findById(branchId);
 
@@ -30,6 +32,8 @@ exports.addBookCopies = async (
       branchId,
       barcode,
       condition,
+      shelf,
+      rack,
     });
 
     copies.push(copy);
@@ -41,10 +45,18 @@ exports.addBookCopies = async (
 /**
  * Update book copy status
  */
-exports.updateCopyStatus = async (copyId, status) => {
+exports.updateCopyStatus = async (copyId, updateData = {}) => {
+  const allowedUpdates = ["status", "condition", "shelf", "rack"];
+  const updates = {};
+  Object.keys(updateData).forEach((key) => {
+    if (allowedUpdates.includes(key) && updateData[key] !== undefined) {
+      updates[key] = updateData[key];
+    }
+  });
+
   const copy = await BookCopy.findByIdAndUpdate(
     copyId,
-    { status },
+    updates,
     { new: true, runValidators: true },
   );
 

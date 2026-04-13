@@ -15,6 +15,12 @@ export interface Questionnaire {
   descriptions: string[];
 }
 
+export interface ProfilePreferenceItem {
+  questionId: string;
+  question: string;
+  answer: string | string[];
+}
+
 export const CHILD_QUESTIONNAIRE: Questionnaire = {
   accountType: "CHILD",
   steps: [
@@ -213,6 +219,41 @@ export function getQuestionnaire(accountType: "CHILD" | "PARENT"): Questionnaire
   return accountType === "CHILD" ? CHILD_QUESTIONNAIRE : PARENT_QUESTIONNAIRE;
 }
 
+export function getQuestionnaireQuestionMeta(accountType: "CHILD" | "PARENT") {
+  const questionnaire = getQuestionnaire(accountType);
+  const meta: Record<string, { question: string; type: QuestionnaireQuestion["type"] }> = {};
+
+  for (const step of questionnaire.steps) {
+    for (const question of step) {
+      meta[question.id] = { question: question.question, type: question.type };
+    }
+  }
+
+  return meta;
+}
+
+export function buildProfilePreferencesFromResponses(
+  responses: Record<string, any>,
+  accountType: "CHILD" | "PARENT",
+): ProfilePreferenceItem[] {
+  const meta = getQuestionnaireQuestionMeta(accountType);
+
+  return Object.entries(meta).map(([questionId, info]) => {
+    const rawAnswer = responses?.[questionId];
+    const answer = Array.isArray(rawAnswer)
+      ? rawAnswer
+      : rawAnswer == null
+        ? ""
+        : String(rawAnswer);
+
+    return {
+      questionId,
+      question: info.question,
+      answer,
+    };
+  });
+}
+
 export function mapQuestionnaireResponsesToProfile(
   responses: Record<string, any>,
   accountType: "CHILD" | "PARENT",
@@ -229,5 +270,6 @@ export function mapQuestionnaireResponsesToProfile(
       readingFrequency: responses.readingFrequency,
       primaryReadingGoal: responses.primaryReadingGoal,
     },
+    profilePreferences: buildProfilePreferencesFromResponses(responses, accountType),
   };
 }

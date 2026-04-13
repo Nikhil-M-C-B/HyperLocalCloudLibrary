@@ -31,6 +31,25 @@ const updateLocationSchema = Joi.object({
   label: Joi.string().allow(""),
 });
 
+const questionnaireResponsesSchema = Joi.object({
+  age: Joi.number().integer().min(0).max(120),
+  favoriteActivity: Joi.string().allow("", null),
+  favoriteCharacter: Joi.string().allow("", null),
+  favoriteAnimal: Joi.string().allow("", null),
+  readingFrequency: Joi.string().allow("", null),
+  primaryReadingGoal: Joi.string().allow("", null),
+  accountType: Joi.string().valid("PARENT", "CHILD"),
+}).unknown(true).optional();
+
+const profilePreferenceItemSchema = Joi.object({
+  questionId: Joi.string().required(),
+  question: Joi.string().allow("", null),
+  answer: Joi.alternatives().try(
+    Joi.string().allow(""),
+    Joi.array().items(Joi.string().allow("")),
+  ),
+});
+
 const createProfileSchema = Joi.object({
   name: Joi.string().required(),
   accountType: Joi.string().valid("PARENT", "CHILD").default("PARENT"),
@@ -40,6 +59,8 @@ const createProfileSchema = Joi.object({
   preferredGenres: Joi.array().items(Joi.string()),
   preferredLanguages: Joi.array().items(Joi.string()),
   userprofileURL: Joi.string().uri().optional(),
+  questionnaireResponses: questionnaireResponsesSchema,
+  profilePreferences: Joi.array().items(profilePreferenceItemSchema).optional(),
 });
 
 const updateProfileSchema = Joi.object({
@@ -56,6 +77,8 @@ const updateProfileSchema = Joi.object({
   preferredGenres: Joi.array().items(Joi.string()),
   preferredLanguages: Joi.array().items(Joi.string()),
   userprofileURL: Joi.string().uri().optional(),
+  questionnaireResponses: questionnaireResponsesSchema,
+  profilePreferences: Joi.array().items(profilePreferenceItemSchema).optional(),
 });
 
 // All routes require authentication

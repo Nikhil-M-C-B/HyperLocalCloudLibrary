@@ -18,6 +18,12 @@ export interface AppProfile {
   age: number; // numeric, derived from ageGroup or set directly
   preferredGenres?: string[];
   preferredLanguages?: string[];
+  questionnaireResponses?: Record<string, any>;
+  profilePreferences?: Array<{
+    questionId: string;
+    question: string;
+    answer: string | string[];
+  }>;
 }
 
 interface SetAuthPayload {
@@ -139,6 +145,8 @@ const useAppStore = create<AppStore>((set, get) => ({
       age: (p as any).age ?? ageGroupToNum((p as any).ageGroup),
       preferredGenres: (p as any).preferredGenres ?? [],
       preferredLanguages: (p as any).preferredLanguages ?? [],
+      questionnaireResponses: (p as any).questionnaireResponses ?? {},
+      profilePreferences: (p as any).profilePreferences ?? [],
     }));
     const state = {
       userId,
@@ -162,6 +170,8 @@ const useAppStore = create<AppStore>((set, get) => ({
       age: profile.age ?? ageGroupToNum(profile.ageGroup),
       preferredGenres: profile.preferredGenres ?? [],
       preferredLanguages: profile.preferredLanguages ?? [],
+      questionnaireResponses: (profile as any).questionnaireResponses ?? {},
+      profilePreferences: (profile as any).profilePreferences ?? [],
     };
     const profiles = [...get().profiles, p];
     set({ profiles });

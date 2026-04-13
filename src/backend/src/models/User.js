@@ -30,6 +30,67 @@ const profileSchema = new mongoose.Schema(
         type: String,
       },
     ],
+    questionnaireResponses: {
+      age: {
+        type: Number,
+        min: 0,
+        max: 120,
+      },
+      favoriteActivity: {
+        type: String,
+        trim: true,
+      },
+      favoriteCharacter: {
+        type: String,
+        trim: true,
+      },
+      favoriteAnimal: {
+        type: String,
+        trim: true,
+      },
+      readingFrequency: {
+        type: String,
+        trim: true,
+      },
+      primaryReadingGoal: {
+        type: String,
+        trim: true,
+      },
+      accountType: {
+        type: String,
+        enum: ["PARENT", "CHILD"],
+      },
+    },
+    profilePreferences: [
+      {
+        questionId: {
+          type: String,
+          trim: true,
+        },
+        question: {
+          type: String,
+          trim: true,
+        },
+        answer: {
+          type: mongoose.Schema.Types.Mixed,
+        },
+      },
+    ],
+    profilePreferencesEmbedding: {
+      type: [Number],
+      default: undefined,
+    },
+    profilePreferencesEmbeddingDim: {
+      type: Number,
+      default: 0,
+    },
+    profilePreferencesEmbeddedAt: {
+      type: Date,
+    },
+    profilePreferencesEmbeddingProvider: {
+      type: String,
+      trim: true,
+    },
     userprofileURL: {
       type: String,
     },

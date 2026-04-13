@@ -3,6 +3,82 @@ const Auth = require("../models/Auth");
 const Issue = require("../models/Issue");
 const AppError = require("../utils/AppError");
 const mongoose = require("mongoose");
+const aiService = require("./aiService");
+
+const serializePreferenceAnswer = (answer) => {
+  if (Array.isArray(answer)) {
+    return answer.filter(Boolean).join(", ");
+  }
+  if (answer == null) {
+    return "";
+  }
+  return String(answer);
+};
+
+const normalizeProfilePreferences = (profileData = {}) => {
+  if (Array.isArray(profileData.profilePreferences)) {
+    return profileData.profilePreferences.map((item) => ({
+      questionId: item.questionId,
+      question: item.question,
+      answer: Array.isArray(item.answer)
+        ? item.answer.map((entry) => String(entry).trim()).filter(Boolean)
+        : item.answer == null
+          ? ""
+          : String(item.answer).trim(),
+    }));
+  }
+
+  const responses = profileData.questionnaireResponses || {};
+  return Object.entries(responses).map(([questionId, answer]) => ({
+    questionId,
+    question: questionId,
+    answer: Array.isArray(answer) ? answer : answer == null ? "" : String(answer),
+  }));
+};
+
+const buildProfilePreferenceEmbeddingText = (profile = {}) => {
+  const preferenceLines = (profile.profilePreferences || [])
+    .map((pref) => {
+      const question = pref.question || pref.questionId || "preference";
+      const answer = serializePreferenceAnswer(pref.answer);
+      return `${question}: ${answer}`;
+    })
+    .filter((line) => line.trim().length > 0);
+
+  const genres = (profile.preferredGenres || []).join(", ");
+  const languages = (profile.preferredLanguages || []).join(", ");
+
+  return [
+    `Profile name: ${profile.name || ""}`,
+    `Age group: ${profile.ageGroup || ""}`,
+    `Preferred genres: ${genres}`,
+    `Preferred languages: ${languages}`,
+    ...preferenceLines,
+  ].join("\n");
+};
+
+const updateProfilePreferenceEmbedding = async (profile) => {
+  const embeddingSource = buildProfilePreferenceEmbeddingText(profile);
+  if (!embeddingSource.trim()) {
+    profile.profilePreferencesEmbedding = undefined;
+    profile.profilePreferencesEmbeddingDim = 0;
+    profile.profilePreferencesEmbeddedAt = undefined;
+    profile.profilePreferencesEmbeddingProvider = undefined;
+    return;
+  }
+
+  try {
+    const embedding = await aiService.generateProfileEmbedding(embeddingSource);
+    if (Array.isArray(embedding) && embedding.length > 0) {
+      profile.profilePreferencesEmbedding = embedding;
+      profile.profilePreferencesEmbeddingDim = embedding.length;
+      profile.profilePreferencesEmbeddedAt = new Date();
+      profile.profilePreferencesEmbeddingProvider = process.env.GEMINI_EMBED_MODEL || "gemini-embedding-2-preview";
+    }
+  } catch (error) {
+    console.warn("[Profile Embedding] Could not update profile embedding:", error.message);
+  }
+};
 
 /**
  * Get user by ID
@@ -64,10 +140,14 @@ exports.createChildProfile = async (parentId, profileData) => {
     ageGroup: profileData.ageGroup,
     preferredGenres: profileData.preferredGenres || [],
     preferredLanguages: profileData.preferredLanguages || [],
+    questionnaireResponses: profileData.questionnaireResponses || {},
+    profilePreferences: normalizeProfilePreferences(profileData),
     userprofileURL: profileData.userprofileURL || undefined,
   };
 
   user.profiles.push(newProfile);
+  const createdProfile = user.profiles[user.profiles.length - 1];
+  await updateProfilePreferenceEmbedding(createdProfile);
   await user.save();
 
   return newProfile;
@@ -111,13 +191,50 @@ exports.updateProfile = async (userId, profileId, updateData) => {
     "ageGroup",
     "preferredGenres",
     "preferredLanguages",
+    "questionnaireResponses",
+    "profilePreferences",
     "userprofileURL",
   ];
+  let shouldRefreshEmbedding = false;
   Object.keys(updateData).forEach((key) => {
     if (allowedUpdates.includes(key)) {
-      profile[key] = updateData[key];
+      if (key === "questionnaireResponses") {
+        const existingResponses = profile.questionnaireResponses || {};
+        profile.questionnaireResponses = {
+          ...existingResponses,
+          ...updateData.questionnaireResponses,
+        };
+        shouldRefreshEmbedding = true;
+      } else if (key === "profilePreferences") {
+        profile.profilePreferences = normalizeProfilePreferences({
+          profilePreferences: updateData.profilePreferences,
+          questionnaireResponses: profile.questionnaireResponses,
+        });
+        shouldRefreshEmbedding = true;
+      } else {
+        profile[key] = updateData[key];
+        if (
+          key === "name" ||
+          key === "ageGroup" ||
+          key === "preferredGenres" ||
+          key === "preferredLanguages"
+        ) {
+          shouldRefreshEmbedding = true;
+        }
+      }
     }
   });
+
+  if (!profile.profilePreferences || profile.profilePreferences.length === 0) {
+    profile.profilePreferences = normalizeProfilePreferences({
+      questionnaireResponses: profile.questionnaireResponses || {},
+    });
+    shouldRefreshEmbedding = true;
+  }
+
+  if (shouldRefreshEmbedding) {
+    await updateProfilePreferenceEmbedding(profile);
+  }
 
   await user.save();
   return profile;
