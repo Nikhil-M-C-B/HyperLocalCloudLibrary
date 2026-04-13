@@ -70,3 +70,32 @@ exports.getBranchStats = catchAsync(async (req, res) => {
     data: { stats }
   });
 });
+
+/**
+ * Bulk import books from an uploaded Excel / CSV file
+ * POST /inventory/bulk-import
+ *
+ * Expects multipart/form-data with:
+ *   - file     : the spreadsheet (.xlsx, .xls, or .csv)
+ *   - branchId : MongoDB ObjectId of the target library branch
+ */
+exports.bulkImportCopies = catchAsync(async (req, res) => {
+  if (!req.file) {
+    return res.status(400).json({ status: 'fail', message: 'No file uploaded. Send the spreadsheet as multipart/form-data with field name "file".' });
+  }
+
+  const { branchId } = req.body;
+  if (!branchId) {
+    return res.status(400).json({ status: 'fail', message: 'branchId is required in the form data.' });
+  }
+
+  const results = await inventoryService.bulkImport(req.file.buffer, branchId);
+
+  const status = results.skippedCount === 0 ? 201 : 207; // 207 = Multi-Status (partial success)
+  res.status(status).json({
+    status:        results.importedCount > 0 ? 'success' : 'fail',
+    importedCount: results.importedCount,
+    skippedCount:  results.skippedCount,
+    errors:        results.errors,
+  });
+});

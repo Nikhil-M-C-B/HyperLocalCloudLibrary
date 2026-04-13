@@ -1,6 +1,7 @@
 import { API_BASE_URL } from '@/constants/config';
 import { Colors, Radius, Spacing, Typography } from '@/constants/theme';
 import useAppStore from '@/store/useAppStore';
+import * as DocumentPicker from 'expo-document-picker';
 import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import {
@@ -63,6 +64,13 @@ export default function InventoryScreen() {
   const [addQty, setAddQty] = useState('1');
   const [addCondition, setAddCondition] = useState<Condition>('GOOD');
   const [saving, setSaving] = useState(false);
+
+  // Bulk import
+  const [importing, setImporting] = useState(false);
+  const [importBranchId, setImportBranchId] = useState<string>('');
+  const [importResult, setImportResult] = useState<{ importedCount: number; skippedCount: number; errors: any[] } | null>(null);
+  const [importResultVisible, setImportResultVisible] = useState(false);
+  const [branchPickerVisible, setBranchPickerVisible] = useState(false);
 
   const hdrs = { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` };
 
@@ -191,6 +199,64 @@ export default function InventoryScreen() {
     }
   };
 
+  // ── Bulk import ────────────────────────────────────────────────────────────
+  const handleBulkImport = async (targetBranchId: string) => {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: [
+          'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+          'application/vnd.ms-excel',
+          'text/csv',
+          'application/csv',
+          '*/*', // fallback for devices that don't expose exact MIME
+        ],
+        copyToCacheDirectory: true,
+      });
+
+      if (result.canceled) return;
+      const file = result.assets[0];
+
+      setImporting(true);
+
+      const formData = new FormData();
+      // React Native FormData expects { uri, name, type } for files
+      formData.append('file', {
+        uri:  file.uri,
+        name: file.name,
+        type: file.mimeType ?? 'application/octet-stream',
+      } as any);
+      formData.append('branchId', targetBranchId);
+
+      const res = await fetch(`${API_BASE_URL}/inventory/bulk-import`, {
+        method:  'POST',
+        headers: { Authorization: `Bearer ${token}` }, // NO Content-Type — fetch sets multipart boundary
+        body:    formData,
+      });
+
+      const json = await res.json();
+      setImportResult(json);
+      setImportResultVisible(true);
+
+      // Refresh data so the new books appear immediately
+      fetchBooks();
+      fetchBranches();
+      if (selectedBranchId) selectBranch(selectedBranchId);
+    } catch (err: any) {
+      Alert.alert('Import Error', err.message ?? 'Something went wrong.');
+    } finally {
+      setImporting(false);
+    }
+  };
+
+  // Show branch picker then kick off import
+  const openImportFlow = () => {
+    if (branches.length === 0) {
+      Alert.alert('No branches', 'Load branches first.');
+      return;
+    }
+    setBranchPickerVisible(true);
+  };
+
   const filteredBooks = books.filter((b) =>
     !search.trim() ||
     b.title?.toLowerCase().includes(search.toLowerCase()) ||
@@ -299,6 +365,99 @@ export default function InventoryScreen() {
         </View>
       </Modal>
 
+      {/* ── Branch Picker Modal (for bulk import) ─────────────────────── */}
+      <Modal
+        transparent
+        visible={branchPickerVisible}
+        animationType="slide"
+        onRequestClose={() => setBranchPickerVisible(false)}
+      >
+        <View style={s.modalOverlay}>
+          <View style={s.modalCard}>
+            <Text style={s.modalTitle}>Select Target Branch</Text>
+            <Text style={[s.modalMeta, { marginBottom: Spacing.md }]}>
+              Choose which branch the imported books will be added to.
+            </Text>
+            <ScrollView style={{ maxHeight: 300 }} showsVerticalScrollIndicator={false}>
+              {branches.map((b) => (
+                <TouchableOpacity
+                  key={b._id}
+                  style={[s.card, { marginBottom: Spacing.xs }]}
+                  onPress={() => {
+                    setBranchPickerVisible(false);
+                    setImportBranchId(b._id);
+                    handleBulkImport(b._id);
+                  }}
+                >
+                  <View style={{ flex: 1 }}>
+                    <Text style={s.cardTitle}>{b.name}</Text>
+                    <Text style={s.cardMeta}>{b.address}</Text>
+                  </View>
+                  <Text style={{ fontSize: 18 }}>→</Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+            <TouchableOpacity
+              style={[s.modalBtn, { backgroundColor: Colors.card, borderWidth: 1.5, borderColor: Colors.cardBorder, marginTop: Spacing.md }]}
+              onPress={() => setBranchPickerVisible(false)}
+            >
+              <Text style={[s.modalBtnText, { color: Colors.textSecondary }]}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ── Import Result Modal ───────────────────────────────────────── */}
+      <Modal
+        transparent
+        visible={importResultVisible}
+        animationType="slide"
+        onRequestClose={() => setImportResultVisible(false)}
+      >
+        <View style={s.modalOverlay}>
+          <View style={s.modalCard}>
+            <Text style={s.modalTitle}>📊 Import Report</Text>
+            {importResult && (
+              <>
+                <View style={s.importSummaryRow}>
+                  <View style={[s.importBadge, { backgroundColor: '#d1fad7' }]}>
+                    <Text style={[s.importBadgeNum, { color: '#1a7a33' }]}>{importResult.importedCount}</Text>
+                    <Text style={[s.importBadgeLabel, { color: '#1a7a33' }]}>Imported</Text>
+                  </View>
+                  <View style={[s.importBadge, { backgroundColor: importResult.skippedCount > 0 ? '#fde8d8' : '#f0f0f0' }]}>
+                    <Text style={[s.importBadgeNum, { color: importResult.skippedCount > 0 ? '#b94a00' : '#888' }]}>{importResult.skippedCount}</Text>
+                    <Text style={[s.importBadgeLabel, { color: importResult.skippedCount > 0 ? '#b94a00' : '#888' }]}>Skipped</Text>
+                  </View>
+                </View>
+
+                {importResult.errors.length > 0 && (
+                  <>
+                    <Text style={[s.label, { marginTop: Spacing.md }]}>Row Errors</Text>
+                    <ScrollView style={{ maxHeight: 200 }} showsVerticalScrollIndicator>
+                      {importResult.errors.map((e, i) => (
+                        <View key={i} style={s.errorRow}>
+                          <Text style={s.errorRowText}>
+                            Row {e.row}{e.isbn ? ` · ISBN ${e.isbn}` : ''}{e.title ? ` · "${e.title}"` : ''}:
+                            {'
+'}{e.reason}
+                          </Text>
+                        </View>
+                      ))}
+                    </ScrollView>
+                  </>
+                )}
+              </>
+            )}
+            <TouchableOpacity
+              style={[s.modalBtn, s.modalBtnPrimary, { marginTop: Spacing.xl }]}
+              onPress={() => setImportResultVisible(false)}
+            >
+              <Text style={[s.modalBtnText, { color: Colors.textOnDark }]}>Done</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={s.scroll}
@@ -310,8 +469,17 @@ export default function InventoryScreen() {
             <Text style={s.backText}>←</Text>
           </TouchableOpacity>
           <Text style={s.title}>Inventory</Text>
-          {/* spacer to centre the title */}
-          <View style={s.backBtn} />
+          {/* Import via spreadsheet */}
+          <TouchableOpacity
+            style={[s.importBtn, importing && { opacity: 0.5 }]}
+            onPress={openImportFlow}
+            disabled={importing}
+          >
+            {importing
+              ? <ActivityIndicator color={Colors.textOnDark} size="small" />
+              : <Text style={s.importBtnText}>📤 Import</Text>
+            }
+          </TouchableOpacity>
         </View>
 
         {/* ── Mode tabs ────────────────────────────────────────────────── */}
@@ -658,4 +826,40 @@ const s = StyleSheet.create({
   },
   modalBtnPrimary: { flex: 2, backgroundColor: Colors.accentSage },
   modalBtnText: { fontSize: Typography.body, fontWeight: '800' },
+
+  // Import button in header
+  importBtn: {
+    backgroundColor: Colors.accentSage,
+    borderRadius: Radius.full,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: 8,
+    minWidth: 80,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  importBtnText: { fontSize: Typography.label, fontWeight: '800', color: Colors.textOnDark },
+
+  // Import result modal
+  importSummaryRow: {
+    flexDirection: 'row',
+    gap: Spacing.md,
+    marginVertical: Spacing.md,
+  },
+  importBadge: {
+    flex: 1,
+    borderRadius: Radius.lg,
+    padding: Spacing.md,
+    alignItems: 'center',
+  },
+  importBadgeNum: { fontSize: 32, fontWeight: '900' },
+  importBadgeLabel: { fontSize: Typography.label, fontWeight: '700', marginTop: 2 },
+  errorRow: {
+    backgroundColor: '#fff4f0',
+    borderRadius: Radius.md,
+    padding: Spacing.sm,
+    marginBottom: Spacing.xs,
+    borderLeftWidth: 3,
+    borderLeftColor: '#e05c00',
+  },
+  errorRowText: { fontSize: Typography.caption, color: '#5c2200', lineHeight: 18 },
 });

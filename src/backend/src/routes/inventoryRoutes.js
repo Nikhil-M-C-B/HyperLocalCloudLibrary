@@ -1,10 +1,30 @@
 const express = require('express');
+const multer  = require('multer');
 const inventoryController = require('../controllers/inventoryController');
 const { protect, restrictTo } = require('../middleware/auth');
 const validate = require('../middleware/validate');
 const Joi = require('joi');
 
 const router = express.Router();
+
+// Multer: store uploaded spreadsheet in memory (no disk writes)
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits:  { fileSize: 10 * 1024 * 1024 }, // 10 MB max
+  fileFilter: (_req, file, cb) => {
+    const allowed = [
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', // .xlsx
+      'application/vnd.ms-excel',                                           // .xls
+      'text/csv',
+      'application/csv',
+    ];
+    if (allowed.includes(file.mimetype) || file.originalname.match(/\.(xlsx|xls|csv)$/i)) {
+      cb(null, true);
+    } else {
+      cb(new Error('Only .xlsx, .xls, and .csv files are accepted'), false);
+    }
+  },
+});
 
 // Validation schemas
 const addCopiesSchema = Joi.object({
@@ -27,5 +47,13 @@ router.put('/:copyId', validate(updateStatusSchema), inventoryController.updateC
 router.get('/book/:bookId', inventoryController.getBookInventory);
 router.get('/branch/:branchId', inventoryController.getInventoryByBranch);
 router.get('/branch/:branchId/stats', inventoryController.getBranchStats);
+
+// Bulk import: POST /inventory/bulk-import
+// multipart/form-data  with fields: file (spreadsheet) + branchId (string)
+router.post(
+  '/bulk-import',
+  upload.single('file'),
+  inventoryController.bulkImportCopies,
+);
 
 module.exports = router;

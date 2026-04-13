@@ -422,3 +422,145 @@ exports.fetchByISBN = async (isbn) => {
     source:        [google && 'google', openLib && 'open_library', olSearch && 'ol_search', loc && 'loc'].filter(Boolean).join('+'),
   };
 };
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Public API — fetch by TITLE (used when no ISBN is provided)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Search for book metadata using a title string.
+ *
+ * Strategy:
+ *   1. Google Books  intitle: query — usually fastest and richest.
+ *   2. Open Library search API     — free fallback, often has more genres.
+ *
+ * The result is merged using the same rules as fetchByISBN.
+ * Returns null if neither source returns a hit.
+ */
+exports.fetchByTitle = async (title) => {
+  if (!title || !title.trim()) return null;
+  const q = title.trim();
+
+  let google   = null;
+  let olSearch = null;
+
+  // ── 1. Google Books ───────────────────────────────────────────────────────
+  try {
+    const params = { q: `intitle:${q}` };
+    if (config.googleBooks?.apiKey) params.key = config.googleBooks.apiKey;
+
+    const res = await axios.get(
+      'https://www.googleapis.com/books/v1/volumes',
+      { params, timeout: 8000 }
+    );
+
+    const item = res.data?.items?.[0];
+    if (item) {
+      const info = item.volumeInfo;
+      const cover =
+        info.imageLinks?.extraLarge ||
+        info.imageLinks?.large      ||
+        info.imageLinks?.medium     ||
+        info.imageLinks?.thumbnail  ||
+        null;
+
+      const fullTitle = info.subtitle
+        ? `${info.title}: ${info.subtitle}`
+        : (info.title || null);
+
+      const isbn13 = info.industryIdentifiers?.find(i => i.type === 'ISBN_13')?.identifier ||
+                     info.industryIdentifiers?.find(i => i.type === 'ISBN_10')?.identifier ||
+                     null;
+
+      google = {
+        title:         fullTitle,
+        author:        info.authors?.join(', ') || null,
+        isbn:          isbn13,
+        genre:         _cleanGenres(info.categories || []),
+        language:      info.language === 'en' ? 'English' : (info.language || 'English'),
+        summary:       _truncate(info.description, 1000),
+        coverImage:    cover ? cover.replace(/^http:\/\//, 'https://').replace(/&edge=curl/, '') : null,
+        pageCount:     info.pageCount   || null,
+        publisher:     info.publisher   || null,
+        publishedDate: info.publishedDate || null,
+        minAge:        _mapMinAge(info.categories || [], info.maturityRating || ''),
+        _maturityRating: info.maturityRating || '',
+        source:        'google_books_title',
+      };
+    }
+  } catch (err) {
+    console.warn(`[BookMetadata] Google Books (title) THREW for "${q}": ${err.message}`);
+  }
+
+  // ── 2. Open Library search ────────────────────────────────────────────────
+  try {
+    const res = await axios.get(
+      'https://openlibrary.org/search.json',
+      {
+        params: {
+          title:  q,
+          limit:  1,
+          fields: 'title,author_name,subject,first_publish_year,publisher,language,isbn',
+        },
+        timeout: 8000,
+      }
+    );
+
+    const doc = res.data?.docs?.[0];
+    if (doc) {
+      const allSubjects = doc.subject || [];
+      const isbn13 = doc.isbn?.find(i => i.length === 13) ||
+                     doc.isbn?.[0] ||
+                     null;
+
+      olSearch = {
+        title:         doc.title || null,
+        author:        doc.author_name?.join(', ') || null,
+        isbn:          isbn13,
+        genre:         _cleanGenres(allSubjects.slice(0, 6)),
+        language:      doc.language?.includes('eng') ? 'English' : (doc.language?.[0] || 'English'),
+        summary:       null,
+        coverImage:    null,
+        pageCount:     null,
+        publisher:     doc.publisher?.[0] || null,
+        publishedDate: doc.first_publish_year ? String(doc.first_publish_year) : null,
+        minAge:        _mapMinAge(allSubjects, ''),
+        source:        'open_library_title',
+      };
+    }
+  } catch (err) {
+    console.warn(`[BookMetadata] OL Search (title) THREW for "${q}": ${err.message}`);
+  }
+
+  if (!google && !olSearch) return null;
+
+  // ── Merge — same rules as fetchByISBN ─────────────────────────────────────
+  const primary   = google || olSearch;
+  const secondary = google ? olSearch : null;
+
+  const allAges = [google?.minAge, olSearch?.minAge].filter(a => a !== null && a !== undefined);
+  const maturityRating = google?._maturityRating || '';
+  if (!allAges.length && maturityRating) {
+    const derived = _mapMinAge([], maturityRating);
+    if (derived !== null) allAges.push(derived);
+  }
+
+  let bestMinAge = allAges[0] ?? null;
+  if (allAges.length > 1) {
+    const hasChildRating = allAges.some(a => a < 12);
+    bestMinAge = hasChildRating ? Math.min(...allAges) : Math.max(...allAges);
+  }
+
+  return {
+    ...primary,
+    summary:       primary.summary       || secondary?.summary       || null,
+    genre:         primary.genre?.length  ? primary.genre  : (secondary?.genre || []),
+    coverImage:    primary.coverImage    || secondary?.coverImage    || null,
+    publisher:     primary.publisher     || secondary?.publisher     || null,
+    pageCount:     primary.pageCount     || secondary?.pageCount     || null,
+    isbn:          primary.isbn          || secondary?.isbn          || null,
+    minAge:        bestMinAge,
+    publishedDate: primary.publishedDate || secondary?.publishedDate || null,
+    source:        [google && 'google_books_title', olSearch && 'ol_title'].filter(Boolean).join('+'),
+  };
+};
