@@ -4,7 +4,7 @@ import { Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native
 import { Colors, Radius, Spacing, Typography } from '@/constants/theme';
 
 export type NavRole = 'user' | 'child';
-export type UserTab = 'home' | 'mybooks' | 'owl' | 'profile' | 'switch';
+export type UserTab = 'home' | 'mybooks' | 'cart' | 'owl' | 'profile' | 'switch';
 export type ChildTab = 'home' | 'owl';
 
 type UserProps = { role: 'user'; active: UserTab };
@@ -14,6 +14,7 @@ type Props = UserProps | ChildProps;
 const USER_ITEMS: { id: UserTab; label: string; icon: string; route: string }[] = [
   { id: 'home',    label: 'Home',      icon: 'home',       route: '/(user)'            },
   { id: 'mybooks', label: 'My Orders', icon: 'receipt-long', route: '/(user)/my-books'  },
+  { id: 'cart',    label: 'Cart',      icon: 'shopping-cart', route: '/(user)/cart'      },
   { id: 'owl',     label: 'Owl AI',    icon: 'smart-toy',  route: '/(user)/owl'        },
   { id: 'profile', label: 'Profile',   icon: 'person',     route: '/(user)/edit-profile'},
   { id: 'switch',  label: 'Profiles',  icon: 'swap-horiz', route: '/(select-profile)'  },

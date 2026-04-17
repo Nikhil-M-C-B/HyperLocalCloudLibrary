@@ -25,6 +25,7 @@ const penaltyRoutes  = require('./routes/penaltyRoutes');
 const deliveryRoutes = require('./routes/deliveryRoutes');
 const shipmentRoutes = require('./routes/shipmentRoutes');
 const quizRoutes     = require('./routes/quizRoutes');
+const cartRoutes     = require('./routes/cartRoutes');
 const app = express();
 
 // ── CORS must come first — before Helmet and rate limiters ──
@@ -78,6 +79,8 @@ app.use('/api/v1/delivery',  deliveryRoutes);
 app.use('/api/v1/shipments', shipmentRoutes);
 // AI Quiz Engine Routes
 app.use('/api/v1/quizzes', quizRoutes);
+// Cart routes (single-library cart behavior)
+app.use('/api/v1/cart', cartRoutes);
 
 // Handle undefined routes
 app.all('*', (req, res, next) => {

@@ -10,6 +10,7 @@ export default function UserLayout() {
       }}
     >
       <Stack.Screen name="index" />
+      <Stack.Screen name="cart" />
       <Stack.Screen name="edit-profile" />
       <Stack.Screen name="select-address" />
     </Stack>
