@@ -12,13 +12,18 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-const STEPS = [
-  { key: 'placed', label: 'Order Placed', icon: '📋', desc: 'Mar 3, 2026 · 10:22 AM' },
-  { key: 'packed', label: 'Packed at Library', icon: '📦', desc: 'Mar 3, 2026 · 2:15 PM' },
-  { key: 'shipped', label: 'Shipped', icon: '🚚', desc: 'Mar 4, 2026 · 9:00 AM' },
-  { key: 'out', label: 'Out for Delivery', icon: '🛵', desc: 'Estimated today by 7 PM' },
-  { key: 'delivered', label: 'Delivered', icon: '✅', desc: 'Pending' },
-];
+const formatTimelineTime = (value?: string | Date | null) => {
+  if (!value) return null;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  return date.toLocaleString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+};
 
 export default function TrackOrderScreen() {
   const router = useRouter();
@@ -51,12 +56,47 @@ export default function TrackOrderScreen() {
     if (!delivery) return 0;
     if (delivery.status === 'DELIVERED' || issue?.status === 'RETURNED') return 4;
     if (delivery.status === 'OUT_FOR_DELIVERY') return 3;
-    if (delivery.status === 'IN_TRANSIT') return 2;
+    if (delivery.status === 'DISPATCHED') return 2;
     if (delivery.status === 'SCHEDULED') return 1;
     return 0; // PLACED
   };
 
   const CURRENT_STEP = getStepIndex();
+  const deliveryFailed = delivery?.status === 'FAILED' || delivery?.status === 'CANCELLED';
+  const steps = [
+    {
+      key: 'placed',
+      label: 'Order Placed',
+      icon: '📋',
+      desc: formatTimelineTime(issue?.issueDate) || 'Pending',
+    },
+    {
+      key: 'packed',
+      label: 'Packed at Library',
+      icon: '📦',
+      desc: formatTimelineTime(delivery?.scheduledAt || delivery?.createdAt) || 'Pending',
+    },
+    {
+      key: 'shipped',
+      label: 'Shipped',
+      icon: '🚚',
+      desc: formatTimelineTime(delivery?.dispatchedAt) || 'Pending',
+    },
+    {
+      key: 'out',
+      label: 'Out for Delivery',
+      icon: '🛵',
+      desc: delivery?.status === 'OUT_FOR_DELIVERY'
+        ? (formatTimelineTime(delivery?.updatedAt) || 'In progress')
+        : 'Pending',
+    },
+    {
+      key: 'delivered',
+      label: 'Delivered',
+      icon: '✅',
+      desc: formatTimelineTime(delivery?.deliveredAt) || (deliveryFailed ? 'Delivery failed' : 'Pending'),
+    },
+  ];
 
   return (
     <SafeAreaView style={s.safe}>
@@ -68,7 +108,7 @@ export default function TrackOrderScreen() {
         </TouchableOpacity>
 
         <Text style={s.title}>Track Order</Text>
-        <Text style={s.orderId}>Issue #{issue ? issue._id.substring(0, 8).toUpperCase() : '...'}</Text>
+        <Text style={s.orderId}>{loading ? 'Loading order...' : `Issue #${issue ? issue._id.substring(0, 8).toUpperCase() : '...'}`}</Text>
 
         {/* Book info */}
         <View style={s.bookCard}>
@@ -78,7 +118,7 @@ export default function TrackOrderScreen() {
             <Text style={s.bookAuthor}>{issue ? `by ${issue.copyId?.bookId?.author} · ${issue.copyId?.branchId?.name}` : 'Loading...'}</Text>
           </View>
           <View style={s.statusPill}>
-            <Text style={s.statusText}>{STEPS[CURRENT_STEP]?.label || 'Loading...'}</Text>
+            <Text style={s.statusText}>{deliveryFailed ? 'Delivery Failed' : (steps[CURRENT_STEP]?.label || 'Loading...')}</Text>
           </View>
         </View>
 
@@ -86,14 +126,20 @@ export default function TrackOrderScreen() {
         <View style={s.etaBanner}>
           <Text style={s.etaEmoji}>⏱️</Text>
           <View>
-            <Text style={s.etaTitle}>{delivery?.status === 'DELIVERED' ? 'Delivered!' : `Expected by ${delivery?.scheduledAt ? new Date(delivery.scheduledAt).toLocaleDateString() : 'soon'}`}</Text>
+            <Text style={s.etaTitle}>
+              {deliveryFailed
+                ? 'Delivery failed'
+                : (delivery?.status === 'DELIVERED'
+                  ? 'Delivered!'
+                  : `Expected by ${delivery?.scheduledAt ? new Date(delivery.scheduledAt).toLocaleDateString() : 'soon'}`)}
+            </Text>
             <Text style={s.etaSub}>Return by: {issue?.dueDate ? new Date(issue.dueDate).toLocaleDateString() : '...'}</Text>
           </View>
         </View>
 
         {/* Progress stepper */}
         <View style={s.stepperCard}>
-          {STEPS.map((step, i) => {
+          {steps.map((step, i) => {
             const isDone = i < CURRENT_STEP;
             const isCurrent = i === CURRENT_STEP;
             const isPending = i > CURRENT_STEP;
@@ -109,7 +155,7 @@ export default function TrackOrderScreen() {
                   ]}>
                     <Text style={[s.stepIcon, isPending && { opacity: 0.3 }]}>{step.icon}</Text>
                   </View>
-                  {i < STEPS.length - 1 && (
+                  {i < steps.length - 1 && (
                     <View style={[s.line, isDone && s.lineDone]} />
                   )}
                 </View>

@@ -1,5 +1,6 @@
 import bookService from '@/api/services/bookService';
 import axiosInstance from '@/api/axiosInstance';
+import cartService from '@/api/services/cartService';
 import { BookCover } from '@/components/BookCover';
 import { NavBar, NAV_BOTTOM_PAD } from '@/components/NavBar';
 import type { Book } from '@/constants/mockData';
@@ -11,6 +12,7 @@ import * as Location from 'expo-location';
 import { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   FlatList,
   Platform,
   ScrollView,
@@ -84,7 +86,7 @@ function StarRow({ rating }: { rating: number }) {
 
 export default function UserBookDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { userId, activeProfileId } = useAppStore();
+  const { userId, activeProfileId, selectedBranchId } = useAppStore();
   const router = useRouter();
   const [book, setBook] = useState<Book | null>(null);
   const [loading, setLoading] = useState(true);
@@ -94,6 +96,7 @@ export default function UserBookDetail() {
   const [similarBooks, setSimilarBooks] = useState<Book[]>([]);
   const [similarGenre, setSimilarGenre] = useState<string>('');
   const [userCoords, setUserCoords] = useState<{ latitude: number; longitude: number } | null>(null);
+  const [cartLoading, setCartLoading] = useState(false);
 
   // ─── Resolve User Location ──────────────────────────────────────────────────
   useEffect(() => {
@@ -208,7 +211,7 @@ export default function UserBookDetail() {
 
     fetchSimilar();
     return () => { active = false; };
-  }, [book?.id, userCoords]);
+  }, [book, userCoords]);
 
   // Re-fetch every time this screen comes into focus so availableCopies
   // reflects the latest inventory after an order is placed.
@@ -248,7 +251,7 @@ export default function UserBookDetail() {
       };
       fetchBook();
       return () => { active = false; };
-    }, [id, userCoords])
+    }, [id, userCoords, userId, activeProfileId])
   );
 
   if (loading) {
@@ -260,6 +263,93 @@ export default function UserBookDetail() {
   }
 
   if (!book) return null;
+
+  const showLibraryConflictPrompt = (message: string) => {
+    if (Platform.OS === 'web') {
+      const replaceConfirmed = typeof globalThis !== 'undefined'
+        ? (globalThis as any).confirm?.(`${message}\n\nPress OK to replace current cart with this book. Press Cancel for other options.`)
+        : false;
+
+      if (replaceConfirmed) {
+        handleAddToCart(true);
+        return;
+      }
+
+      const orderFirst = typeof globalThis !== 'undefined'
+        ? (globalThis as any).confirm?.('Do you want to order the current cart first? Press OK to open cart, Cancel to stay on this page.')
+        : false;
+
+      if (orderFirst) {
+        router.push('/(user)/cart');
+      }
+      return;
+    }
+
+    Alert.alert(
+      'Replace cart?',
+      message,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Order current cart first',
+          onPress: () => router.push('/(user)/cart'),
+        },
+        {
+          text: 'Clear & Add',
+          style: 'destructive',
+          onPress: () => handleAddToCart(true),
+        },
+      ],
+    );
+  };
+
+  const handleAddToCart = async (forceReplace = false) => {
+    if (!selectedBranchId) {
+      Alert.alert('Select Library', 'Please select a library first from the Home screen.');
+      return;
+    }
+
+    if (!forceReplace) {
+      try {
+        const cartRes = await cartService.getCart();
+        const existingCartLibraryId = cartRes?.data?.cart?.library_id;
+        const hasItems = Array.isArray(cartRes?.data?.cart?.items) && cartRes.data.cart.items.length > 0;
+
+        if (hasItems && existingCartLibraryId && String(existingCartLibraryId) !== String(selectedBranchId)) {
+          showLibraryConflictPrompt('Your cart contains books from another library. Do you want to replace cart or order current cart first?');
+          return;
+        }
+      } catch (precheckError) {
+        console.warn('Cart precheck failed, continuing with backend validation', precheckError);
+      }
+    }
+
+    const payload = {
+      book_id: book.id,
+      library_id: selectedBranchId,
+      force_replace: forceReplace,
+    };
+
+    try {
+      setCartLoading(true);
+      await cartService.addToCart(payload);
+      Alert.alert('✅ Book added to cart!');
+    } catch (error: any) {
+      const status = error?.response?.status;
+      const data = error?.response?.data;
+
+      if (status === 409 && data?.requires_confirmation) {
+        showLibraryConflictPrompt(
+          data?.message || 'Your cart contains books from another library. Do you want to replace cart or order current cart first?',
+        );
+      } else {
+        console.warn('Failed to add to cart', error);
+        Alert.alert('Error', 'Could not add this book to cart. Please try again.');
+      }
+    } finally {
+      setCartLoading(false);
+    }
+  };
 
   return (
     <SafeAreaView style={s.safe}>
@@ -416,10 +506,11 @@ export default function UserBookDetail() {
           {book.availableCopies > 0 ? (
             <TouchableOpacity
               style={s.btnPrimary}
+              disabled={cartLoading}
               activeOpacity={0.82}
-              onPress={() => router.push(`/(user)/order/${book.id}`)}
+              onPress={() => handleAddToCart(false)}
             >
-              <Text style={s.btnPrimaryText}>📦 Order this book</Text>
+              <Text style={s.btnPrimaryText}>{cartLoading ? 'Adding...' : '🛒 Add to cart'}</Text>
             </TouchableOpacity>
           ) : (
             <TouchableOpacity style={s.btnWaitlist} activeOpacity={0.82}>
@@ -444,6 +535,7 @@ export default function UserBookDetail() {
 
         <View style={{ height: Spacing.xxl }} />
       </ScrollView>
+
       {Platform.OS !== 'web' && <NavBar role="user" active="home" />}
     </SafeAreaView>
   );
