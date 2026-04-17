@@ -1,6 +1,7 @@
 import { API_BASE_URL } from '@/constants/config';
 import { Colors, Radius, Spacing, Typography } from '@/constants/theme';
 import useAppStore from '@/store/useAppStore';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as DocumentPicker from 'expo-document-picker';
 import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
@@ -16,6 +17,8 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+
+const IMPORT_HINT_KEY = 'bulk_import_hint_dismissed';
 
 type Mode = 'book' | 'branch';
 type Condition = 'GOOD' | 'FAIR' | 'POOR';
@@ -71,6 +74,8 @@ export default function InventoryScreen() {
   const [importResult, setImportResult] = useState<{ importedCount: number; skippedCount: number; errors: any[] } | null>(null);
   const [importResultVisible, setImportResultVisible] = useState(false);
   const [branchPickerVisible, setBranchPickerVisible] = useState(false);
+  const [instructionVisible, setInstructionVisible] = useState(false);
+  const [doNotShowHint, setDoNotShowHint] = useState(false);
 
   const hdrs = { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` };
 
@@ -78,6 +83,10 @@ export default function InventoryScreen() {
     if (!token) return;
     fetchBooks();
     fetchBranches();
+    // Load the "don't show import hint" preference
+    AsyncStorage.getItem(IMPORT_HINT_KEY).then((val) => {
+      if (val === 'true') setDoNotShowHint(true);
+    }).catch(() => {});
   }, [token]);
 
   const fetchBooks = async () => {
@@ -219,12 +228,19 @@ export default function InventoryScreen() {
       setImporting(true);
 
       const formData = new FormData();
-      // React Native FormData expects { uri, name, type } for files
-      formData.append('file', {
-        uri:  file.uri,
-        name: file.name,
-        type: file.mimeType ?? 'application/octet-stream',
-      } as any);
+      // On web, expo-document-picker provides a real browser File object via `file.file`.
+      // On native it only provides { uri, name, mimeType } — multer cannot use a plain object.
+      if ((file as any).file instanceof File) {
+        // Web: append the real File object so multer can read the bytes
+        formData.append('file', (file as any).file, file.name);
+      } else {
+        // Native (iOS / Android): use the RN FormData { uri, name, type } shape
+        formData.append('file', {
+          uri:  file.uri,
+          name: file.name,
+          type: file.mimeType ?? 'application/octet-stream',
+        } as any);
+      }
       formData.append('branchId', targetBranchId);
 
       const res = await fetch(`${API_BASE_URL}/inventory/bulk-import`, {
@@ -234,6 +250,10 @@ export default function InventoryScreen() {
       });
 
       const json = await res.json();
+      if (!res.ok) {
+        throw new Error(json.message || `Server returned ${res.status}`);
+      }
+      
       setImportResult(json);
       setImportResultVisible(true);
 
@@ -248,12 +268,25 @@ export default function InventoryScreen() {
     }
   };
 
-  // Show branch picker then kick off import
+  // Show instruction hint (if not dismissed), then branch picker
   const openImportFlow = () => {
     if (branches.length === 0) {
       Alert.alert('No branches', 'Load branches first.');
       return;
     }
+    // If the librarian already dismissed the hint, skip straight to branch picker
+    if (doNotShowHint) {
+      setBranchPickerVisible(true);
+    } else {
+      setInstructionVisible(true);
+    }
+  };
+
+  const handleInstructionProceed = async () => {
+    if (doNotShowHint) {
+      await AsyncStorage.setItem(IMPORT_HINT_KEY, 'true').catch(() => {});
+    }
+    setInstructionVisible(false);
     setBranchPickerVisible(true);
   };
 
@@ -365,6 +398,77 @@ export default function InventoryScreen() {
         </View>
       </Modal>
 
+      {/* ── Import Instructions Modal ─────────────────────────────────── */}
+      <Modal
+        transparent
+        visible={instructionVisible}
+        animationType="slide"
+        onRequestClose={() => setInstructionVisible(false)}
+      >
+        <View style={s.modalOverlay}>
+          <View style={s.modalCard}>
+            <Text style={s.modalTitle}>📋 Prepare Your Spreadsheet</Text>
+            <Text style={[s.modalMeta, { marginBottom: Spacing.md }]}>
+              Your Excel (.xlsx) or CSV file should have the following columns:
+            </Text>
+
+            {/* Column reference table */}
+            <View style={s.hintTable}>
+              {([
+                ['ISBN', 'Recommended', '13-digit ISBN (e.g. 9780439708180)'],
+                ['Title', 'Required if no ISBN', 'Used to search online if ISBN is missing'],
+                ['Quantity', '✅ Required', 'Number of physical copies to add'],
+                ['Condition', 'Optional', 'GOOD · FAIR · POOR · NEW · DAMAGED'],
+                ['Author', 'Fallback', 'Used only if online lookup fails'],
+                ['Genre', 'Fallback', 'Semicolon-separated, e.g. Fiction;Drama'],
+                ['Summary', 'Fallback', 'Required if online lookup finds nothing'],
+                ['Language', 'Fallback', 'Defaults to English'],
+                ['MinAge', 'Fallback', 'Minimum reader age, e.g. 12'],
+              ] as [string, string, string][]).map(([col, req, desc]) => (
+                <View key={col} style={s.hintRow}>
+                  <View style={{ width: 72 }}>
+                    <Text style={s.hintCol}>{col}</Text>
+                    <Text style={s.hintReq}>{req}</Text>
+                  </View>
+                  <Text style={s.hintDesc} numberOfLines={2}>{desc}</Text>
+                </View>
+              ))}
+            </View>
+
+            <Text style={[s.modalMeta, { marginTop: Spacing.md, fontStyle: 'italic' }]}>
+              💡 Tip: If a book has an ISBN, all other columns are optional — we'll fetch the metadata automatically!
+            </Text>
+
+            {/* Don't show again toggle */}
+            <TouchableOpacity
+              style={s.dontShowRow}
+              onPress={() => setDoNotShowHint(prev => !prev)}
+              activeOpacity={0.7}
+            >
+              <View style={[s.checkbox, doNotShowHint && s.checkboxChecked]}>
+                {doNotShowHint && <Text style={s.checkmark}>✓</Text>}
+              </View>
+              <Text style={s.dontShowText}>Don't show this again</Text>
+            </TouchableOpacity>
+
+            <View style={s.modalBtns}>
+              <TouchableOpacity
+                style={[s.modalBtn, { backgroundColor: Colors.card, borderWidth: 1.5, borderColor: Colors.cardBorder }]}
+                onPress={() => setInstructionVisible(false)}
+              >
+                <Text style={[s.modalBtnText, { color: Colors.textSecondary }]}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[s.modalBtn, s.modalBtnPrimary]}
+                onPress={handleInstructionProceed}
+              >
+                <Text style={[s.modalBtnText, { color: Colors.textOnDark }]}>Proceed →</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
       {/* ── Branch Picker Modal (for bulk import) ─────────────────────── */}
       <Modal
         transparent
@@ -417,29 +521,28 @@ export default function InventoryScreen() {
         <View style={s.modalOverlay}>
           <View style={s.modalCard}>
             <Text style={s.modalTitle}>📊 Import Report</Text>
-            {importResult && (
+            {importResult != null && (
               <>
                 <View style={s.importSummaryRow}>
                   <View style={[s.importBadge, { backgroundColor: '#d1fad7' }]}>
-                    <Text style={[s.importBadgeNum, { color: '#1a7a33' }]}>{importResult.importedCount}</Text>
+                    <Text style={[s.importBadgeNum, { color: '#1a7a33' }]}>{importResult.importedCount ?? 0}</Text>
                     <Text style={[s.importBadgeLabel, { color: '#1a7a33' }]}>Imported</Text>
                   </View>
-                  <View style={[s.importBadge, { backgroundColor: importResult.skippedCount > 0 ? '#fde8d8' : '#f0f0f0' }]}>
-                    <Text style={[s.importBadgeNum, { color: importResult.skippedCount > 0 ? '#b94a00' : '#888' }]}>{importResult.skippedCount}</Text>
-                    <Text style={[s.importBadgeLabel, { color: importResult.skippedCount > 0 ? '#b94a00' : '#888' }]}>Skipped</Text>
+                  <View style={[s.importBadge, { backgroundColor: (importResult.skippedCount ?? 0) > 0 ? '#fde8d8' : '#f0f0f0' }]}>
+                    <Text style={[s.importBadgeNum, { color: (importResult.skippedCount ?? 0) > 0 ? '#b94a00' : '#888' }]}>{importResult.skippedCount ?? 0}</Text>
+                    <Text style={[s.importBadgeLabel, { color: (importResult.skippedCount ?? 0) > 0 ? '#b94a00' : '#888' }]}>Skipped</Text>
                   </View>
                 </View>
 
-                {importResult.errors.length > 0 && (
+                {(importResult.errors ?? []).length > 0 && (
                   <>
                     <Text style={[s.label, { marginTop: Spacing.md }]}>Row Errors</Text>
                     <ScrollView style={{ maxHeight: 200 }} showsVerticalScrollIndicator>
-                      {importResult.errors.map((e, i) => (
+                      {(importResult.errors ?? []).map((e: any, i: number) => (
                         <View key={i} style={s.errorRow}>
                           <Text style={s.errorRowText}>
                             Row {e.row}{e.isbn ? ` · ISBN ${e.isbn}` : ''}{e.title ? ` · "${e.title}"` : ''}:
-                            {'
-'}{e.reason}
+                            {'\n'}{e.reason}
                           </Text>
                         </View>
                       ))}
@@ -862,4 +965,65 @@ const s = StyleSheet.create({
     borderLeftColor: '#e05c00',
   },
   errorRowText: { fontSize: Typography.caption, color: '#5c2200', lineHeight: 18 },
+
+  // Import instruction modal
+  hintTable: {
+    gap: 6,
+    marginTop: 4,
+  },
+  hintRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: Spacing.sm,
+    paddingVertical: 5,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.cardBorder,
+  },
+  hintCol: {
+    fontSize: Typography.label,
+    fontWeight: '800',
+    color: Colors.textPrimary,
+  },
+  hintReq: {
+    fontSize: 10,
+    color: Colors.textMuted,
+    marginTop: 1,
+  },
+  hintDesc: {
+    flex: 1,
+    fontSize: Typography.caption,
+    color: Colors.textSecondary,
+    lineHeight: 16,
+  },
+  dontShowRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    marginTop: Spacing.lg,
+  },
+  checkbox: {
+    width: 22,
+    height: 22,
+    borderRadius: 6,
+    borderWidth: 2,
+    borderColor: Colors.cardBorder,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: Colors.background,
+  },
+  checkboxChecked: {
+    backgroundColor: Colors.accentSage,
+    borderColor: Colors.accentSage,
+  },
+  checkmark: {
+    fontSize: 13,
+    color: Colors.textOnDark,
+    fontWeight: '900',
+    lineHeight: 16,
+  },
+  dontShowText: {
+    fontSize: Typography.label,
+    color: Colors.textSecondary,
+    fontWeight: '600',
+  },
 });

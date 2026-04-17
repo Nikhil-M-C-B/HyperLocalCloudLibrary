@@ -15,8 +15,8 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-// ─── Mock quiz questions keyed by ISBN (number→string) or book _id ─────────
-const QUIZZES: Record<string, { q: string; options: string[]; answer: number }[]> = {
+// Answer letter labels
+const LETTERS = ['A', 'B', 'C', 'D'];
 
   // ── Frog and Toad Are Friends — Arnold Lobel (ISBN 64440206) ──────────────
   '64440206': [
@@ -338,9 +338,6 @@ const QUIZZES: Record<string, { q: string; options: string[]; answer: number }[]
   ],
 };
 
-// Answer letter labels
-const LETTERS = ['A', 'B', 'C', 'D'];
-
 export default function QuizScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
@@ -348,54 +345,53 @@ export default function QuizScreen() {
   const { recordQuizResult } = useChildTrackingStore();
 
   const [bookTitle, setBookTitle] = useState('Loading book...');
-  const [bookIsbn, setBookIsbn] = useState<string | null>(null);
   useEffect(() => {
     let active = true;
-    const fetchBook = async () => {
-      try {
-        const response = await bookService.getBookById(id as string);
-        if (active && response.data?.book) {
-          setBookTitle(response.data.book.title);
-          // isbn is stored as a Number in the DB; convert to string for quiz key lookup
-          if (response.data.book.isbn != null) {
-            setBookIsbn(String(response.data.book.isbn));
-          }
-        } else if (active) {
-          setBookTitle('Unknown Book');
-        }
-      } catch (err) {
-        if (active) setBookTitle('Unknown Book');
-      }
-    };
-    fetchBook();
+    bookService.getBookById(id as string)
+      .then(r => { if (active && r.data?.book) setBookTitle(r.data.book.title); })
+      .catch(() => { if (active) setBookTitle('Unknown Book'); });
     return () => { active = false; };
   }, [id]);
 
   const { token } = useAppStore();
-  const [questions, setQuestions] = useState<any[] | null>(null);
-  const [loadingQuiz, setLoadingQuiz] = useState(true);
+  const [questions, setQuestions]         = useState<any[] | null>(null);
+  const [loadingQuiz, setLoadingQuiz]     = useState(true);
+  const [maxLimitReached, setMaxLimitReached] = useState(false);
+  const [maxAnswered, setMaxAnswered]     = useState(0);
 
   useEffect(() => {
     let active = true;
     const fetchQuiz = async () => {
       try {
-        const res = await fetch(`${API_BASE_URL}/quizzes/generate/${id}`, {
-          headers: { Authorization: `Bearer ${token}` }
+        const res  = await fetch(`${API_BASE_URL}/quizzes/generate/${id}`, {
+          headers: { Authorization: `Bearer ${token}` },
         });
         const json = await res.json();
-        if (active && json.data?.quiz?.questions) {
+
+        if (!active) return;
+
+        if (json.data?.maxLimitReached) {
+          setMaxLimitReached(true);
+          setMaxAnswered(json.data.questionsAnswered ?? 60);
+          return;
+        }
+
+        if (json.data?.quiz?.questions) {
           const adapted = json.data.quiz.questions.map((q: any) => ({
-            q: q.question,
-            options: q.options,
-            answer: q.options.indexOf(q.correctAnswer) !== -1 ? q.options.indexOf(q.correctAnswer) : 0,
+            _id:              q._id,
+            q:                q.question,
+            options:          q.options,
+            answer:           q.options.indexOf(q.correctAnswer) !== -1
+                                ? q.options.indexOf(q.correctAnswer)
+                                : 0,
             correctAnswerString: q.correctAnswer,
           }));
           setQuestions(adapted);
-        } else if (active) {
-            setQuestions(QUIZZES[id as string] || QUIZZES.default);
         }
       } catch (err) {
-        if (active) setQuestions(QUIZZES[id as string] || QUIZZES.default);
+        // Network error: nothing to fall back to — just leave loading=false so
+        // the user sees an empty state rather than crashing.
+        console.warn('[Quiz] Failed to fetch quiz:', err);
       } finally {
         if (active) setLoadingQuiz(false);
       }
@@ -445,10 +441,11 @@ export default function QuizScreen() {
       }
 
       try {
+        const qIds = questions.map((q: any) => q._id).filter(Boolean);
         await fetch(`${API_BASE_URL}/quizzes/submit`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-          body: JSON.stringify({ bookId: id, answers: answersData }),
+          body: JSON.stringify({ bookId: id, answers: answersData, questionIds: qIds }),
         });
       } catch (e) {
         console.warn('Failed to submit quiz to backend', e);
@@ -465,13 +462,45 @@ export default function QuizScreen() {
     setDone(false);
   };
 
-  if (loadingQuiz || !questions) {
+  if (loadingQuiz) {
     return (
       <SafeAreaView style={[s.safe, {justifyContent: 'center', alignItems: 'center'}]}>
-        <Text style={{fontSize: 48, marginBottom: 20}}>🪄</Text>
+        <Text style={{fontSize: 48, marginBottom: 20}}>📚</Text>
         <Text style={{fontSize: Typography.body + 2, color: Colors.textSecondary, fontWeight: '700', textAlign: 'center', paddingHorizontal: 30, lineHeight: 26}}>
-          Generating an AI Quiz{'\n'}just for you...
+          Preparing your quiz{'\n'}This may take a moment the first time...
         </Text>
+      </SafeAreaView>
+    );
+  }
+
+  if (maxLimitReached) {
+    return (
+      <SafeAreaView style={[s.safe, {justifyContent: 'center', alignItems: 'center', paddingHorizontal: Spacing.xl}]}>
+        {Platform.OS === 'web' && <NavBar role="child" active="home" />}
+        <Text style={{fontSize: 52, marginBottom: 16}}>🏆</Text>
+        <Text style={{fontSize: Typography.titleChild - 4, fontWeight: '900', color: Colors.accentSage, textAlign: 'center', marginBottom: 8}}>
+          Quiz Master!
+        </Text>
+        <Text style={{fontSize: Typography.body, color: Colors.textSecondary, textAlign: 'center', lineHeight: 24, marginBottom: 32}}>
+          You've answered all {maxAnswered} questions available for this book.{`\n`}Come back after reading a new book!
+        </Text>
+        <TouchableOpacity style={s.btnPrimary} onPress={() => router.back()}>
+          <Text style={s.btnPrimaryText}>Back to book</Text>
+        </TouchableOpacity>
+      </SafeAreaView>
+    );
+  }
+
+  if (!questions) {
+    return (
+      <SafeAreaView style={[s.safe, {justifyContent: 'center', alignItems: 'center', paddingHorizontal: Spacing.xl}]}>
+        <Text style={{fontSize: 40, marginBottom: 12}}>😕</Text>
+        <Text style={{fontSize: Typography.body, color: Colors.textSecondary, textAlign: 'center', lineHeight: 24}}>
+          Couldn't load the quiz right now.{`\n`}Please try again later.
+        </Text>
+        <TouchableOpacity style={[s.btnPrimary, {marginTop: 24}]} onPress={() => router.back()}>
+          <Text style={s.btnPrimaryText}>Go back</Text>
+        </TouchableOpacity>
       </SafeAreaView>
     );
   }
