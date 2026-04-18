@@ -90,7 +90,11 @@ exports.searchPublishers = async (query, limit = 12) => {
   const safeLimit = Math.min(Math.max(parseInt(limit, 10) || 12, 1), 30);
 
   const { data } = await openLibraryClient.get('/search.json', {
-    params: { publisher: q, limit: 80 },
+    params: {
+      publisher: q,
+      limit: 80,
+      fields: 'publisher,title,author_name,first_publish_year',
+    },
   });
 
   const docs = asArray(data?.docs);
