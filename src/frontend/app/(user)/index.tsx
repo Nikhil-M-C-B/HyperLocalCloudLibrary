@@ -853,6 +853,19 @@ export default function UserHome() {
         </View>
         )}
 
+        {mode === 'forYou' && (
+          <View style={s.catalogQuickRow}>
+            <TouchableOpacity style={s.catalogQuickBtn} onPress={() => router.push('/(user)/authors')}>
+              <Text style={s.catalogQuickTitle}>Author Explorer</Text>
+              <Text style={s.catalogQuickSub}>Open profiles & works</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={s.catalogQuickBtn} onPress={() => router.push('/(user)/publishers')}>
+              <Text style={s.catalogQuickTitle}>Publisher Explorer</Text>
+              <Text style={s.catalogQuickSub}>Open catalog lookup</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
         {mode === 'forChild' ? (
           /* ── FOR YOUR CHILD view ── */
           <View>
@@ -1268,6 +1281,31 @@ const s = StyleSheet.create({
     color: Colors.textMuted,
     fontWeight: "700",
     paddingHorizontal: 4,
+  },
+
+  catalogQuickRow: {
+    flexDirection: 'row',
+    gap: Spacing.sm,
+    paddingHorizontal: Spacing.xl,
+    marginBottom: Spacing.lg,
+  },
+  catalogQuickBtn: {
+    flex: 1,
+    backgroundColor: Colors.card,
+    borderWidth: 1,
+    borderColor: Colors.cardBorder,
+    borderRadius: Radius.lg,
+    padding: Spacing.md,
+    gap: 3,
+  },
+  catalogQuickTitle: {
+    color: Colors.textPrimary,
+    fontSize: Typography.body,
+    fontWeight: '700',
+  },
+  catalogQuickSub: {
+    color: Colors.textSecondary,
+    fontSize: Typography.label,
   },
 
   section: { paddingHorizontal: Spacing.xl, marginBottom: Spacing.xl },
