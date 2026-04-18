@@ -1,6 +1,6 @@
 const express = require('express');
 const bookController = require('../controllers/bookController');
-const { protect, restrictTo } = require('../middleware/auth');
+const { protect, restrictTo, requireActiveSubscription } = require('../middleware/auth');
 const validate = require('../middleware/validate');
 const Joi = require('joi');
 
@@ -58,9 +58,9 @@ const updateBookSchema = Joi.object({
 // Public routes (anyone can browse books)
 router.get('/', bookController.getAllBooks);
 router.get('/branch/:branchId', bookController.getBranchBooks);
-router.post('/chat', protect, bookController.chatWithOwl);
-router.post('/chat/stream', protect, bookController.streamChatWithOwl);
-router.get('/smart-recommendations', protect, bookController.getSmartRecommendations);
+router.post('/chat', protect, requireActiveSubscription('aiRecommendations'), bookController.chatWithOwl);
+router.post('/chat/stream', protect, requireActiveSubscription('aiRecommendations'), bookController.streamChatWithOwl);
+router.get('/smart-recommendations', protect, requireActiveSubscription('aiRecommendations'), bookController.getSmartRecommendations);
 router.get('/lookup', protect, restrictTo('LIBRARIAN', 'ADMIN'), bookController.lookupByISBN);
 router.get('/:bookId', bookController.getBook);
 router.get('/:bookId/availability', protect, bookController.checkAvailability);
