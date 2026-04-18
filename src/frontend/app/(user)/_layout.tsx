@@ -13,6 +13,8 @@ export default function UserLayout() {
       <Stack.Screen name="cart" />
       <Stack.Screen name="edit-profile" />
       <Stack.Screen name="select-address" />
+      <Stack.Screen name="authors" />
+      <Stack.Screen name="publishers" />
     </Stack>
   );
 }
