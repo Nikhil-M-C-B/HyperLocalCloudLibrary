@@ -193,6 +193,26 @@ const userSchema = new mongoose.Schema(
       enum: ["USER", "LIBRARIAN", "ADMIN"],
       default: "USER",
     },
+    subscription: {
+      plan: {
+        type: String,
+        enum: ['FREE', 'BASIC', 'PREMIUM'],
+        default: 'FREE',
+      },
+      status: {
+        type: String,
+        enum: ['ACTIVE', 'TRIALING', 'PAST_DUE', 'CANCELLED'],
+        default: 'ACTIVE',
+      },
+      currentPeriodEnd: {
+        type: Date,
+      },
+      features: {
+        aiRecommendations: { type: Boolean, default: true },
+        aiQuizzes: { type: Boolean, default: true },
+        premiumContent: { type: Boolean, default: false },
+      },
+    },
     // ── Platform Services Layer — Aryan ──────────────────
     // FCM device tokens for push notifications
     fcmTokens: [
