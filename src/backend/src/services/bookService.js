@@ -3,6 +3,61 @@ const BookCopy = require("../models/BookCopy");
 const AppError = require("../utils/AppError");
 const bookMetadataService = require("./bookMetadataService");
 const s3Service = require("./s3Service");
+const axios = require("axios");
+
+const GEMINI_EMBED_MODEL = process.env.GEMINI_EMBED_MODEL || "gemini-embedding-2-preview";
+const EMBEDDING_DIMENSION = parseInt(process.env.EMBEDDING_DIMENSION || "768", 10);
+
+const buildBookEmbeddingText = (bookData = {}) => {
+  const genreText = Array.isArray(bookData.genre) ? bookData.genre.join(", ") : String(bookData.genre || "");
+  const chatbotTagsText = Array.isArray(bookData.chatbotTags)
+    ? bookData.chatbotTags.map((tag) => String(tag).trim()).filter(Boolean).join(", ")
+    : String(bookData.chatbotTags || "");
+
+  return [
+    `Title: ${bookData.title || ""}`,
+    `Author: ${bookData.author || ""}`,
+    `Genre: ${genreText}`,
+    `Language: ${bookData.language || ""}`,
+    `ChatbotTags: ${chatbotTagsText}`,
+    `Summary: ${bookData.summary || ""}`,
+  ].join("\n").trim();
+};
+
+const getGeminiEmbedding = async (text) => {
+  const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
+  if (!apiKey) {
+    throw new AppError("Missing GEMINI_API_KEY/GOOGLE_API_KEY for embedding generation", 500);
+  }
+
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_EMBED_MODEL}:embedContent?key=${apiKey}`;
+
+  const response = await axios.post(
+    url,
+    {
+      content: {
+        parts: [{ text }],
+      },
+      taskType: "RETRIEVAL_DOCUMENT",
+      outputDimensionality: EMBEDDING_DIMENSION,
+    },
+    { timeout: 90000 }
+  );
+
+  const embedding = response.data?.embedding?.values;
+  if (!Array.isArray(embedding) || embedding.length === 0) {
+    throw new AppError(`Invalid Gemini embedding response: ${JSON.stringify(response.data)}`, 502);
+  }
+
+  if (embedding.length !== EMBEDDING_DIMENSION) {
+    throw new AppError(
+      `Embedding dimension mismatch. Expected ${EMBEDDING_DIMENSION}, got ${embedding.length}`,
+      502
+    );
+  }
+
+  return embedding;
+};
 
 const parseAgeRatingMin = (ageRating) => {
   if (!ageRating) return null;
@@ -430,6 +485,22 @@ exports.createBook = async (bookData) => {
     data.chatbotTags = [...data.generatedTags];
   }
 
+  // Always generate embeddings on librarian/admin book creation unless explicit vectors are provided.
+  if (!Array.isArray(data.plot_embeddings) || data.plot_embeddings.length === 0) {
+    const embeddingText = buildBookEmbeddingText(data);
+    if (!embeddingText) {
+      throw new AppError("Cannot generate embedding: missing book text content", 400);
+    }
+
+    const embedding = await getGeminiEmbedding(embeddingText);
+    data.plot_embeddings = embedding;
+    data.plot_embeddings_dim = embedding.length;
+    data.embedding_provider = GEMINI_EMBED_MODEL;
+    data.embedding_title = data.title;
+    data.embedding_author = data.author;
+    data.embedding_migrated_at = new Date();
+  }
+
   // Remove internal tracking field before saving
   delete data._metadataSource;
 
@@ -456,15 +527,48 @@ exports.updateBook = async (bookId, updateData) => {
     (field) => updateData[field] !== undefined,
   );
 
-  if (shouldRegenerateTags && !updateData.generatedTags) {
-    const existing = await Book.findById(bookId).lean();
+  const shouldRegenerateEmbedding = ["title", "author", "genre", "language", "summary", "chatbotTags"].some(
+    (field) => updateData[field] !== undefined,
+  );
+  const hasCustomEmbedding = Array.isArray(updateData.plot_embeddings) && updateData.plot_embeddings.length > 0;
+
+  let existing = null;
+  if ((shouldRegenerateTags && !updateData.generatedTags) || (shouldRegenerateEmbedding && !hasCustomEmbedding)) {
+    existing = await Book.findById(bookId).lean();
     if (!existing) throw new AppError("Book not found", 404);
+  }
+
+  if (shouldRegenerateTags && !updateData.generatedTags) {
     const merged = { ...existing, ...updateData };
     updateData.generatedTags = buildGeneratedTags(merged);
   }
 
   if (shouldRegenerateTags && !updateData.chatbotTags) {
     updateData.chatbotTags = [...(updateData.generatedTags || [])];
+  }
+
+  if (shouldRegenerateEmbedding && !hasCustomEmbedding) {
+    const merged = { ...existing, ...updateData };
+    if (!merged.summary) {
+      merged.summary = "No description available.";
+    }
+
+    const embeddingText = buildBookEmbeddingText(merged);
+    if (!embeddingText) {
+      throw new AppError("Cannot regenerate embedding: missing book text content", 400);
+    }
+
+    const embedding = await getGeminiEmbedding(embeddingText);
+    updateData.plot_embeddings = embedding;
+    updateData.plot_embeddings_dim = embedding.length;
+    updateData.embedding_provider = GEMINI_EMBED_MODEL;
+    updateData.embedding_title = merged.title;
+    updateData.embedding_author = merged.author;
+    updateData.embedding_migrated_at = new Date();
+  }
+
+  if (hasCustomEmbedding && !updateData.plot_embeddings_dim) {
+    updateData.plot_embeddings_dim = updateData.plot_embeddings.length;
   }
 
   const book = await Book.findByIdAndUpdate(bookId, updateData, {
