@@ -60,7 +60,7 @@ function mapBook(b: any): Book {
 function toAvailableBooks(books: any[]) {
   return books
     .map(mapBook)
-    .filter((book) => (book.availableCopies ?? 0) > 0);
+    .filter((book) => (book.availableCopies ?? 0) > 0 && !!book.coverImage);
 }
 
 type Branch = {
@@ -75,9 +75,23 @@ const HRCARD_H = 190;
 
 // ─── Horizontal book card (for recommendation row) ────────────────────────────
 function HorizBookCard({ book, onPress }: { book: Book; onPress: () => void }) {
+  const [visible, setVisible] = useState(false);
+  const [errored, setErrored] = useState(false);
+  if (errored || !book.coverImage) return null;
   return (
-    <TouchableOpacity style={hc.wrap} onPress={onPress} activeOpacity={0.82}>
-      <BookCover book={book} width={HRCARD_W} height={HRCARD_H} fontSize={11} />
+    <TouchableOpacity
+      style={[hc.wrap, { opacity: visible ? 1 : 0, width: visible ? HRCARD_W : 0 }]}
+      onPress={onPress}
+      activeOpacity={0.82}
+    >
+      <BookCover
+        book={book}
+        width={HRCARD_W}
+        height={HRCARD_H}
+        fontSize={11}
+        onImageLoad={() => setVisible(true)}
+        onImageError={() => setErrored(true)}
+      />
       <Text style={hc.title} numberOfLines={2}>
         {book.title}
       </Text>

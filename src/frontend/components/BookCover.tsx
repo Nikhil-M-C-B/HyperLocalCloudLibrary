@@ -6,16 +6,19 @@ import type { Book } from '@/constants/mockData';
 import { Radius } from '@/constants/theme';
 import { Image } from 'expo-image';
 import React from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { BookCoverFallback } from './BookCoverFallback';
+import { StyleSheet } from 'react-native';
 
 interface Props {
   book: Book & { isbn?: string };
   width: number;
   height: number;
   fontSize?: number;
+  onImageError?: () => void;
+  onImageLoad?: () => void;
 }
 
-export function BookCover({ book, width, height, fontSize = 13 }: Props) {
+export function BookCover({ book, width, height, fontSize = 13, onImageError, onImageLoad }: Props) {
   // Stage: 'primary' → try coverImage, 'fallback' → try Open Library by ISBN, 'error' → text placeholder
   const [stage, setStage] = React.useState<'primary' | 'fallback' | 'error'>('primary');
 
@@ -32,6 +35,7 @@ export function BookCover({ book, width, height, fontSize = 13 }: Props) {
       setStage('fallback');
     } else {
       setStage('error');
+      onImageError?.();
     }
   };
 
@@ -48,51 +52,33 @@ export function BookCover({ book, width, height, fontSize = 13 }: Props) {
         contentFit="cover"
         transition={200}
         onError={handleError}
+        onLoad={(e) => {
+          // Open Library returns a tiny "No Cover" placeholder (~1×1 or <50px)
+          // when an ISBN has no cover. Treat undersized images as failures.
+          const { width: w, height: h } = e.source;
+          if (w < 50 || h < 50) {
+            handleError();
+          } else {
+            onImageLoad?.();
+          }
+        }}
       />
     );
   }
 
-  // Fallback to spine line accent
+  // Genre-aware fallback cover
   return (
-    <View style={[styles.cover, { width, height, backgroundColor: book.coverColor, borderRadius: Radius.md }]}>
-      {/* Spine */}
-      <View style={[styles.spine, { backgroundColor: book.coverAccent }]} />
-      {/* Title text */}
-      <View style={styles.textArea}>
-        <Text style={[styles.title, { fontSize, color: book.coverAccent }]} numberOfLines={3}>
-          {book.title}
-        </Text>
-        <Text style={[styles.author, { fontSize: fontSize - 2, color: book.coverAccent }]} numberOfLines={1}>
-          {book.author}
-        </Text>
-      </View>
-    </View>
+    <BookCoverFallback
+      title={book.title}
+      genre={book.genres?.[0]}
+      width={width}
+      height={height}
+    />
   );
 }
 
 const styles = StyleSheet.create({
   cover: {
     overflow: 'hidden',
-    flexDirection: 'row',
-  },
-  spine: {
-    width: 6,
-    height: '100%',
-    opacity: 0.6,
-  },
-  textArea: {
-    flex: 1,
-    padding: 8,
-    justifyContent: 'flex-end',
-    gap: 3,
-  },
-  title: {
-    fontWeight: '800',
-    lineHeight: 16,
-    opacity: 0.85,
-  },
-  author: {
-    fontWeight: '500',
-    opacity: 0.65,
   },
 });
