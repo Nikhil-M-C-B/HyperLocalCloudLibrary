@@ -73,6 +73,22 @@ export default function OrderScreen() {
 
   const [loadingLibraries, setLoadingLibraries] = useState(false);
 
+  const autoSelectNearestLibrary = (nextLibraries: LibraryBranch[]) => {
+    if (!Array.isArray(nextLibraries) || nextLibraries.length === 0) {
+      setSelectedLib(null);
+      return;
+    }
+
+    const currentlySelectedExists =
+      !!selectedLib && nextLibraries.some((branch) => branch.branchId === selectedLib && branch.isWithinReach);
+    if (currentlySelectedExists) {
+      return;
+    }
+
+    const nearestReachable = nextLibraries.find((branch) => branch.isWithinReach);
+    setSelectedLib(nearestReachable ? nearestReachable.branchId : null);
+  };
+
   // Address picker state
   const [showAddressPicker, setShowAddressPicker] = useState(false);
   const [selectedAddress, setSelectedAddress] = useState<any>(null);
@@ -90,7 +106,9 @@ export default function OrderScreen() {
 
         const availRes = await bookService.getBookAvailability(id as string);
         if (active && availRes?.data?.branches) {
-          setLibraries(availRes.data.branches);
+          const nextLibraries = availRes.data.branches;
+          setLibraries(nextLibraries);
+          autoSelectNearestLibrary(nextLibraries);
         }
       } catch (err) {
         console.warn("Failed to load book data for order", err);
@@ -176,7 +194,9 @@ export default function OrderScreen() {
       const lng = coords?.[0];
       const availRes = await bookService.getBookAvailability(id as string, lat, lng);
       if (availRes?.data?.branches) {
-        setLibraries(availRes.data.branches);
+        const nextLibraries = availRes.data.branches;
+        setLibraries(nextLibraries);
+        autoSelectNearestLibrary(nextLibraries);
       }
     } catch (err) {
       console.warn('Failed to refresh availability', err);
