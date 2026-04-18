@@ -77,6 +77,13 @@ export default function InventoryScreen() {
   const [instructionVisible, setInstructionVisible] = useState(false);
   const [doNotShowHint, setDoNotShowHint] = useState(false);
 
+  // Chatbot tag editor
+  const [tagModalVisible, setTagModalVisible] = useState(false);
+  const [tagBook, setTagBook] = useState<{ id: string; title: string } | null>(null);
+  const [editTags, setEditTags] = useState<string[]>([]);
+  const [tagInput, setTagInput] = useState('');
+  const [savingTags, setSavingTags] = useState(false);
+
   const hdrs = { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` };
 
   useEffect(() => {
@@ -290,6 +297,53 @@ export default function InventoryScreen() {
     setBranchPickerVisible(true);
   };
 
+  // ── Chatbot tag editor ──────────────────────────────────────────────────────
+  const openTagEditor = (book: any) => {
+    setTagBook({ id: book._id, title: book.title });
+    setEditTags(Array.isArray(book.chatbotTags) ? [...book.chatbotTags] : []);
+    setTagInput('');
+    setTagModalVisible(true);
+  };
+
+  const addTag = () => {
+    const raw = tagInput.trim().toLowerCase().replace(/[^a-z0-9\-\s]/g, '');
+    const newTags = raw.split(',').map(t => t.trim()).filter(t => t.length > 0);
+    setEditTags(prev => {
+      const merged = [...prev];
+      for (const t of newTags) {
+        if (!merged.includes(t)) merged.push(t);
+      }
+      return merged;
+    });
+    setTagInput('');
+  };
+
+  const removeTag = (tag: string) => setEditTags(prev => prev.filter(t => t !== tag));
+
+  const saveTagEdit = async () => {
+    if (!tagBook) return;
+    setSavingTags(true);
+    try {
+      const res = await fetch(`${API_BASE_URL}/books/${tagBook.id}`, {
+        method: 'PUT',
+        headers: hdrs,
+        body: JSON.stringify({ chatbotTags: editTags }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.message ?? 'Failed to save tags');
+      // Update local books list so badge refreshes without a full reload
+      setBooks(prev => prev.map(b =>
+        b._id === tagBook.id ? { ...b, chatbotTags: editTags } : b
+      ));
+      setTagModalVisible(false);
+      Alert.alert('✅ Tags saved', `Chatbot tags updated for "${tagBook.title}".`);
+    } catch (err: any) {
+      Alert.alert('Error', err.message ?? 'Something went wrong.');
+    } finally {
+      setSavingTags(false);
+    }
+  };
+
   const filteredBooks = books.filter((b) =>
     !search.trim() ||
     b.title?.toLowerCase().includes(search.toLowerCase()) ||
@@ -339,6 +393,76 @@ export default function InventoryScreen() {
 
   return (
     <SafeAreaView style={s.safe}>
+      {/* ── Chatbot Tag Editor Modal ───────────────────────────────────── */}
+      <Modal
+        transparent
+        visible={tagModalVisible}
+        animationType="slide"
+        onRequestClose={() => setTagModalVisible(false)}
+      >
+        <View style={s.modalOverlay}>
+          <View style={[s.modalCard, { maxHeight: '80%' }]}>
+            <Text style={s.modalTitle}>🏷️ Chatbot Tags</Text>
+            <Text style={s.modalSub} numberOfLines={1}>{tagBook?.title}</Text>
+            <Text style={{ fontSize: Typography.label, color: Colors.textMuted, marginBottom: Spacing.sm, lineHeight: 18 }}>
+              These tags help the chatbot find this book. Add descriptive keywords like topic, mood, or theme.
+            </Text>
+
+            {/* Current tag chips */}
+            <ScrollView style={{ maxHeight: 120 }} contentContainerStyle={s.tagChipWrap}>
+              {editTags.length === 0 ? (
+                <Text style={{ fontSize: Typography.label, color: Colors.textMuted, fontStyle: 'italic' }}>No tags yet</Text>
+              ) : editTags.map(tag => (
+                <TouchableOpacity key={tag} style={s.tagChip} onPress={() => removeTag(tag)} activeOpacity={0.7}>
+                  <Text style={s.tagChipText}>{tag}</Text>
+                  <Text style={s.tagChipRemove}>✕</Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+
+            {/* Tag input */}
+            <View style={s.tagInputRow}>
+              <TextInput
+                style={[s.modalInput, { flex: 1 }]}
+                placeholder="adventure, animals, bedtime…"
+                placeholderTextColor={Colors.textMuted}
+                value={tagInput}
+                onChangeText={setTagInput}
+                autoCapitalize="none"
+                returnKeyType="done"
+                onSubmitEditing={addTag}
+              />
+              <TouchableOpacity style={s.tagAddBtn} onPress={addTag}>
+                <Text style={s.tagAddBtnText}>Add</Text>
+              </TouchableOpacity>
+            </View>
+            <Text style={{ fontSize: 11, color: Colors.textMuted, marginBottom: Spacing.md }}>
+              Tip: separate multiple tags with commas. Tap a tag to remove it.
+            </Text>
+
+            {/* Actions */}
+            <View style={{ flexDirection: 'row', gap: Spacing.sm }}>
+              <TouchableOpacity
+                style={[s.modalBtn, { flex: 1 }]}
+                onPress={() => setTagModalVisible(false)}
+              >
+                <Text style={s.modalBtnText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[s.modalBtn, s.modalBtnPrimary, { flex: 2 }, savingTags && { opacity: 0.6 }]}
+                onPress={saveTagEdit}
+                disabled={savingTags}
+              >
+                {savingTags
+                  ? <ActivityIndicator color={Colors.textOnDark} size="small" />
+                  : <Text style={[s.modalBtnText, { color: Colors.textOnDark }]}>Save Tags</Text>
+                }
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
       {/* ── Add Copies Modal ──────────────────────────────────────────── */}
       <Modal
         transparent
@@ -629,8 +753,23 @@ export default function InventoryScreen() {
                       <Text style={s.cardMeta}>
                         Age {book.minAge !== undefined ? `${book.minAge}+` : 'Unknown'} · ISBN {book.isbn}
                       </Text>
+                      {/* Tag count badge */}
+                      {Array.isArray(book.chatbotTags) && book.chatbotTags.length > 0 && (
+                        <View style={s.tagBadgeRow}>
+                          <Text style={s.tagBadge}>🏷️ {book.chatbotTags.length} tag{book.chatbotTags.length !== 1 ? 's' : ''}</Text>
+                        </View>
+                      )}
                     </View>
-                    <Text style={s.chevron}>{selectedBookId === book._id ? '▲' : '▼'}</Text>
+                    <View style={{ alignItems: 'flex-end', gap: Spacing.xs }}>
+                      <Text style={s.chevron}>{selectedBookId === book._id ? '▲' : '▼'}</Text>
+                      <TouchableOpacity
+                        style={s.editTagsBtn}
+                        onPress={(e) => { e.stopPropagation?.(); openTagEditor(book); }}
+                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                      >
+                        <Text style={s.editTagsBtnText}>🏷️</Text>
+                      </TouchableOpacity>
+                    </View>
                   </TouchableOpacity>
 
                   {selectedBookId === book._id && (
@@ -1026,4 +1165,26 @@ const s = StyleSheet.create({
     color: Colors.textSecondary,
     fontWeight: '600',
   },
+
+  // chatbot tag editor styles
+  tagChipWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, paddingBottom: 8, marginBottom: 8 },
+  tagChip: {
+    flexDirection: 'row', alignItems: 'center', gap: 5,
+    backgroundColor: '#E8F5E9', borderRadius: 100,
+    paddingHorizontal: 10, paddingVertical: 5,
+    borderWidth: 1, borderColor: '#6B9E78',
+  },
+  tagChipText: { fontSize: 12, fontWeight: '700', color: '#6B9E78' },
+  tagChipRemove: { fontSize: 12, color: '#6B9E78', fontWeight: '900' },
+  tagInputRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 },
+  tagAddBtn: { backgroundColor: '#6B9E78', borderRadius: 100, paddingHorizontal: 14, paddingVertical: 10 },
+  tagAddBtnText: { fontSize: 12, fontWeight: '800', color: '#fff' },
+  tagBadgeRow: { marginTop: 4 },
+  tagBadge: { fontSize: 11, fontWeight: '700', color: '#6B9E78' },
+  editTagsBtn: {
+    width: 30, height: 30, borderRadius: 15,
+    backgroundColor: '#E8F5E9', alignItems: 'center', justifyContent: 'center',
+    borderWidth: 1, borderColor: '#6B9E78',
+  },
+  editTagsBtnText: { fontSize: 14 },
 });
