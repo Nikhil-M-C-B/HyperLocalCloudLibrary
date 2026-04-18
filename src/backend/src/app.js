@@ -19,6 +19,7 @@ const libraryRoutes = require('./routes/libraryRoutes');
 const inventoryRoutes = require('./routes/inventoryRoutes');
 const circulationRoutes = require('./routes/circulationRoutes');
 const notificationRoutes = require('./routes/notificationRoutes');
+const catalogRoutes = require('./routes/catalogRoutes');
 // Stub routes enabled for prototype - controllers use stub services (no MySQL)
 const paymentRoutes  = require('./routes/paymentRoutes');
 const penaltyRoutes  = require('./routes/penaltyRoutes');
@@ -70,6 +71,7 @@ app.use('/api/v1/libraries', libraryRoutes);
 app.use('/api/v1/inventory', inventoryRoutes);
 app.use('/api/v1/issues', circulationRoutes);
 app.use('/api/v1/notifications', notificationRoutes); // Platform Services — Aryan
+app.use('/api/v1/catalog', catalogRoutes);
 // Stub routes - validate & log data without MySQL
 app.use('/api/v1/payments',  paymentRoutes);
 app.use('/api/v1/penalties', penaltyRoutes);
