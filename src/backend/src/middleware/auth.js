@@ -57,6 +57,54 @@ exports.restrictTo = (...roles) => {
 };
 
 /**
+ * Require an active/trialing subscription and optional feature flags.
+ * Feature checks are backward compatible with existing users that do not
+ * yet have a subscription object persisted.
+ */
+exports.requireActiveSubscription = (...requiredFeatures) => {
+  return (req, res, next) => {
+    // Staff roles bypass subscriber gates.
+    if (['ADMIN', 'LIBRARIAN'].includes(req.user.role)) {
+      return next();
+    }
+
+    const subscription = req.user.subscription || {};
+    const status = String(subscription.status || 'ACTIVE').toUpperCase();
+    const allowedStatuses = ['ACTIVE', 'TRIALING'];
+
+    if (!allowedStatuses.includes(status)) {
+      return next(new AppError('An active subscription is required for this feature.', 403));
+    }
+
+    if (subscription.currentPeriodEnd) {
+      const endsAt = new Date(subscription.currentPeriodEnd).getTime();
+      if (!Number.isNaN(endsAt) && endsAt < Date.now()) {
+        return next(new AppError('Your subscription has expired. Please renew to continue.', 403));
+      }
+    }
+
+    if (requiredFeatures.length === 0 || !subscription.features) {
+      return next();
+    }
+
+    const missingFeature = requiredFeatures.find(
+      (feature) => subscription.features[feature] !== true,
+    );
+
+    if (missingFeature) {
+      return next(
+        new AppError(
+          `Your current plan does not include ${missingFeature}. Please upgrade your subscription.`,
+          403,
+        ),
+      );
+    }
+
+    next();
+  };
+};
+
+/**
  * Check if profile belongs to logged-in user
  */
 exports.verifyProfileOwnership = catchAsync(async (req, res, next) => {
