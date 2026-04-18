@@ -11,7 +11,7 @@ const mongoose = require('mongoose');
  */
 
 const MAX_POOL_SIZE = 60;
-const BATCH_SIZE    = 30;
+const BATCH_SIZE    = 10;
 const QUIZ_SIZE     = 5;
 
 const questionSchema = new mongoose.Schema(

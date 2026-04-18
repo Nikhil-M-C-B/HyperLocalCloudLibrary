@@ -1507,10 +1507,24 @@ exports.generateQuiz = async (bookId, userId) => {
         }
         return { questions: pickRandom(freshUnseen, QUIZ_SIZE) };
       } else {
-        // Pool running low: top up in background, serve what we have now
-        triggerBackgroundGeneration(bookId, batchCount);
-        if (unseen.length === 0) return { maxLimitReached: true, questionsAnswered: seenIds.size };
-        return { questions: pickRandom(unseen, Math.min(QUIZ_SIZE, unseen.length)) };
+        // Pool exists but user has seen everything currently in it.
+        // NEVER return maxLimitReached here — pool is only partially filled (e.g. 10/60).
+        if (unseen.length > 0) {
+          // Still have unseen questions: serve them while top-up runs in background
+          triggerBackgroundGeneration(bookId, batchCount);
+          return { questions: pickRandom(unseen, Math.min(QUIZ_SIZE, unseen.length)) };
+        }
+        // No unseen left — wait synchronously for the next batch
+        await triggerBackgroundGeneration(bookId, batchCount);
+        for (let attempt = 0; attempt < 30; attempt++) {
+          await new Promise(res => setTimeout(res, 1000));
+          pool = await BookQuizPool.findOne({ bookId }).lean();
+          const freshUnseen = (pool?.questions ?? []).filter(q => !seenIds.has(q._id.toString()));
+          if (freshUnseen.length >= QUIZ_SIZE) {
+            return { questions: pickRandom(freshUnseen, QUIZ_SIZE) };
+          }
+        }
+        throw new AppError('Quiz generation is taking longer than expected. Please try again shortly.', 503);
       }
     }
 
