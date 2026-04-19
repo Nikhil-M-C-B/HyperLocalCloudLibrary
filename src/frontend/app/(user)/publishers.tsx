@@ -78,7 +78,7 @@ export default function PublishersScreen() {
           <Text style={s.backText}>← Back</Text>
         </TouchableOpacity>
         <Text style={s.title}>Publisher Explorer</Text>
-        <Text style={s.subtitle}>Discover publishers and related catalog data from Open Library.</Text>
+        <Text style={s.subtitle}>Discover publishers and related catalog data from our library collection.</Text>
 
         <View style={s.searchWrap}>
           <TextInput
