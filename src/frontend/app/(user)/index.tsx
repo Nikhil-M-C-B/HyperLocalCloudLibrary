@@ -869,13 +869,11 @@ export default function UserHome() {
 
         {mode === 'forYou' && (
           <View style={s.catalogQuickRow}>
-            <TouchableOpacity style={s.catalogQuickBtn} onPress={() => router.push('/(user)/authors')}>
-              <Text style={s.catalogQuickTitle}>Author Explorer</Text>
-              <Text style={s.catalogQuickSub}>Open profiles & works</Text>
+            <TouchableOpacity style={s.catalogQuickPill} onPress={() => router.push('/(user)/authors')}>
+              <Text style={s.catalogQuickPillText}>Browse Authors</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={s.catalogQuickBtn} onPress={() => router.push('/(user)/publishers')}>
-              <Text style={s.catalogQuickTitle}>Publisher Explorer</Text>
-              <Text style={s.catalogQuickSub}>Open catalog lookup</Text>
+            <TouchableOpacity style={s.catalogQuickPill} onPress={() => router.push('/(user)/publishers')}>
+              <Text style={s.catalogQuickPillText}>Browse Publishers</Text>
             </TouchableOpacity>
           </View>
         )}
@@ -1301,25 +1299,20 @@ const s = StyleSheet.create({
     flexDirection: 'row',
     gap: Spacing.sm,
     paddingHorizontal: Spacing.xl,
-    marginBottom: Spacing.lg,
+    marginBottom: Spacing.md,
   },
-  catalogQuickBtn: {
-    flex: 1,
+  catalogQuickPill: {
     backgroundColor: Colors.card,
-    borderWidth: 1,
+    borderWidth: 1.5,
     borderColor: Colors.cardBorder,
-    borderRadius: Radius.lg,
-    padding: Spacing.md,
-    gap: 3,
+    borderRadius: Radius.full,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: 7,
   },
-  catalogQuickTitle: {
+  catalogQuickPillText: {
     color: Colors.textPrimary,
-    fontSize: Typography.body,
-    fontWeight: '700',
-  },
-  catalogQuickSub: {
-    color: Colors.textSecondary,
     fontSize: Typography.label,
+    fontWeight: '600',
   },
 
   section: { paddingHorizontal: Spacing.xl, marginBottom: Spacing.xl },
