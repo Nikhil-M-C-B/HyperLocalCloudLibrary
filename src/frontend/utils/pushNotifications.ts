@@ -1,22 +1,14 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import Constants from 'expo-constants';
 import * as Device from 'expo-device';
-import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 import notificationService, {
   type NotificationPlatform,
 } from '@/api/services/notificationService';
 
 const PUSH_TOKEN_KEY = '@push_device_token_v1';
-
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: false,
-    shouldSetBadge: false,
-    shouldShowBanner: true,
-    shouldShowList: true,
-  }),
-});
+const isExpoGo = Constants.executionEnvironment === 'storeClient';
+let notificationsConfigured = false;
 
 const currentPlatform = (): NotificationPlatform => {
   if (Platform.OS === 'ios') return 'ios';
@@ -25,12 +17,31 @@ const currentPlatform = (): NotificationPlatform => {
 };
 
 export async function registerPushNotifications(userId?: string | null): Promise<void> {
+  if (isExpoGo) {
+    return;
+  }
+
   // Push is only meaningful on real mobile devices.
   if (Platform.OS === 'web' || !Device.isDevice || !userId) {
     return;
   }
 
   try {
+    const Notifications = await import('expo-notifications');
+
+    if (!notificationsConfigured) {
+      Notifications.setNotificationHandler({
+        handleNotification: async () => ({
+          shouldShowAlert: true,
+          shouldPlaySound: false,
+          shouldSetBadge: false,
+          shouldShowBanner: true,
+          shouldShowList: true,
+        }),
+      });
+      notificationsConfigured = true;
+    }
+
     const existing = await Notifications.getPermissionsAsync();
     let finalStatus = existing.status;
 

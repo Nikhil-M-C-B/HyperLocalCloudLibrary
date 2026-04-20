@@ -1,6 +1,7 @@
 import bookService from '@/api/services/bookService';
 import { NavBar, NAV_BOTTOM_PAD } from '@/components/NavBar';
 import { Colors, Radius, Spacing, Typography } from '@/constants/theme';
+import { filterBooksWithCovers } from '@/utils/bookFilters';
 import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import {
@@ -120,7 +121,7 @@ export default function AuthorsScreen() {
     (async () => {
       try {
         const res = await bookService.getBooks({ limit: 500 });
-        const books: any[] = res?.data?.books ?? res?.books ?? [];
+        const books: any[] = filterBooksWithCovers(res?.data?.books ?? res?.books ?? []);
         setAllAuthors(extractAuthorsFromBooks(books));
       } catch (e) {
         console.warn('Failed to load authors from DB', e);

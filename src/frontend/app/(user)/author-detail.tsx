@@ -3,6 +3,7 @@ import catalogService, { type CatalogAuthorDetails } from '@/api/services/catalo
 import { BookCoverFallback } from '@/components/BookCoverFallback';
 import { NavBar, NAV_BOTTOM_PAD } from '@/components/NavBar';
 import { Colors, Radius, Spacing, Typography } from '@/constants/theme';
+import { filterBooksWithCovers } from '@/utils/bookFilters';
 import { Image } from 'expo-image';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
@@ -65,7 +66,7 @@ export default function AuthorDetailScreen() {
           // ── DB mode: load all books, filter by author partial match ──
           const res = await bookService.getBooks({ limit: 500 });
           const all: any[] = res?.data?.books ?? res?.books ?? [];
-          const matched = all.filter((b: any) => authorMatches(b.author || '', name || ''));
+          const matched = filterBooksWithCovers(all).filter((b: any) => authorMatches(b.author || '', name || ''));
           setDBBooks(matched);
 
           // Build a synthetic CatalogAuthorDetails from DB data
@@ -123,7 +124,7 @@ export default function AuthorDetailScreen() {
           if (details?.name) {
             try {
               const res = await bookService.searchBooks(details.name);
-              const books: any[] = res?.data?.books ?? res?.books ?? [];
+              const books: any[] = filterBooksWithCovers(res?.data?.books ?? res?.books ?? []);
               setDBBooks(books);
             } catch { /* non-critical */ }
           }
@@ -200,20 +201,11 @@ export default function AuthorDetailScreen() {
                       onPress={() => router.push(`/(user)/book/${book._id || book.id}`)}
                     >
                       <View style={s.workCover}>
-                        {book.coverImage ? (
-                          <Image
-                            source={{ uri: book.coverImage }}
-                            style={{ width: WORK_W, height: WORK_H, borderRadius: Radius.sm }}
-                            contentFit="cover"
-                          />
-                        ) : (
-                          <BookCoverFallback
-                            title={book.title}
-                            genre={genre}
-                            width={WORK_W}
-                            height={WORK_H}
-                          />
-                        )}
+                        <Image
+                          source={{ uri: book.coverImage }}
+                          style={{ width: WORK_W, height: WORK_H, borderRadius: Radius.sm }}
+                          contentFit="cover"
+                        />
                         <View style={s.availBadge}>
                           <Text style={s.availBadgeText}>📖</Text>
                         </View>
