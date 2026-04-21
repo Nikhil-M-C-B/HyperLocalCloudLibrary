@@ -44,6 +44,14 @@ export function BookCover({ book, width, height, fontSize = 13, onImageError, on
   else if (stage === 'fallback' && fallbackUrl) coverUrl = fallbackUrl;
   else if (stage === 'primary' && !primaryUrl && fallbackUrl) coverUrl = fallbackUrl;
 
+  const usingFallback = !coverUrl || stage === 'error';
+
+  // When falling back to BookCoverFallback, notify parent that rendering is done.
+  // Must be before any conditional return to satisfy Rules of Hooks.
+  React.useEffect(() => {
+    if (usingFallback) onImageLoad?.();
+  }, [usingFallback]);
+
   if (coverUrl && stage !== 'error') {
     return (
       <Image

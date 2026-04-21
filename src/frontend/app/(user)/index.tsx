@@ -13,7 +13,7 @@ import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 import { NavBar, NAV_BOTTOM_PAD } from "@/components/NavBar";
 import * as Location from "expo-location";
 import { useRouter } from "expo-router";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
     ActivityIndicator,
     Alert,
@@ -62,6 +62,11 @@ function toAvailableBooks(books: any[]) {
   return filterBooksWithCovers(books)
     .map(mapBook)
     .filter((book) => (book.availableCopies ?? 0) > 0 && !!book.coverImage);
+}
+
+// Guest / no-branch version — don't require availableCopies, just need a cover
+function toBrowsableBooks(books: any[]) {
+  return books.map(mapBook).filter((book) => !!book.coverImage);
 }
 
 type Branch = {
@@ -246,11 +251,15 @@ export default function UserHome() {
   const [mode, setMode] = useState<'forYou' | 'forChild'>('forYou');
   const [selectedChildId, setSelectedChildId] = useState<string | null>(null);
 
-  const { userId, profiles, activeProfileId, clearAuth, token, removeProfile, selectedBranchId, selectedBranchName, setSelectedBranch } = useAppStore();
+  const { userId, profiles, activeProfileId, clearAuth, token, removeProfile, selectedBranchId, selectedBranchName, setSelectedBranch, isAuthenticated } = useAppStore();
   const activeProfile = profiles.find((p) => p.profileId === activeProfileId);
-  const preferredGenres = activeProfile?.preferredGenres?.length
-    ? activeProfile.preferredGenres
-    : ["Fantasy", "Picture Book"];
+  const preferredGenres = useMemo(
+    () => activeProfile?.preferredGenres?.length
+      ? activeProfile.preferredGenres
+      : ["Fantasy", "Picture Book"],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [activeProfile?.profileId]
+  );
 
   // For child profiles, compute the maximum age so the backend can filter out adult content.
   // Compute the maxAge book filter:
@@ -286,12 +295,14 @@ export default function UserHome() {
   //   • Logged-in CHILD profile  → maxAge (hide adult books)
   //   • Parent in "For Child"    → maxAge of the selected child (show children's books)
   //   • Parent in "For You"      → minAge:5 (hide toddler/picture books only; YA 12+ stays visible)
-  const ageFilter: { maxAge?: number; minAge?: number } =
-    childMaxAge !== undefined
+  const ageFilter = useMemo<{ maxAge?: number; minAge?: number }>(
+    () => childMaxAge !== undefined
       ? { maxAge: childMaxAge }
       : mode === 'forChild'
         ? { maxAge: viewingChildMaxAge }
-        : {};
+        : {},
+    [childMaxAge, viewingChildMaxAge, mode]
+  );
 
   const [recommended, setRecommended] = useState<Book[]>([]);
   const [newArrivals, setNewArrivals] = useState<Book[]>([]);
@@ -349,6 +360,11 @@ export default function UserHome() {
     };
 
     const requestLocation = async () => {
+      // Guests have no userId — skip address lookup and GPS, go straight to branch fetch
+      if (!userId) {
+        if (active) setUserCoords(null);
+        return;
+      }
       try {
         const hasSavedAddressLocation = await resolveFromSavedDeliveryAddress();
         if (hasSavedAddressLocation) return;
@@ -444,8 +460,8 @@ export default function UserHome() {
           }),
         ]);
 
-        if (active) setRecommended(toAvailableBooks(recRes?.data?.books || []));
-        if (active) setNewArrivals(toAvailableBooks(newRes?.data?.books || []));
+        if (active) setRecommended((selectedBranchId ? toAvailableBooks : toBrowsableBooks)(recRes?.data?.books || []));
+        if (active) setNewArrivals((selectedBranchId ? toAvailableBooks : toBrowsableBooks)(newRes?.data?.books || []));
 
         if (active) setLoading(false);
 
@@ -526,7 +542,7 @@ export default function UserHome() {
           branchId: selectedBranchId || undefined,
           ...ageFilter,
         });
-        if (active) setAllBooks(toAvailableBooks(res?.data?.books || []));
+        if (active) setAllBooks((selectedBranchId ? toAvailableBooks : toBrowsableBooks)(res?.data?.books || []));
       } catch (error) {
         console.warn("Failed to fetch books for genre browse:", error);
       }
@@ -686,30 +702,42 @@ export default function UserHome() {
         >
           <View style={s.menuCard}>
             <Text style={s.menuTitle}>Menu</Text>
-            <TouchableOpacity
-              style={s.menuItem}
-              onPress={() => {
-                setMenuVisible(false);
-                router.push("/(user)/edit-profile");
-              }}
-            >
-              <Text style={s.menuItemText}>Edit Profile</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={s.menuItem} onPress={handleDeleteProfile}>
-              <Text style={[s.menuItemText, { color: Colors.error }]}>
-                Delete Profile
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={s.menuItem} onPress={handleSignOut}>
-              <Text style={[s.menuItemText, { color: Colors.error }]}>
-                Sign Out
-              </Text>
-            </TouchableOpacity>
+            {isAuthenticated ? (
+              <>
+                <TouchableOpacity
+                  style={s.menuItem}
+                  onPress={() => { setMenuVisible(false); router.push("/(user)/edit-profile"); }}
+                >
+                  <Text style={s.menuItemText}>Edit Profile</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={s.menuItem} onPress={handleDeleteProfile}>
+                  <Text style={[s.menuItemText, { color: Colors.error }]}>Delete Profile</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={s.menuItem} onPress={handleSignOut}>
+                  <Text style={[s.menuItemText, { color: Colors.error }]}>Sign Out</Text>
+                </TouchableOpacity>
+              </>
+            ) : (
+              <>
+                <TouchableOpacity
+                  style={s.menuItem}
+                  onPress={() => { setMenuVisible(false); router.push('/(auth)/login'); }}
+                >
+                  <Text style={s.menuItemText}>Sign In</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={s.menuItem}
+                  onPress={() => { setMenuVisible(false); router.push('/(auth)/signup'); }}
+                >
+                  <Text style={s.menuItemText}>Create Account</Text>
+                </TouchableOpacity>
+              </>
+            )}
             <TouchableOpacity
               style={s.menuCancel}
               onPress={() => setMenuVisible(false)}
             >
-              <Text style={s.menuCancelText}>Cancel</Text>
+              <Text style={s.menuCancelText}>Close</Text>
             </TouchableOpacity>
           </View>
         </TouchableOpacity>
@@ -795,50 +823,75 @@ export default function UserHome() {
           </TouchableOpacity>
           <View style={{ flex: 1 }}>
             <Text style={s.greeting}>
-              Hello, {activeProfile?.name || "Priya"}
+              {isAuthenticated ? `Hello, ${activeProfile?.name || 'Priya'}` : 'Welcome to the Library!'}
             </Text>
-            {branches.length === 0 && (
-              <Text style={s.subGreeting}>What are you looking for today?</Text>
+            {branches.length > 0 ? (
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                style={{ marginTop: 4 }}
+                contentContainerStyle={{ paddingRight: 6 }}
+              >
+                {branches.filter(b => (b.distanceKm ?? 0) < 8).map(b => (
+                  <TouchableOpacity 
+                    key={b._id} 
+                    onPress={() => setSelectedBranch(b._id, b.name)}
+                    style={[
+                      s.branchPill,
+                      selectedBranchId === b._id ? s.branchPillActive : undefined,
+                    ]}
+                  >
+                    <Text style={[s.branchPillName, selectedBranchId === b._id ? s.branchPillNameActive : undefined]}>
+                      📍 {b.name}
+                    </Text>
+                    {typeof b.distanceKm === 'number' && (
+                      <Text style={[s.branchPillDistance, selectedBranchId === b._id ? s.branchPillDistanceActive : undefined]}>
+                        {b.distanceKm.toFixed(1)} km
+                      </Text>
+                    )}
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            ) : (
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 4, flexWrap: 'wrap' }}>
+                <Text style={s.subGreeting}>{isAuthenticated ? 'What are you looking for today?' : 'Browse our collection — sign in to borrow books.'}</Text>
+                {!isAuthenticated && (
+                  <TouchableOpacity
+                    style={{ backgroundColor: Colors.buttonPrimary, borderRadius: 20, paddingHorizontal: 10, paddingVertical: 4 }}
+                    onPress={async () => {
+                      try {
+                        const webNav: any = typeof globalThis !== 'undefined' ? (globalThis as any).navigator : undefined;
+                        if (webNav?.geolocation) {
+                          webNav.geolocation.getCurrentPosition(
+                            async (pos: any) => {
+                              const res = await axiosInstance.get('/libraries', { params: { lat: pos.coords.latitude, lng: pos.coords.longitude } });
+                              const libs = res.data?.data?.libraries;
+                              if (libs?.length) { setBranches(libs); setSelectedBranch(libs[0]._id, libs[0].name); }
+                            },
+                            () => {}
+                          );
+                        }
+                      } catch {}
+                    }}
+                  >
+                    <Text style={{ fontSize: 11, fontWeight: '700', color: Colors.buttonPrimaryText ?? '#5a3e1b' }}>📍 Find nearby branches</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
             )}
           </View>
-          <TouchableOpacity
-            style={[s.profileBtn, { marginRight: -4, marginTop: -4 }]}
-            onPress={() => router.replace("/(select-profile)")}
-          >
-            <Text style={s.profileEmoji}>👤</Text>
-          </TouchableOpacity>
+          {isAuthenticated && (
+            <TouchableOpacity
+              style={s.profileBtn}
+              onPress={() => router.replace("/(select-profile)")}
+            >
+              <Text style={s.profileEmoji}>👤</Text>
+            </TouchableOpacity>
+          )}
         </View>
 
-        {branches.length > 0 && (
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={s.branchRow}
-          >
-            {branches.filter(b => (b.distanceKm ?? 0) < 8).map(b => (
-              <TouchableOpacity 
-                key={b._id} 
-                onPress={() => setSelectedBranch(b._id, b.name)}
-                style={[
-                  s.branchPill,
-                  selectedBranchId === b._id ? s.branchPillActive : undefined,
-                ]}
-              >
-                <Text style={[s.branchPillName, selectedBranchId === b._id ? s.branchPillNameActive : undefined]}>
-                  📍 {b.name}
-                </Text>
-                {typeof b.distanceKm === 'number' && (
-                  <Text style={[s.branchPillDistance, selectedBranchId === b._id ? s.branchPillDistanceActive : undefined]}>
-                    {b.distanceKm.toFixed(1)} km
-                  </Text>
-                )}
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
-        )}
-
-        {/* ── Mode toggle: For You / For Your Child ── */}
-        <View style={s.modeToggleRow}>
+        {/* ── Mode toggle: For You / For Your Child (authenticated only) ── */}
+        {isAuthenticated && (<View style={s.modeToggleRow}>
           <TouchableOpacity
             style={[s.modeBtn, mode === 'forYou' && s.modeBtnActive]}
             onPress={() => setMode('forYou')}
@@ -855,7 +908,7 @@ export default function UserHome() {
               🧒 For Your Child
             </Text>
           </TouchableOpacity>
-        </View>
+        </View>)}
 
         {/* ── Search bar (only in For You mode) ── */}
         {mode === 'forYou' && (
@@ -1063,8 +1116,8 @@ export default function UserHome() {
           </View>
         ) : (
           <>
-            {/* ── Active order pill ── */}
-            {activeIssues.length > 0 && activeIssues[0].type === "PHYSICAL" && (
+            {/* ── Active order pill (authenticated only) ── */}
+            {isAuthenticated && activeIssues.length > 0 && activeIssues[0].type === "PHYSICAL" && (
               <TouchableOpacity
                 style={s.orderBanner}
                 onPress={() =>
@@ -1086,7 +1139,7 @@ export default function UserHome() {
             )}
 
             {/* ── Owl's LangChain Smart Picks ── */}
-            {(smartRecommendations.length > 0 || smartLoading) && (
+            {isAuthenticated && (smartRecommendations.length > 0 || smartLoading) && (
               <View style={s.section}>
                 <SectionHeader title="🦉 Owl's Smart Picks" />
                     {smartRecommendations.length === 0 && smartLoading ? (
@@ -1110,7 +1163,7 @@ export default function UserHome() {
             )}
 
             {/* ── Based on Your Preferences ── */}
-            {recommended.length > 0 && (
+            {isAuthenticated && recommended.length > 0 && (
               <View style={s.section}>
                 <SectionHeader title="⭐ Based on Your Preferences" />
                 <ScrollView
@@ -1176,10 +1229,10 @@ export default function UserHome() {
             {/* ── My Orders ── */}
             <TouchableOpacity
               style={s.myBooksBanner}
-              onPress={() => router.push("/(user)/my-books")}
+              onPress={() => isAuthenticated ? router.push('/(user)/my-books') : router.push('/(auth)/login')}
             >
               <Text style={s.myBooksText}>
-                My orders & borrowing history →
+                {isAuthenticated ? 'My orders & borrowing history →' : '🔑 Sign in to view borrowing history →'}
               </Text>
             </TouchableOpacity>
 
@@ -1193,22 +1246,24 @@ export default function UserHome() {
 
       {Platform.OS !== 'web' && <NavBar role="user" active="home" />}
 
-      {/* ── Chatbot FAB ── */}
-      <TouchableOpacity 
-        style={{
-          position: 'absolute', bottom: Platform.OS !== 'web' ? 118 : 28, right: 20,
-          backgroundColor: Colors.accentSage,
-          borderRadius: Radius.full,
-          paddingVertical: 12, paddingHorizontal: 18,
-          flexDirection: 'row', alignItems: 'center', gap: 6,
-          boxShadow: '0px 4px 12px rgba(74, 124, 89, 0.4)', elevation: 8
-        }} 
-        activeOpacity={0.85}
-        onPress={() => router.push('/(user)/owl')}
-      >
-        <Text style={{ fontSize: 22 }}>🦉</Text>
-        <Text style={{ fontSize: Typography.label + 1, fontWeight: '800', color: Colors.textOnDark }}>Ask Owl</Text>
-      </TouchableOpacity>
+      {/* ── Chatbot FAB — authenticated users only ── */}
+      {isAuthenticated && (
+        <TouchableOpacity 
+          style={{
+            position: 'absolute', bottom: Platform.OS !== 'web' ? 100 : 28, right: 24,
+            backgroundColor: Colors.accentSage,
+            borderRadius: Radius.full,
+            paddingVertical: 12, paddingHorizontal: 18,
+            flexDirection: 'row', alignItems: 'center', gap: 6,
+            boxShadow: '0px 4px 12px rgba(74, 124, 89, 0.4)', elevation: 8
+          }} 
+          activeOpacity={0.85}
+          onPress={() => router.push('/(user)/owl')}
+        >
+          <Text style={{ fontSize: 22 }}>🦉</Text>
+          <Text style={{ fontSize: Typography.label + 1, fontWeight: '800', color: Colors.textOnDark }}>Ask Owl</Text>
+        </TouchableOpacity>
+      )}
     </SafeAreaView>
   );
 }
