@@ -1,68 +1,81 @@
-# Hyper Local Cloud Library - Backend API
+# Hyper Local Cloud Library - Backend
 
-The Node.js and Express backend empowering the Hyper Local Cloud Library ecosystem.
+Node.js + Express backend for authentication, user/profile management, catalog browsing, circulation, delivery, penalties, and payments.
 
-This robust REST API securely manages dynamic Library inventories, transactional Circulation ledgers, role-based profiles (parent/child/librarian/admin), and calculates geographic Delivery availability.
+## Tech Stack
+- Node.js + Express
+- MongoDB + Mongoose (primary data)
+- MySQL (payments/penalties)
+- JWT auth + role-based middleware
+- Joi request validation
+- Jest + Supertest test suite
 
-## 🛠️ Tech Stack
-- **Runtime:** Node.js (v16+)
-- **Framework:** Express.js
-- **Database:** MongoDB
-- **ORM:** Mongoose
-- **Validation:** Joi validation schemas
-- **Authentication:** JWT (JSON Web Tokens) with `crypto`-hashed passwords structure.
-- **Geospatial Maths:** Custom Haversine module checking delivery radii.
-
----
-
-## 🚀 Quick Setup
-
-1. **Install Modules:**
+## Quick Start
+1. Install dependencies:
    ```bash
    npm install
    ```
-
-2. **Configure Environment:**
-   You must set up an `.env` file at `backend/.env`.
-   ```env
-   NODE_ENV=development
-   PORT=5000
-   
-   # Database Configuration
-   MONGODB_URI=mongodb+srv://<auth string>
-   MONGO_DB_NAME=library_db
-   
-   # JWT Configuration
-   JWT_SECRET=YOUR_SECRET_KEY
-   JWT_EXPIRES_IN=90d
-   ```
-
-3. **Start the Development Server:**
+2. Create `.env` in `src/backend/` (example below).
+3. Start server:
    ```bash
    npm start
-   # Server natively listens on http://localhost:5000
    ```
 
----
+Server runs on `http://localhost:5000` by default.
 
-## 🏛️ Business Logic & Operations
+## Scripts
+- `npm start` - start server
+- `npm run dev` - start with nodemon
+- `npm test` - run tests with coverage
+- `npm run test:watch` - watch mode
+- `npm run seed` - seed sample data
 
-### Delivery Boundaries (Haversine Formula)
-The `IssueBook` controller inside `src/services/circulationService.js` natively calculates straight-line distances off your authenticated user's coordinates directly against the targeted Library Branch's raw location via the MongoDB schema. If the difference eclipses the branch's valid physical radius constraint, an API block throws.
+## Environment Variables (Common)
+```env
+NODE_ENV=development
+PORT=5000
 
-### Transaction Sequences (Atomic Processing)
-In `.issueBook(...)` processes, when a physical copy is pulled off the digital shelf, a `mongoose.startSession()` triggers to ensure database transactional integrity. Because 3 documents are pushed (an `Issue`, an `inventoryService` status update `BookCopy`, and an instantiated `Delivery` trace object), MongoDB transactions ensure that ALL updates write flawlessly, or none write at all.
+MONGODB_URI=mongodb://localhost:27017/hyper-local-library
+MONGODB_TEST_URI=mongodb://localhost:27017/hyper-local-library-test
 
-### Dynamic Inventory Analytics 
-When the API retrieves `getAllBooks` or `getBookById` (powered by `bookService.js`), a dedicated live database aggregator pipelines how many active `AVAILABLE` copies currently sit in the system directly pulling arrays off `BookCopy` instead of relying on cached unverified strings!
+MYSQL_HOST=localhost
+MYSQL_PORT=3306
+MYSQL_USER=root
+MYSQL_PASSWORD=
+MYSQL_DATABASE=library_transactions
 
----
+JWT_SECRET=change-this-in-production
+JWT_EXPIRES_IN=7d
 
-## 🌐 Endpoints
+DELIVERY_RADIUS_KM=8
+LATE_FEE_PER_DAY=10
+GRACE_PERIOD_DAYS=2
+DEFAULT_BORROW_PERIOD_DAYS=14
 
-- **`GET /api/v1/auth/me`** - Parse Authentication / active session token.
-- **`POST /api/v1/auth/login`** - Authenticate Email/JWT.
-- **`GET /api/v1/books`** - Discover top items / new arrivals (Dynamic copies count linked).
-- **`GET /api/v1/libraries`** - Discover configured Library Branches.
-- **`POST /api/v1/issues`** - Push a circulation trigger transaction out mapping a copy to an instantiated Profile.
-- **`GET /api/v1/users/:parentId/children`** - Authenticated lookup tracking unique nested profiles bound.
+AI_API_URL=http://localhost:8000/recommend
+EXTRA_API_KEYS_OPTIONAL=true
+```
+
+For the full config surface, see `src/config/index.js`.
+
+## Key API Groups
+- `/api/v1/auth` - register/login/me/change-password
+- `/api/v1/users` - user data, child profiles, reading history, locations
+- `/api/v1/books` - browse/search/book details/availability
+- `/api/v1/issues` - issue, return, status/history
+- `/api/v1/libraries` - branches and nearby discovery
+- `/api/v1/inventory` - copy-level inventory operations
+- `/api/v1/payments`, `/api/v1/penalties` - financial flows
+
+## Recent Backend Updates
+- Added ownership guard middleware `verifyUserOwnership` for user-scoped routes.
+- Improved `Book` model pre-validation to keep `ageRating` and `minAge` in sync.
+- Added bounded retry handling for transient Mongo transaction conflicts in `issueBook`.
+- On return flow, reading history is now updated from the returned issue’s resolved `bookId`.
+
+## Testing
+```bash
+npm test
+```
+
+Integration tests live under `tests/integration`, utility tests under `tests/utils`.
