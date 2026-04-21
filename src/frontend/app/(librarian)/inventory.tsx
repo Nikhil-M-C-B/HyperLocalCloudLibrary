@@ -1030,6 +1030,22 @@ const s = StyleSheet.create({
     color: Colors.textPrimary,
     marginBottom: Spacing.xs,
   },
+  modalSub: {
+    fontSize: Typography.body,
+    fontWeight: '600',
+    color: Colors.textSecondary,
+    marginBottom: Spacing.sm,
+  },
+  modalInput: {
+    backgroundColor: Colors.browseSurface,
+    borderRadius: Radius.md,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: 10,
+    fontSize: Typography.body,
+    color: Colors.textPrimary,
+    borderWidth: 1,
+    borderColor: Colors.cardBorder,
+  },
   modalMeta: { fontSize: Typography.label, color: Colors.textSecondary },
 
   label: {
