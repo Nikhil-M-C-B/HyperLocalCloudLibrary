@@ -135,6 +135,14 @@ export default function WelcomeScreen() {
           >
             <Text style={styles.btnSecondaryText}>Create Account</Text>
           </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.btnGuest}
+            activeOpacity={0.75}
+            onPress={() => router.replace('/(user)')}
+          >
+            <Text style={styles.btnGuestText}>Browse as Guest →</Text>
+          </TouchableOpacity>
         </View>
 
         {/* ── Footer ── */}
@@ -221,6 +229,17 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: Colors.accentSage,
     letterSpacing: 0.3,
+  },
+
+  // Guest
+  btnGuest: {
+    alignItems: 'center',
+    paddingVertical: 10,
+  },
+  btnGuestText: {
+    fontSize: Typography.body,
+    color: Colors.textMuted,
+    fontWeight: '600',
   },
 
   // Footer

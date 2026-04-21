@@ -86,7 +86,7 @@ function StarRow({ rating }: { rating: number }) {
 
 export default function UserBookDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { userId, activeProfileId, selectedBranchId } = useAppStore();
+  const { userId, activeProfileId, selectedBranchId, isAuthenticated } = useAppStore();
   const router = useRouter();
   const [book, setBook] = useState<Book | null>(null);
   const [loading, setLoading] = useState(true);
@@ -511,7 +511,15 @@ export default function UserBookDetail() {
 
         {/* Actions */}
         <View style={s.actions}>
-          {book.availableCopies > 0 ? (
+          {!isAuthenticated ? (
+            <TouchableOpacity
+              style={s.btnPrimary}
+              activeOpacity={0.82}
+              onPress={() => router.push('/(auth)/login')}
+            >
+              <Text style={s.btnPrimaryText}>🔒 Sign in to Borrow</Text>
+            </TouchableOpacity>
+          ) : book.availableCopies > 0 ? (
             <TouchableOpacity
               style={s.btnPrimary}
               disabled={cartLoading}

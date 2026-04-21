@@ -68,16 +68,19 @@ axiosInstance.interceptors.response.use(
             useNetworkStore.getState().setOffline();
         }
 
-        // Token expired / unauthorized
+        // Token expired / unauthorized — only redirect if we had a session
         if (error.response && error.response.status === 401) {
-            console.warn('401 Unauthorized — logging out');
-
             // Lazy requires to avoid circular dependencies
             const { default: useAppStore } = require('../store/useAppStore');
-            const { router } = require('expo-router');
+            const isAuthenticated = useAppStore.getState().isAuthenticated;
 
-            useAppStore.getState().clearAuth();
-            router.replace('/(auth)/welcome');
+            // Guests hit 401 on protected endpoints — don't redirect them
+            if (isAuthenticated) {
+                console.warn('401 Unauthorized — logging out');
+                const { router } = require('expo-router');
+                useAppStore.getState().clearAuth();
+                router.replace('/(auth)/welcome');
+            }
         }
 
         return Promise.reject(error);

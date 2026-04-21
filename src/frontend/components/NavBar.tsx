@@ -2,6 +2,7 @@ import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { useRouter } from 'expo-router';
 import { Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Colors, Radius, Spacing, Typography } from '@/constants/theme';
+import useAppStore from '@/store/useAppStore';
 
 export type NavRole = 'user' | 'child';
 export type UserTab = 'home' | 'mybooks' | 'cart' | 'owl' | 'profile' | 'switch';
@@ -25,9 +26,15 @@ const CHILD_ITEMS: { id: ChildTab; label: string; icon: string; route: string }[
   { id: 'owl',  label: 'Owl',  icon: 'smart-toy', route: '/(child)/owl' },
 ];
 
+// Guest-only nav items (browse-only)
+const GUEST_ITEMS: { id: string; label: string; icon: string; route: string }[] = [
+  { id: 'home',    label: 'Home',      icon: 'home',    route: '/(user)'  },
+];
+
 export function NavBar(props: Props) {
   const router = useRouter();
-  const items = props.role === 'user' ? USER_ITEMS : CHILD_ITEMS;
+  const { isAuthenticated } = useAppStore();
+  const items = !isAuthenticated ? GUEST_ITEMS : props.role === 'user' ? USER_ITEMS : CHILD_ITEMS;
   const active = props.active;
 
   if (Platform.OS === 'web') {
@@ -50,8 +57,16 @@ export function NavBar(props: Props) {
               <Text style={[sw.label, isActive && sw.labelActive]}>{item.label}</Text>
             </TouchableOpacity>
           );
-        })}
-      </View>
+        })}        {!isAuthenticated && (
+          <TouchableOpacity
+            style={[sw.item, { marginLeft: 'auto' }]}
+            onPress={() => router.push('/(auth)/login')}
+            activeOpacity={0.75}
+          >
+            <MaterialIcons name="login" size={17} color={Colors.accentSage} />
+            <Text style={[sw.label, sw.labelActive]}>Join Library</Text>
+          </TouchableOpacity>
+        )}      </View>
     );
   }
 
@@ -78,6 +93,18 @@ export function NavBar(props: Props) {
           </TouchableOpacity>
         );
       })}
+      {!isAuthenticated && (
+        <TouchableOpacity
+          style={sb.item}
+          onPress={() => router.push('/(auth)/login')}
+          activeOpacity={0.75}
+        >
+          <View style={[sb.iconWrap, sb.iconWrapActive]}>
+            <MaterialIcons name="login" size={22} color={Colors.accentSage} />
+          </View>
+          <Text style={[sb.label, sb.labelActive]}>Join Library</Text>
+        </TouchableOpacity>
+      )}
     </View>
   );
 }

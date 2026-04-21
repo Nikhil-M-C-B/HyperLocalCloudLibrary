@@ -23,7 +23,9 @@ export default function RootIndex() {
     );
   }
 
-  if (!isAuthenticated) return <Redirect href="/(auth)/welcome" />;
+  // Unauthenticated users browse as guests — they land on the user home
+  // and see a "Sign in" prompt when they try to borrow.
+  if (!isAuthenticated) return <Redirect href="/(user)" />;
   if (role === "LIBRARIAN") return <Redirect href="/(librarian)" />;
   if (role === "ADMIN") return <Redirect href="/(admin)" />;
 
