@@ -1,9 +1,9 @@
-import bookService from '@/api/services/bookService';
 import catalogService, { type CatalogAuthorDetails } from '@/api/services/catalogService';
 import { BookCoverFallback } from '@/components/BookCoverFallback';
 import { NavBar, NAV_BOTTOM_PAD } from '@/components/NavBar';
 import { Colors, Radius, Spacing, Typography } from '@/constants/theme';
 import { filterBooksWithCovers } from '@/utils/bookFilters';
+import { getCachedBooks } from '@/utils/booksCache';
 import { Image } from 'expo-image';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
@@ -28,6 +28,27 @@ function subjectToGenre(subjects: string[]): string | undefined {
   if (joined.includes('romance') || joined.includes('love')) return 'Romance';
   if (joined.includes('history') || joined.includes('historical')) return 'History';
   return undefined;
+}
+
+// Small wrapper so each grid cell gets its own error state for the cover image
+const WORK_W = 110;
+const WORK_H = 160;
+function WorkCoverImage({ uri, title, genre }: { uri?: string; title: string; genre?: string }) {
+  const [errored, setErrored] = useState(false);
+  if (errored || !uri) {
+    return (
+      <BookCoverFallback title={title} genre={genre} width={WORK_W} height={WORK_H} />
+    );
+  }
+  return (
+    <Image
+      source={{ uri }}
+      style={{ width: WORK_W, height: WORK_H, borderRadius: Radius.sm }}
+      contentFit="cover"
+      cachePolicy="disk"
+      onError={() => setErrored(true)}
+    />
+  );
 }
 
 // Partial-name match: does a book's author field belong to this canonical author?
@@ -64,8 +85,7 @@ export default function AuthorDetailScreen() {
       try {
         if (isFromDB) {
           // ── DB mode: load all books, filter by author partial match ──
-          const res = await bookService.getBooks({ limit: 500 });
-          const all: any[] = res?.data?.books ?? res?.books ?? [];
+          const all: any[] = await getCachedBooks();
           const matched = filterBooksWithCovers(all).filter((b: any) => authorMatches(b.author || '', name || ''));
           setDBBooks(matched);
 
@@ -123,8 +143,10 @@ export default function AuthorDetailScreen() {
           // Also fetch matching DB books for Available Books grid
           if (details?.name) {
             try {
-              const res = await bookService.searchBooks(details.name);
-              const books: any[] = filterBooksWithCovers(res?.data?.books ?? res?.books ?? []);
+              const all: any[] = await getCachedBooks();
+              const books: any[] = filterBooksWithCovers(all).filter(
+                (b: any) => authorMatches(b.author || '', details.name)
+              );
               setDBBooks(books);
             } catch { /* non-critical */ }
           }
@@ -201,10 +223,10 @@ export default function AuthorDetailScreen() {
                       onPress={() => router.push(`/(user)/book/${book._id || book.id}`)}
                     >
                       <View style={s.workCover}>
-                        <Image
-                          source={{ uri: book.coverImage }}
-                          style={{ width: WORK_W, height: WORK_H, borderRadius: Radius.sm }}
-                          contentFit="cover"
+                        <WorkCoverImage
+                          uri={book.coverImage}
+                          title={book.title}
+                          genre={book.genre?.[0]}
                         />
                         <View style={s.availBadge}>
                           <Text style={s.availBadgeText}>📖</Text>
@@ -262,8 +284,6 @@ export default function AuthorDetailScreen() {
 }
 
 const PHOTO_SIZE = 280;
-const WORK_W = 110;
-const WORK_H = 160;
 
 const s = StyleSheet.create({
   safe: { flex: 1, backgroundColor: Colors.background },
