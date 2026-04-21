@@ -5,6 +5,7 @@ export default function ChildLayout() {
   return (
     <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: Colors.childTint } }}>
       <Stack.Screen name="index" />
+      <Stack.Screen name="owl" />
     </Stack>
   );
 }
