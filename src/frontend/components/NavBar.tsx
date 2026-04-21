@@ -57,7 +57,8 @@ export function NavBar(props: Props) {
               <Text style={[sw.label, isActive && sw.labelActive]}>{item.label}</Text>
             </TouchableOpacity>
           );
-        })}        {!isAuthenticated && (
+        })}
+        {!isAuthenticated && (
           <TouchableOpacity
             style={[sw.item, { marginLeft: 'auto' }]}
             onPress={() => router.push('/(auth)/login')}
@@ -66,7 +67,8 @@ export function NavBar(props: Props) {
             <MaterialIcons name="login" size={17} color={Colors.accentSage} />
             <Text style={[sw.label, sw.labelActive]}>Join Library</Text>
           </TouchableOpacity>
-        )}      </View>
+        )}
+      </View>
     );
   }
 

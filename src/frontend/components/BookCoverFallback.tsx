@@ -155,10 +155,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     overflow: 'hidden',
     // Subtle outer shadow to reinforce the "physical book" feel
-    shadowColor: '#000',
-    shadowOffset: { width: 2, height: 2 },
-    shadowOpacity: 0.18,
-    shadowRadius: 4,
+    boxShadow: '2px 2px 4px rgba(0, 0, 0, 0.18)',
     elevation: 3,
   },
   spine: {
