@@ -84,13 +84,6 @@ Use this document to outline milestones, risks, and weekly goals.
 * ***Aaryan*** -
 * **LLM Infrastructure** : Setup and scaling of the AI model for recommendations and quizzes.
 * **Geolocation Service** : Service to identify and select the user's "closest library" by default.
-* **CI/CD Pipeline** : Integration of codeRabbit to ensure high code quality during R1 updates.
 * **Security/Auth Provider** : Managing secure login and subscription access gates
 * Design and Implement the logic and data retrieval Author and Publisher pages some open source webpages
 
-## Risks & Mitigations
-
-- Risk:
-- Mitigation:
-
-## Notes
