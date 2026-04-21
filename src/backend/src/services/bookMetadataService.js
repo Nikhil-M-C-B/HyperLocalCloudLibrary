@@ -439,3 +439,63 @@ exports.fetchByISBN = async (isbn) => {
     source:        [google && 'google', openLib && 'open_library', olSearch && 'ol_search', loc && 'loc'].filter(Boolean).join('+'),
   };
 };
+
+
+/**
+ * Fallback: fetch metadata by Title when ISBN is missing.
+ * Searches Google Books for the title, extracts the best ISBN, and re-runs the full pipeline.
+ * If no ISBN is attached to the Google Books result, it returns basic Google Books info.
+ */
+exports.fetchByTitle = async (title) => {
+  if (!title) return null;
+  const params = { q: `intitle:"${title}"` };
+  if (config.googleBooks?.apiKey) {
+    params.key = config.googleBooks.apiKey;
+  }
+  
+  try {
+    const response = await axios.get(
+      'https://www.googleapis.com/books/v1/volumes',
+      { params, timeout: 8000 }
+    );
+
+    const items = response.data?.items;
+    if (!items?.length) return null;
+
+    const info = items[0].volumeInfo;
+    
+    // Attempt to extract an ISBN and route back through our primary pipeline
+    const isbns = info.industryIdentifiers || [];
+    const bestIsbn = isbns.find(i => i.type === 'ISBN_13')?.identifier || 
+                     isbns.find(i => i.type === 'ISBN_10')?.identifier;
+                     
+    if (bestIsbn) {
+      return await exports.fetchByISBN(bestIsbn);
+    }
+
+    // If no ISBN exists but we matched a book, return the raw Google Books info
+    const cover = info.imageLinks?.extraLarge || info.imageLinks?.large || 
+                  info.imageLinks?.medium || info.imageLinks?.thumbnail || null;
+    const coverImage = cover ? cover.replace(/^http:\/\//, 'https://').replace(/&edge=curl/, '') : null;
+    const fullTitle = info.subtitle ? `${info.title}: ${info.subtitle}` : (info.title || null);
+
+    return {
+      title:         fullTitle,
+      author:        info.authors?.join(', ') || null,
+      isbn:          null,
+      genre:         _cleanGenres(info.categories),
+      language:      info.language === 'en' ? 'English' : (info.language || 'English'),
+      summary:       _truncate(info.description, 1000),
+      coverImage,
+      pageCount:     info.pageCount || null,
+      publisher:     info.publisher || null,
+      publishedDate: info.publishedDate || null,
+      minAge:        _mapMinAge(info.categories || [], info.maturityRating || ''),
+      ageRating:     _toAgeRating(_mapMinAge(info.categories || [], info.maturityRating || '')),
+      source:        'google_books_title_search',
+    };
+  } catch (err) {
+    console.warn(`[BookMetadata] fetchByTitle failed for "${title}":`, err.message);
+    return null;
+  }
+};
