@@ -133,7 +133,7 @@ const bookSchema = new mongoose.Schema({
 });
 
 bookSchema.pre('validate', function deriveAgeFields(next) {
-  if (this.ageRating && (this.minAge === undefined || this.minAge === null)) {
+  if (this.ageRating && String(this.ageRating).trim()) {
     const parsed = parseAgeRatingMin(this.ageRating);
     if (parsed !== null) {
       this.minAge = parsed;

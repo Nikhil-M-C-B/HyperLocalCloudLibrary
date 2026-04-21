@@ -10,152 +10,182 @@ const inventoryService = require("./inventoryService");
 const config = require("../config");
 const mongoose = require("mongoose");
 
+const MAX_TRANSACTION_RETRIES = 3;
+
+const isTransientTransactionError = (error) => {
+  if (!error) return false;
+  if (error.code === 112) return true; // WriteConflict
+
+  const labels = error.errorLabels || error?.errorResponse?.errorLabels || [];
+  return (
+    labels.includes("TransientTransactionError") ||
+    labels.includes("UnknownTransactionCommitResult")
+  );
+};
+
+const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
 /**
  * Issue a book (with delivery eligibility check)
  */
 exports.issueBook = async (issueData) => {
   const { userId, profileId, bookId, branchId, type = "PHYSICAL" } = issueData;
 
-  // Start transaction for atomic operations
-  const session = await mongoose.startSession();
-  session.startTransaction();
+  for (let attempt = 1; attempt <= MAX_TRANSACTION_RETRIES; attempt++) {
+    const session = await mongoose.startSession();
+    session.startTransaction();
 
-  try {
-    // 1. Validate user and profile
-    const user = await User.findById(userId).session(session);
-    if (!user) {
-      throw new AppError("User not found", 404);
-    }
-
-    const profile = user.profiles.find(
-      (p) => p.profileId.toString() === profileId.toString(),
-    );
-    if (!profile) {
-      throw new AppError("Profile not found", 404);
-    }
-
-    // 2. Get library branch
-    const branch = await LibraryBranch.findById(branchId).session(session);
-    if (!branch || branch.status !== "ACTIVE") {
-      throw new AppError("Library branch not found or inactive", 404);
-    }
-
-    // Resolve delivery location (needed for eligibility check and delivery record)
-    const activeAddress =
-      user.deliveryAddresses?.find((a) => a.isDefault) ||
-      user.deliveryAddresses?.[0] ||
-      user.deliveryAddress;
-
-    // 3. Delivery Eligibility Check (Haversine Logic)
-    if (type === "PHYSICAL") {
-      if (
-        !activeAddress?.location?.coordinates ||
-        activeAddress.location.coordinates.length < 2
-      ) {
-        throw new AppError("Please set your delivery address first", 400);
+    try {
+      // 1. Validate user and profile
+      const user = await User.findById(userId).session(session);
+      if (!user) {
+        throw new AppError("User not found", 404);
       }
 
-      if (
-        !branch.location ||
-        !branch.location.coordinates ||
-        branch.location.coordinates.length < 2
-      ) {
-        throw new AppError(
-          "Library branch does not have a valid location configured",
-          400,
+      const profile = user.profiles.find(
+        (p) => p.profileId.toString() === profileId.toString(),
+      );
+      if (!profile) {
+        throw new AppError("Profile not found", 404);
+      }
+
+      // 2. Get library branch
+      const branch = await LibraryBranch.findById(branchId).session(session);
+      if (!branch || branch.status !== "ACTIVE") {
+        throw new AppError("Library branch not found or inactive", 404);
+      }
+
+      // Resolve delivery location (needed for eligibility check and delivery record)
+      const activeAddress =
+        user.deliveryAddresses?.find((a) => a.isDefault) ||
+        user.deliveryAddresses?.[0] ||
+        user.deliveryAddress;
+
+      // 3. Delivery Eligibility Check (Haversine Logic)
+      if (type === "PHYSICAL") {
+        if (
+          !activeAddress?.location?.coordinates ||
+          activeAddress.location.coordinates.length < 2
+        ) {
+          throw new AppError("Please set your delivery address first", 400);
+        }
+
+        if (
+          !branch.location ||
+          !branch.location.coordinates ||
+          branch.location.coordinates.length < 2
+        ) {
+          throw new AppError(
+            "Library branch does not have a valid location configured",
+            400,
+          );
+        }
+
+        const userLocation = {
+          latitude: activeAddress.location.coordinates[1],
+          longitude: activeAddress.location.coordinates[0],
+        };
+
+        const branchLocation = {
+          latitude: branch.location.coordinates[1],
+          longitude: branch.location.coordinates[0],
+        };
+
+        const isEligible = isWithinDeliveryRadius(
+          userLocation,
+          branchLocation,
+          config.business.deliveryRadiusKm,
         );
+
+        if (!isEligible) {
+          throw new AppError(
+            `Delivery not available. Library is beyond ${config.business.deliveryRadiusKm}km radius`,
+            400,
+          );
+        }
       }
 
-      const userLocation = {
-        latitude: activeAddress.location.coordinates[1],
-        longitude: activeAddress.location.coordinates[0],
-      };
-
-      const branchLocation = {
-        latitude: branch.location.coordinates[1],
-        longitude: branch.location.coordinates[0],
-      };
-
-      const isEligible = isWithinDeliveryRadius(
-        userLocation,
-        branchLocation,
-        config.business.deliveryRadiusKm,
+      // 4. Find available book copy
+      const availableCopies = await inventoryService.getAvailableCopies(
+        bookId,
+        branchId,
+        session,
       );
 
-      if (!isEligible) {
-        throw new AppError(
-          `Delivery not available. Library is beyond ${config.business.deliveryRadiusKm}km radius`,
-          400,
-        );
+      if (availableCopies.length === 0) {
+        throw new AppError("No copies available at this branch", 400);
       }
-    }
 
-    // 4. Find available book copy
-    const availableCopies = await inventoryService.getAvailableCopies(
-      bookId,
-      branchId,
-      session,
-    );
+      const copy = availableCopies[0];
 
-    if (availableCopies.length === 0) {
-      throw new AppError("No copies available at this branch", 400);
-    }
+      // 5. Mark copy as issued
+      await inventoryService.markAsIssued(copy._id, session);
 
-    const copy = availableCopies[0];
+      // 6. Create issue record
+      const issueDate = new Date();
+      const dueDate = calculateDueDate(issueDate);
 
-    // 5. Mark copy as issued
-    await inventoryService.markAsIssued(copy._id, session);
-
-    // 6. Create issue record
-    const issueDate = new Date();
-    const dueDate = calculateDueDate(issueDate);
-
-    const issue = await Issue.create(
-      [
-        {
-          userId,
-          profileId,
-          copyId: copy._id,
-          issueDate,
-          dueDate,
-          status: "ISSUED",
-          type: type.toUpperCase(),
-        },
-      ],
-      { session },
-    );
-
-    // 7. Create delivery record for physical books
-    if (type === "PHYSICAL") {
-      const scheduledDate = new Date();
-      scheduledDate.setDate(scheduledDate.getDate() + 1); // Next day delivery
-
-      await Delivery.create(
+      const issue = await Issue.create(
         [
           {
-            issueId: issue[0]._id,
-            branchId,
             userId,
-            deliveryAddress: [activeAddress?.street, activeAddress?.city, activeAddress?.state, activeAddress?.pincode].filter(Boolean).join(', ') || 'Address not set',
-            scheduledAt: scheduledDate,
-            status: "SCHEDULED",
+            profileId,
+            copyId: copy._id,
+            issueDate,
+            dueDate,
+            status: "ISSUED",
+            type: type.toUpperCase(),
           },
         ],
         { session },
       );
+
+      // 7. Create delivery record for physical books
+      if (type === "PHYSICAL") {
+        const scheduledDate = new Date();
+        scheduledDate.setDate(scheduledDate.getDate() + 1); // Next day delivery
+
+        await Delivery.create(
+          [
+            {
+              issueId: issue[0]._id,
+              branchId,
+              userId,
+              deliveryAddress:
+                [
+                  activeAddress?.street,
+                  activeAddress?.city,
+                  activeAddress?.state,
+                  activeAddress?.pincode,
+                ]
+                  .filter(Boolean)
+                  .join(', ') || 'Address not set',
+              scheduledAt: scheduledDate,
+              status: "SCHEDULED",
+            },
+          ],
+          { session },
+        );
+      }
+
+      await session.commitTransaction();
+
+      return {
+        issue: issue[0],
+        message: "Book issued successfully",
+      };
+    } catch (error) {
+      await session.abortTransaction();
+
+      if (attempt < MAX_TRANSACTION_RETRIES && isTransientTransactionError(error)) {
+        await delay(attempt * 25);
+        continue;
+      }
+
+      throw error;
+    } finally {
+      session.endSession();
     }
-
-    await session.commitTransaction();
-
-    return {
-      issue: issue[0],
-      message: "Book issued successfully",
-    };
-  } catch (error) {
-    await session.abortTransaction();
-    throw error;
-  } finally {
-    session.endSession();
   }
 };
 
@@ -189,6 +219,19 @@ exports.returnBook = async (issueId) => {
         status: "DELIVERED",
         deliveredAt: new Date(),
       },
+    );
+  }
+
+  const returnedIssue = await Issue.findById(issue._id).populate({
+    path: 'copyId',
+    populate: { path: 'bookId' },
+  });
+  const bookId = returnedIssue?.copyId?.bookId?._id || returnedIssue?.copyId?.bookId;
+  if (bookId) {
+    await require('./userService').addToReadingHistory(
+      String(returnedIssue.userId),
+      String(returnedIssue.profileId),
+      String(bookId),
     );
   }
 

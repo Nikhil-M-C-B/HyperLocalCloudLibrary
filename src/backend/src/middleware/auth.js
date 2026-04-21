@@ -125,3 +125,28 @@ exports.verifyProfileOwnership = catchAsync(async (req, res, next) => {
   req.profile = userProfile;
   next();
 });
+
+/**
+ * Check if the requested user resource belongs to the logged-in user.
+ * Admins are allowed to access any user resource.
+ */
+exports.verifyUserOwnership = (paramName = 'id') => {
+  return catchAsync(async (req, res, next) => {
+    const requestedUserId = req.params[paramName];
+
+    if (!requestedUserId || req.user.role === 'ADMIN') {
+      return next();
+    }
+
+    const targetUser = await User.findById(requestedUserId).select('_id');
+    if (!targetUser) {
+      return next(new AppError('User not found', 404));
+    }
+
+    if (req.user._id.toString() !== requestedUserId.toString()) {
+      return next(new AppError('You do not have access to this user account', 403));
+    }
+
+    next();
+  });
+};
