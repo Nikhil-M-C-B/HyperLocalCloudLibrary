@@ -63,6 +63,17 @@ app.get('/health', (req, res) => {
   });
 });
 
+// Root endpoint
+app.get('/', (req, res) => {
+  res.status(200).json({
+    status: 'success',
+    message: 'Hyper Local Cloud Library API',
+    version: '1.0.0',
+    endpoints: '/api/v1/*',
+    health: '/health'
+  });
+});
+
 // API Routes
 app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1/users', userRoutes);
