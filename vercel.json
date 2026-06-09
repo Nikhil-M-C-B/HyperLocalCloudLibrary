@@ -1,0 +1,8 @@
+{
+  "buildCommand": "cd src/frontend && npm install && npm run vercel-build",
+  "installCommand": "npm install",
+  "outputDirectory": "src/frontend/.expo/dist",
+  "env": {
+    "EXPO_PUBLIC_API_URL": "@hyperlocal_api_url"
+  }
+}

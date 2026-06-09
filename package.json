@@ -1,0 +1,8 @@
+{
+  "name": "project-monorepo-team-44",
+  "private": true,
+  "scripts": {
+    "build": "cd src/frontend && npm install && npm run vercel-build",
+    "install:all": "npm install && cd src/frontend && npm install"
+  }
+}
