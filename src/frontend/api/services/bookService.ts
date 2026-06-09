@@ -11,7 +11,17 @@ function getBooksArray(payload: any): any[] {
   return payload?.data?.books ?? payload?.books ?? [];
 }
 
-const bookService = {
+export interface BookService {
+  getBooks: (params?: BooksParams) => Promise<any>;
+  searchBooks: (query: string) => Promise<any>;
+  getBookById: (bookId: string, params?: Record<string, any>) => Promise<any>;
+  getBookAvailability: (bookId: string, lat?: number, lng?: number) => Promise<any>;
+  getBookCopies: (bookId: string) => Promise<any>;
+  issueBook: (bookId: string, branchId: string, profileId: string) => Promise<any>;
+  returnBook: (issueId: string) => Promise<any>;
+}
+
+const bookService: BookService = {
   getBooks: async (params: BooksParams = {}) => {
     if (params?.branchId && !params?.branchIds) {
       const branchId = params.branchId;
