@@ -19,11 +19,11 @@ export interface AppProfile {
   preferredGenres?: string[];
   preferredLanguages?: string[];
   questionnaireResponses?: Record<string, any>;
-  profilePreferences?: Array<{
+  profilePreferences?: {
     questionId: string;
     question: string;
     answer: string | string[];
-  }>;
+  }[];
 }
 
 interface SetAuthPayload {
@@ -271,7 +271,7 @@ const useAppStore = create<AppStore>((set, get) => ({
     try {
       // Lazy import to avoid require cycle:
       // useAppStore → bookService → axiosInstance → useAppStore
-      const bookService = (await import("@/api/services/bookService")).default;
+      const bookService = (await import("../api/services/bookService")).default;
       const response = await bookService.getBooks({ limit: 10 });
       if (response.data?.books) {
         const urls = response.data.books
